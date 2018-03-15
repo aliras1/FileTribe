@@ -15,14 +15,14 @@ type Network struct {
 	Address string
 }
 
-func (n *Network) isUsernameRegistered(username string) (bool, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/is/username/registered/%s", n.Address, username))
+func (n *Network) Get(path string, id string) ([]byte, error) {
+	resp, err := http.Get(fmt.Sprintf("%s%s%s", n.Address, path, id))
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	return strconv.ParseBool(string(body))
+	return body, nil
 }
 
 func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, error) {
@@ -49,14 +49,12 @@ func (n *Network) GetUserBoxingKey(username string) (crypto.PublicBoxingKey, err
 	return crypto.Base64ToPublicBoxingKey(string(base64PublicBoxingKey))
 }
 
-func (n *Network) Get(path string, id string) ([]byte, error) {
-	resp, err := http.Get(fmt.Sprintf("%s%s%s", n.Address, path, id))
+func (n *Network) isUsernameRegistered(username string) (bool, error) {
+	boolString, err := n.Get("/is/username/registered/", username)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	return body, nil
+	return strconv.ParseBool(string(boolString))
 }
 
 func (n *Network) Put(path string, contentType string, data []byte) error {
@@ -77,14 +75,6 @@ func (n *Network) Put(path string, contentType string, data []byte) error {
 	return nil
 }
 
-func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) error {
-	return n.Put(
-		fmt.Sprintf("/register/username/%s", username),
-		"application/octet-stream",
-		[]byte(hash.ToBase64()),
-	)
-}
-
 func (n *Network) PutSigningKey(hash crypto.PublicKeyHash, key crypto.PublicSigningKey) error {
 	jsonStr := fmt.Sprintf(`{"hash":"%s", "signkey":"%s"}`, hash.ToBase64(), key.ToBase64())
 	return n.Put(
@@ -100,5 +90,13 @@ func (n *Network) PutBoxingKey(hash crypto.PublicKeyHash, key crypto.PublicBoxin
 		"/put/boxkey",
 		"application/json",
 		[]byte(jsonStr),
+	)
+}
+
+func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) error {
+	return n.Put(
+		fmt.Sprintf("/register/username/%s", username),
+		"application/octet-stream",
+		[]byte(hash.ToBase64()),
 	)
 }

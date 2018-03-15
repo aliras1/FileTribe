@@ -49,7 +49,11 @@ func NewUser(username, password string) *User {
 }
 
 func SignUp(username, password string, network Network) (*User, error) {
-	if exists, err := network.isUsernameRegistered(username); !exists {
+	exists, err := network.isUsernameRegistered(username)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
 		user := NewUser(username, password)
 		if user == nil {
 			return nil, errors.New("could not generate user")
@@ -63,11 +67,8 @@ func SignUp(username, password string, network Network) (*User, error) {
 		network.PutSigningKey(user.PublicKeyHash, user.Signer.PublicKey)
 		network.PutBoxingKey(user.PublicKeyHash, user.Boxer.PublicKey)
 		return user, nil
-	} else if exists {
-		return nil, errors.New("user already exists")
-	} else {
-		return nil, err
 	}
+	return nil, errors.New("user already exists")
 }
 
 func SignIn(username, password string, network Network) (*User, error) {
