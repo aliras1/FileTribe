@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, abort, request, Response
+from flask import Flask, abort, request, Response
 
 
 app = Flask(__name__)
@@ -16,6 +16,7 @@ messages = {
 
 }
 
+
 @app.route('/is/username/registered/<username>', methods=['GET'])
 def is_username_registered(username):
     if username not in users:
@@ -29,12 +30,14 @@ def get_user_public_key_hash(user):
         abort(404)
     return Response(users[user])
 
+
 @app.route('/get/user/signkey/<user>', methods=['GET'])
 def get_user_signing_key(user):
     if user not in users:
         abort(404)
     h = users[user]
     return Response(h_to_sign_key[h])
+
 
 @app.route('/get/user/boxkey/<user>', methods=['GET'])
 def get_user_boxing_key(user):
@@ -55,6 +58,7 @@ def put_sign_key():
         Response("signing key already exists")
     h_to_sign_key[hash] = vk
     return Response()
+
 
 @app.route('/put/boxkey', methods=['POST'])
 def put_box_key():
@@ -77,7 +81,6 @@ def signup(username):
         Response("user already exists")
     users[username] = data.decode()
     return Response()
-
 
 
 if __name__ == "__main__":
