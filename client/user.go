@@ -8,7 +8,7 @@ import (
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/scrypt"
 
-	"ipfs-share-go/crypto"
+	"ipfs-share/crypto"
 )
 
 type User struct {

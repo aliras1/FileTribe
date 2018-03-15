@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"ipfs-share-go/crypto"
+	"ipfs-share/crypto"
 )
 
 type Network struct {

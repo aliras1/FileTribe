@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/crypto/ed25519"
 
-	"ipfs-share-go/crypto/ed25519/util/edwards25519"
+	"ipfs-share/crypto/ed25519/util/edwards25519"
 )
 
 type PublicSigningKey ed25519.PublicKey
