@@ -75,8 +75,8 @@ func TestKeysOnServer(t *testing.T) {
 }
 
 func TestSignIn(t *testing.T) {
-	username := "testuser"
-	password := "password"
+	username := "testuser3"
+	password := "password3"
 	network := Network{"http://0.0.0.0:6000"}
 	_, err := SignUp(username, password, network)
 	if err != nil {
