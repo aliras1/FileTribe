@@ -48,7 +48,6 @@ func (m *Multipart) AddSubDir(dirPath, basePath string) error {
 		if !f.IsDir() {
 			m.AddFile(dirPath+"/"+f.Name(), basePath+"/"+f.Name())
 		} else {
-			//println(basePath + "/" + f.Name())
 			m.AddSubDir(dirPath+"/"+f.Name(), basePath+"/"+f.Name())
 		}
 	}
@@ -62,10 +61,8 @@ func (m *Multipart) Send() ([]byte, error) {
 		fmt.Println(err)
 		return nil, err
 	}
-	// Don't forget to set the content type, this will contain the boundary.
-	req.Header.Set("Content-Type", m.writer.FormDataContentType())
 
-	// Submit the request
+	req.Header.Set("Content-Type", m.writer.FormDataContentType())
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
@@ -73,7 +70,6 @@ func (m *Multipart) Send() ([]byte, error) {
 		return nil, err
 	}
 
-	// Check the response
 	if res.StatusCode != http.StatusOK {
 		err = fmt.Errorf("bad status: %s", res.Status)
 	}
