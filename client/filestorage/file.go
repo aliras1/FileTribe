@@ -47,7 +47,6 @@ func (f *File) Share(shareWith []string, baseDirPath string, network *client.Net
 			if err != nil {
 				return err
 			}
-
 			// send share message
 			err = network.SendMessage(f.Owner, i, path.Base(f.Path))
 			if err != nil {

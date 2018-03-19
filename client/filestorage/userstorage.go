@@ -76,7 +76,10 @@ func (u *UserStorage) AddAndShareFile(filePath string, shareWith []string) error
 		return err
 	}
 	f := File{filePath, merkleNode.Hash, u.username, []string{}, []string{}}
-	f.Share(shareWith, u.dataPath+"/public/for/", u.network)
+	err = f.Share(shareWith, u.dataPath+"/public/for/", u.network)
+	if err != nil {
+		return err
+	}
 	u.RootDir = append(u.RootDir, &f)
 	return nil
 }
