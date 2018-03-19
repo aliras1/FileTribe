@@ -1,7 +1,9 @@
 package filestorage
 
 import (
+	"errors"
 	"fmt"
+	"ipfs-share/client"
 	"ipfs-share/ipfs"
 	"os"
 	"strings"
@@ -10,26 +12,27 @@ import (
 type UserStorage struct {
 	username string
 	dataPath string
-	RootDir  *Directory
+	RootDir  []*File
 	ipfs     *ipfs.IPFS
+	network  *client.Network
 }
 
 func (u *UserStorage) Init(path string, i *ipfs.IPFS) error {
 	u.ipfs = i
-	u.dataPath = path + "/data"
+	u.dataPath = path + "/data/"
 	var errorArray []error
 
-	err := os.Mkdir(u.dataPath, 0700)
+	err := os.Mkdir(u.dataPath, 0770)
 	if err != nil {
 		errorArray = append(errorArray, err)
 	}
 
-	err = os.Mkdir(u.dataPath+"/public", 0700)
+	err = os.Mkdir(u.dataPath+"/public", 0770)
 	if err != nil {
 		errorArray = append(errorArray, err)
 	}
 
-	err = os.MkdirAll(u.dataPath+"/userdata/root", 0700)
+	err = os.MkdirAll(u.dataPath+"/userdata/root", 0770)
 	if err != nil {
 		errorArray = append(errorArray, err)
 	}
@@ -51,58 +54,29 @@ func (u *UserStorage) Init(path string, i *ipfs.IPFS) error {
 }
 
 func (u *UserStorage) build() error {
-	u.RootDir = NewDir(u.dataPath+"/userdata/root", "", u.username, []string{}, []string{})
-	// TODO read .json files and build up the user storage
+
 	return nil
 }
 
-func searchDir(directory *Directory, name string) *Entry {
-	if strings.HasSuffix(directory.Path, name) {
-		return &directory.Entry
-	}
-	for _, f := range directory.Files {
-		if strings.HasSuffix(f.Path, name) {
-			fmt.Println(f.Path + "    " + name)
-			return f
+func (u *UserStorage) IsFileInRootDir(filePath string) bool {
+	for _, i := range u.RootDir {
+		if strings.Compare(i.Path, filePath) == 0 {
+			return true
 		}
 	}
-	for _, f := range directory.SubDirectories {
-		return searchDir(f, name)
-	}
-	return nil
+	return false
 }
 
-func (u *UserStorage) AddAndShareDirectory(path string, shareWith, wAccess []string) error {
-	dp := &Directory{
-		Entry{path, "", u.username, shareWith, wAccess},
-		[]*Directory{},
-		[]*Entry{},
+func (u *UserStorage) AddAndShareFile(filePath string, shareWith []string) error {
+	if u.IsFileInRootDir(filePath) {
+		return errors.New("file already in root dir")
 	}
-
-	err := u.RootDir.AddLocalDirRecursively(dp)
-	merkleNodes, err := u.ipfs.AddDir(path)
+	merkleNode, err := u.ipfs.AddFile(filePath)
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
-	if merkleNodes == nil {
-		return nil
-	}
-
-	for _, m := range merkleNodes {
-		e := searchDir(dp, m.Name)
-		if e == nil {
-			fmt.Println("NIL by: " + m.Name)
-		} else if strings.Compare(e.IPFSAddr, "") != 0 {
-			fmt.Println("already visited: " + m.Name)
-		} else {
-			e.IPFSAddr = m.Hash
-		}
-	}
-
-	fmt.Println("--------- list ----------")
-	dp.List()
-	fmt.Println("--------- end ----------")
-
-	return err
+	f := File{filePath, merkleNode.Hash, u.username, []string{}, []string{}}
+	f.Share(shareWith, u.dataPath+"/public/for/", u.network)
+	u.RootDir = append(u.RootDir, &f)
+	return nil
 }

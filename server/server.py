@@ -12,9 +12,7 @@ h_to_box_key = {
 h_to_sign_key = {
     #'K81nggpY96g95wm0blComPnmQw3qmhTMke7llFso9WSQDQZb59Oz9MeO+82gimfr7xO2Q+4Q4SYAGe+wqMScaeOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV': 'kA0GW+fTs/THjvvNoIpn6+8TtkPuEOEmABnvsKjEnGk='
 }
-messages = {
-
-}
+messages = {}
 
 
 @app.route('/is/username/registered/<username>', methods=['GET'])
@@ -80,6 +78,16 @@ def signup(username):
     if username in users:
         Response("user already exists")
     users[username] = data.decode()
+    return Response()
+
+@app.route('/send/message', methods=['POST'])
+def send_message():
+    data = request.json
+    if data["to"] in messages:
+        messages[data["to"]] += [[data["from"], data["msg"]]]
+    else:
+        messages[data["to"]] = [[data["from"], data["msg"]]]
+    print(messages)
     return Response()
 
 

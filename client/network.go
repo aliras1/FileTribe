@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"encoding/json"
 	"ipfs-share/crypto"
 )
 
@@ -99,4 +100,16 @@ func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) e
 		"application/octet-stream",
 		[]byte(hash.ToBase64()),
 	)
+}
+
+func (n *Network) SendMessage(from, to, msg string) error {
+	jsonMap := make(map[string]string)
+	jsonMap["from"] = from
+	jsonMap["to"] = to
+	jsonMap["msg"] = msg
+	byteJson, err := json.Marshal(jsonMap)
+	if err != nil {
+		return err
+	}
+	return n.Put("/send/message", "application/json", byteJson)
 }

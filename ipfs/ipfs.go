@@ -1,9 +1,11 @@
 package ipfs
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/whyrusleeping/tar-utils"
 	"io/ioutil"
 	"net/http"
 	"path"
@@ -29,9 +31,27 @@ func NewIPFS(host string, port int) (*IPFS, error) {
 	return &ipfs, nil
 }
 
+func (i *IPFS) AddFile(filePath string) (*MerkleNode, error) {
+	fileName := path.Base(filePath)
+	url := i.host + ":" + i.port + i.version + "add?"
+	m := NewMultipart(url)
+	m.AddFile(filePath, fileName)
+	resp, err := m.Send()
+	if err != nil {
+		return nil, err
+	}
+	var returnMerkleNode MerkleNode
+	err = json.Unmarshal(resp, &returnMerkleNode)
+	if err != nil {
+		err = errors.New("could not unmarshal response: " + err.Error())
+		return nil, err
+	}
+	return &returnMerkleNode, nil
+}
+
 func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 	dirName := path.Base(dirPath)
-	url := i.host + ":" + i.port + i.version + "add?wrap-with-directory=true"
+	url := i.host + ":" + i.port + i.version + "add?wrap-with-directory=true&pin=false"
 	m := NewMultipart(url)
 
 	// list dir
@@ -73,6 +93,16 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 	return merkleNodes, err
 }
 
+func (i *IPFS) Get(hash string) error {
+	b, err := i.getRequest("get?arg=" + hash)
+	if err != nil {
+		return err
+	}
+
+	extractor := &tar.Extractor{"/home/aliras/tmp/tmp"}
+	return extractor.Extract(bytes.NewReader(b))
+}
+
 // Files commands
 type Files struct {
 }
@@ -82,11 +112,11 @@ func List(path string) {
 }
 
 func (i *IPFS) Version() (string, error) {
-	version, err := i.get("version")
+	version, err := i.getRequest("version")
 	return string(version), err
 }
 
-func (i *IPFS) get(path string) ([]byte, error) {
+func (i *IPFS) getRequest(path string) ([]byte, error) {
 	resp, err := http.Get(i.host + ":" + i.port + "/" + i.version + path)
 	if err != nil {
 		return nil, err
