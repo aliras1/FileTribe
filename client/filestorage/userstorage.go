@@ -10,9 +10,9 @@ import (
 )
 
 type UserStorage struct {
+	RootDir  []*File
 	username string
 	dataPath string
-	RootDir  []*File
 	ipfs     *ipfs.IPFS
 	network  *client.Network
 }
