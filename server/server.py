@@ -80,6 +80,7 @@ def signup(username):
     users[username] = data.decode()
     return Response()
 
+
 @app.route('/send/message', methods=['POST'])
 def send_message():
     data = request.json
@@ -89,6 +90,7 @@ def send_message():
         messages[data["to"]] = [{"from": data["from"], "message": data["message"]}]
     print(messages)
     return Response()
+
 
 @app.route('/get/messages/<username>', methods=['GET'])
 def get_messages(username):
@@ -101,7 +103,6 @@ def get_messages(username):
 
 
 if __name__ == "__main__":
-    # pylint: disable=bad-option-value,wrong-import-position,wrong-import-order
     import os
     os.environ['NLS_LANG'] = '.UTF8'
     app.run(debug=True, host="0.0.0.0", port=6000)
