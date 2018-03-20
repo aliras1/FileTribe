@@ -36,42 +36,44 @@ func TestBoxing(t *testing.T) {
 	}
 }
 
-func TestKeysOnServer(t *testing.T) {
+func TestUserDataOnServer(t *testing.T) {
 	username := "testuser"
 	password := "password"
 	network := nw.Network{"http://0.0.0.0:6000"}
-	user, err := SignUp(username, password, &network)
+	user, err := SignUp(username, password, "ipfs", &network)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	// Public key hash
 	publicKeyHash, err := network.GetUserPublicKeyHash(username)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if !publicKeyHash.Equals(&user.PublicKeyHash) {
 		t.Fatal("the public key hashes do not match")
 	}
-
 	// Public signing key
 	publicSigningKey, err := network.GetUserSigningKey(username)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if !publicSigningKey.Equals(&user.Signer.PublicKey) {
 		t.Fatal("the public signing keys do not match")
 	}
-
 	// Public boxing key
 	publicBoxingKey, err := network.GetUserBoxingKey(username)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if !publicBoxingKey.Equals(&user.Boxer.PublicKey) {
+		t.Fatal("the public boxing keys do not match")
+	}
+	// Ipfs address
+	ipfsAddr, err := network.GetUserIPFSAddr(username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Compare(ipfsAddr, "ipfs") != 0 {
 		t.Fatal("the public boxing keys do not match")
 	}
 }
@@ -80,7 +82,7 @@ func TestSignIn(t *testing.T) {
 	username := "testuser3"
 	password := "password3"
 	network := nw.Network{"http://0.0.0.0:6000"}
-	_, err := SignUp(username, password, &network)
+	_, err := SignUp(username, password, "ipfs", &network)
 	if err != nil {
 		t.Fatal(err)
 	}

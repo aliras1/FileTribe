@@ -1,13 +1,9 @@
 package filestorage
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"os"
 	"path"
-	"strings"
 
+	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
 
@@ -22,37 +18,27 @@ type File struct {
 	WAccess    []string `json:"w_access"`
 }
 
-func (f *File) Share(shareWith []string, baseDirPath string, network *nw.Network) error {
+func (f *File) Share(shareWith []string, baseDirPath string, network *nw.Network, ipfs *ipfs.IPFS, us *UserStorage) error {
 	// TODO check if there exists a more efficient way to merge 2 lists
-	for _, i := range shareWith {
-		skip := false
-		for j := 0; j < len(f.SharedWith) && !skip; j++ {
-			if strings.Compare(i, f.SharedWith[j]) == 0 {
-				skip = true
-			}
+	for _, user := range shareWith {
+		// add to share list
+		f.SharedWith = append(f.SharedWith, user)
+		// make new capability into for_X directory
+		err := us.CreateCapabilityFile(f, baseDirPath+user)
+		if err != nil {
+			return err
 		}
-		if !skip {
-			// add to share list
-			f.SharedWith = append(f.SharedWith, i)
-
-			// make new capability into for_X directory
-			err := os.Mkdir(baseDirPath+i, 0770)
-			if err != nil {
-				fmt.Println(err) /* TODO check for permission errors */
-			}
-			jsonMap := make(map[string]string)
-			jsonMap["name"] = path.Base(f.Path)
-			jsonMap["hash"] = path.Base(f.Hash)
-			byteJson, err := json.Marshal(jsonMap)
-			err = ioutil.WriteFile(baseDirPath+i+"/"+path.Base(f.Path)+".json", byteJson, 0644)
-			if err != nil {
-				return err
-			}
-			// send share message
-			err = network.SendMessage(f.Owner, i, path.Base(f.Path))
-			if err != nil {
-				return err
-			}
+	}
+	// re-publish the public directory
+	err := us.PublishPublicDir()
+	if err != nil {
+		return err
+	}
+	for _, user := range shareWith {
+		// send share message
+		err = network.SendMessage(f.Owner, user, path.Base(f.Path))
+		if err != nil {
+			return err
 		}
 	}
 	return nil

@@ -1,9 +1,12 @@
 package filestorage
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 
 	"ipfs-share/ipfs"
@@ -12,54 +15,35 @@ import (
 
 type UserStorage struct {
 	RootDir  []*File
-	Username string
 	DataPath string
 	IPFS     *ipfs.IPFS
 	Network  *nw.Network
 }
 
-func (u *UserStorage) Init(path string, i *ipfs.IPFS) error {
-	u.IPFS = i
-	u.DataPath = path + "/data/"
-	var errorArray []error
+func NewUserStorage(path string, ipfs *ipfs.IPFS, network *nw.Network) *UserStorage {
+	var us UserStorage
+	us.IPFS = ipfs
+	us.Network = network
+	us.DataPath = path + "/data/"
+	us.RootDir = []*File{}
 
-	err := os.Mkdir(u.DataPath, 0770)
-	if err != nil {
-		errorArray = append(errorArray, err)
-	}
-
-	err = os.Mkdir(u.DataPath+"/public", 0770)
-	if err != nil {
-		errorArray = append(errorArray, err)
-	}
-
-	err = os.MkdirAll(u.DataPath+"/userdata/root", 0770)
-	if err != nil {
-		errorArray = append(errorArray, err)
-	}
-
-	f, err := os.Create(u.DataPath + "/userdata/caps.json")
+	os.Mkdir(us.DataPath, 0770)
+	os.Mkdir(us.DataPath+"/public", 0770)
+	os.MkdirAll(us.DataPath+"/userdata/root", 0770)
+	f, _ := os.Create(us.DataPath + "/userdata/caps.json")
 	f.Close()
-	if err != nil {
-		errorArray = append(errorArray, err)
-	}
-
-	f, err = os.Create(u.DataPath + "/userdata/shared.json")
+	f, _ = os.Create(us.DataPath + "/userdata/shared.json")
 	f.Close()
-	if err != nil {
-		errorArray = append(errorArray, err)
-	}
-
-	u.build()
-	return fmt.Errorf("%s", errorArray)
+	us.build()
+	return &us
 }
 
-func (u *UserStorage) build() error {
+func (us *UserStorage) build() error {
 	return errors.New("not implemented")
 }
 
-func (u *UserStorage) IsFileInRootDir(filePath string) bool {
-	for _, i := range u.RootDir {
+func (us *UserStorage) IsFileInRootDir(filePath string) bool {
+	for _, i := range us.RootDir {
 		if strings.Compare(i.Path, filePath) == 0 {
 			return true
 		}
@@ -67,19 +51,49 @@ func (u *UserStorage) IsFileInRootDir(filePath string) bool {
 	return false
 }
 
-func (u *UserStorage) AddAndShareFile(filePath string, shareWith []string) error {
-	if u.IsFileInRootDir(filePath) {
+func (us *UserStorage) AddAndShareFile(filePath, owner string, shareWith []string) error {
+	if us.IsFileInRootDir(filePath) {
 		return errors.New("file already in root dir")
 	}
-	merkleNode, err := u.IPFS.AddFile(filePath)
+	merkleNode, err := us.IPFS.AddFile(filePath)
 	if err != nil {
 		return err
 	}
-	f := File{filePath, merkleNode.Hash, u.Username, []string{}, []string{}}
-	err = f.Share(shareWith, u.DataPath+"/public/for/", u.Network)
+	f := File{filePath, merkleNode.Hash, owner, []string{}, []string{}}
+	err = f.Share(shareWith, us.DataPath+"/public/for/", us.Network, us.IPFS, us)
 	if err != nil {
 		return err
 	}
-	u.RootDir = append(u.RootDir, &f)
+	us.RootDir = append(us.RootDir, &f)
+	return nil
+}
+
+func (us *UserStorage) CreateCapabilityFile(f *File, forPath string) error {
+	err := os.MkdirAll(forPath, 0770)
+	if err != nil {
+		fmt.Println(err) /* TODO check for permission errors */
+	}
+	jsonMap := make(map[string]string)
+	jsonMap["name"] = path.Base(f.Path)
+	jsonMap["hash"] = path.Base(f.Hash)
+	byteJson, err := json.Marshal(jsonMap)
+	return ioutil.WriteFile(forPath+"/"+path.Base(f.Path)+".json", byteJson, 0644)
+}
+
+func (us *UserStorage) PublishPublicDir() error {
+	publicDir := us.DataPath + "/public"
+	merkleNodes, err := us.IPFS.AddDir(publicDir)
+	if err != nil {
+		return err
+	}
+	for _, mn := range merkleNodes {
+		if strings.Compare(mn.Name, "public") == 0 {
+			err = us.IPFS.NamePublish(mn.Hash)
+			if err != nil {
+				return err
+			}
+			break
+		}
+	}
 	return nil
 }

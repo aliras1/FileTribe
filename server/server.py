@@ -12,6 +12,7 @@ h_to_box_key = {
 h_to_sign_key = {
     #'K81nggpY96g95wm0blComPnmQw3qmhTMke7llFso9WSQDQZb59Oz9MeO+82gimfr7xO2Q+4Q4SYAGe+wqMScaeOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV': 'kA0GW+fTs/THjvvNoIpn6+8TtkPuEOEmABnvsKjEnGk='
 }
+h_to_ipfs = {}
 messages = {}
 
 
@@ -32,7 +33,7 @@ def get_user_public_key_hash(user):
 @app.route('/get/user/signkey/<user>', methods=['GET'])
 def get_user_signing_key(user):
     if user not in users:
-        abort(404)
+        return Response()
     h = users[user]
     return Response(h_to_sign_key[h])
 
@@ -40,9 +41,17 @@ def get_user_signing_key(user):
 @app.route('/get/user/boxkey/<user>', methods=['GET'])
 def get_user_boxing_key(user):
     if user not in users:
-        abort(404)
+        return Response()
     h = users[user]
     return Response(h_to_box_key[h])
+
+
+@app.route('/get/user/ipfsaddr/<user>', methods=['GET'])
+def get_user_ipfs_addr(user):
+    if user not in users:
+        return Response()
+    h = users[user]
+    return Response(h_to_ipfs[h])
 
 
 @app.route('/put/signkey', methods=['POST'])
@@ -53,7 +62,7 @@ def put_sign_key():
     print(hash)
     print(vk)
     if hash in h_to_sign_key:
-        Response("signing key already exists")
+        Response("signing key for hash {} already exists".format(hash))
     h_to_sign_key[hash] = vk
     return Response()
 
@@ -66,8 +75,21 @@ def put_box_key():
     print(hash)
     print(vk)
     if hash in h_to_box_key:
-        Response("boxing key already exists")
+        Response("boxing key for hash {} already exists".format(hash))
     h_to_box_key[hash] = vk
+    return Response()
+
+
+@app.route('/put/ipfsaddr', methods=['POST'])
+def put_ipfs_addr():
+    data = request.json
+    hash = data["hash"]
+    ipfs = data["ipfsaddr"]
+    print(hash)
+    print(ipfs)
+    if hash in h_to_ipfs:
+        Response("ipfs address for hash {} already exists".format(hash))
+    h_to_ipfs[hash] = ipfs
     return Response()
 
 

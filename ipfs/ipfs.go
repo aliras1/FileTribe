@@ -21,17 +21,31 @@ type IPFSID struct {
 	ProtocolVersion string   `json:"ProtocolVersion"`
 }
 
+type ListLink struct {
+	Name string `json:"Name"`
+	Hash string `json:"Hash"`
+	Size int    `json:"Size"`
+	Type int    `json:"Type"`
+}
+
+type ListObject struct {
+	Hash  string     `json:"Hash"`
+	Links []ListLink `json:"Links"`
+}
+
+type ListObjects struct {
+	Objects []ListObject `json:"Objects"`
+}
+
 type IPFS struct {
 	host    string
 	port    string
 	version string
-
-	Files
 }
 
 func NewIPFS(host string, port int) (*IPFS, error) {
 	p := strconv.FormatInt(int64(port), 10)
-	ipfs := IPFS{host, p, "/api/v0/", Files{}}
+	ipfs := IPFS{host, p, "/api/v0/"}
 	_, err := ipfs.Version()
 	if err != nil {
 		return nil, errors.New("could not connect to ipfs daemon: " + err.Error())
@@ -58,6 +72,7 @@ func (i *IPFS) AddFile(filePath string) (*MerkleNode, error) {
 }
 
 func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
+	fmt.Println("addir")
 	dirName := path.Base(dirPath)
 	url := i.host + ":" + i.port + i.version + "add?wrap-with-directory=true&pin=false"
 	m := NewMultipart(url)
@@ -101,6 +116,27 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 	return merkleNodes, err
 }
 
+func (i *IPFS) List(pathIPFS string) (*ListObjects, error) {
+	bytesListObjectsJSON, err := i.getRequest("ls?arg=" + pathIPFS)
+	if err != nil {
+		return nil, err
+	}
+	var listObjects ListObjects
+	err = json.Unmarshal(bytesListObjectsJSON, &listObjects)
+	if err != nil {
+		return nil, err
+	}
+	return &listObjects, nil
+}
+
+func (i *IPFS) NamePublish(hash string) error {
+	_, err := i.getRequest("name/publish?arg=" + hash)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (i *IPFS) Get(hash string) error {
 	b, err := i.getRequest("get?arg=" + hash)
 	if err != nil {
@@ -109,14 +145,6 @@ func (i *IPFS) Get(hash string) error {
 
 	extractor := &tar.Extractor{"/home/aliras/tmp/tmp"}
 	return extractor.Extract(bytes.NewReader(b))
-}
-
-// Files commands
-type Files struct {
-}
-
-func List(path string) {
-
 }
 
 func (i *IPFS) Version() (string, error) {

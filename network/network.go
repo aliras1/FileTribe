@@ -56,6 +56,14 @@ func (n *Network) GetUserBoxingKey(username string) (crypto.PublicBoxingKey, err
 	return crypto.Base64ToPublicBoxingKey(string(base64PublicBoxingKey))
 }
 
+func (n *Network) GetUserIPFSAddr(username string) (string, error) {
+	bytesIPFSAddr, err := n.Get("/get/user/ipfsaddr/", username)
+	if err != nil {
+		return "", err
+	}
+	return string(bytesIPFSAddr), nil
+}
+
 func (n *Network) IsUsernameRegistered(username string) (bool, error) {
 	boolString, err := n.Get("/is/username/registered/", username)
 	if err != nil {
@@ -108,6 +116,15 @@ func (n *Network) PutBoxingKey(hash crypto.PublicKeyHash, key crypto.PublicBoxin
 	jsonStr := fmt.Sprintf(`{"hash":"%s", "boxkey":"%s"}`, hash.ToBase64(), key.ToBase64())
 	return n.Put(
 		"/put/boxkey",
+		"application/json",
+		[]byte(jsonStr),
+	)
+}
+
+func (n *Network) PutIPFSAddr(hash crypto.PublicKeyHash, ipfsAddr string) error {
+	jsonStr := fmt.Sprintf(`{"hash":"%s", "ipfsaddr":"%s"}`, hash.ToBase64(), ipfsAddr)
+	return n.Put(
+		"/put/ipfsaddr",
 		"application/json",
 		[]byte(jsonStr),
 	)
