@@ -9,13 +9,6 @@ import (
 	nw "ipfs-share/network"
 )
 
-func Produce(c chan nw.Message) {
-	for i := 0; i < 15; i++ {
-		m := nw.Message{From: "from", Message: fmt.Sprintf("hello, friend!%d", i)}
-		c <- m
-	}
-}
-
 func TestMessageGetter(t *testing.T) {
 	n := nw.Network{"http://0.0.0.0:6000"}
 	i, err := ipfs.NewIPFS("http://127.0.0.1", 5001)
