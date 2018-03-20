@@ -19,7 +19,6 @@ type File struct {
 }
 
 func (f *File) Share(shareWith []string, baseDirPath string, network *nw.Network, ipfs *ipfs.IPFS, us *UserStorage) error {
-	// TODO check if there exists a more efficient way to merge 2 lists
 	for _, user := range shareWith {
 		// add to share list
 		f.SharedWith = append(f.SharedWith, user)
