@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"ipfs-share/network"
+	nw "ipfs-share/network"
 )
 
 func TestBoxing(t *testing.T) {
@@ -39,7 +39,7 @@ func TestBoxing(t *testing.T) {
 func TestKeysOnServer(t *testing.T) {
 	username := "testuser"
 	password := "password"
-	network := network.Network{"http://0.0.0.0:6000"}
+	network := nw.Network{"http://0.0.0.0:6000"}
 	user, err := SignUp(username, password, &network)
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +79,7 @@ func TestKeysOnServer(t *testing.T) {
 func TestSignIn(t *testing.T) {
 	username := "testuser3"
 	password := "password3"
-	network := network.Network{"http://0.0.0.0:6000"}
+	network := nw.Network{"http://0.0.0.0:6000"}
 	_, err := SignUp(username, password, &network)
 	if err != nil {
 		t.Fatal(err)
