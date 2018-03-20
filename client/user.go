@@ -50,6 +50,7 @@ func NewUser(username, password string) *User {
 }
 
 func SignUp(username, password string, network *nw.Network) (*User, error) {
+	// TODO register IPFS address as well
 	exists, err := network.IsUsernameRegistered(username)
 	if err != nil {
 		return nil, err

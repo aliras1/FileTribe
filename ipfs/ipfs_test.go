@@ -25,6 +25,16 @@ func TestIPFS_AddFile(t *testing.T) {
 
 func TestIPFS_Get(t *testing.T) {
 	ipfs, err := NewIPFS("http://127.0.0.1", 5001)
-	fmt.Println(err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ipfs.Get("Qmf6Dea2XP5GqmBdGmfpJNKpqaDCfDbSi1CnLHEz8B7aP9")
+}
+
+func TestIPFS_ID(t *testing.T) {
+	ipfs, err := NewIPFS("http://127.0.0.1", 5001)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(ipfs.ID())
 }

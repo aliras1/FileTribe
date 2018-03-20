@@ -13,6 +13,14 @@ import (
 	"strings"
 )
 
+type IPFSID struct {
+	ID              string   `json:"ID"`
+	PublicKey       string   `json:"PublicKey"`
+	Addresses       []string `json:"Addresses"`
+	AgentVersion    string   `json:"AgentVersion"`
+	ProtocolVersion string   `json:"ProtocolVersion"`
+}
+
 type IPFS struct {
 	host    string
 	port    string
@@ -114,6 +122,16 @@ func List(path string) {
 func (i *IPFS) Version() (string, error) {
 	version, err := i.getRequest("version")
 	return string(version), err
+}
+
+func (i *IPFS) ID() (*IPFSID, error) {
+	bytesID, err := i.getRequest("id")
+	if err != nil {
+		return nil, err
+	}
+	var id IPFSID
+	err = json.Unmarshal(bytesID, &id)
+	return &id, err
 }
 
 func (i *IPFS) getRequest(path string) ([]byte, error) {
