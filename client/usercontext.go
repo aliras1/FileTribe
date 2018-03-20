@@ -2,11 +2,12 @@ package client
 
 import (
 	"fmt"
+	"os"
+	"time"
+
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
-	"os"
-	"time"
 )
 
 type UserContext struct {

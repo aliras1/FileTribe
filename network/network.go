@@ -2,13 +2,13 @@ package network
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 
-	"encoding/json"
 	"ipfs-share/crypto"
 )
 

@@ -3,10 +3,11 @@ package filestorage
 import (
 	"errors"
 	"fmt"
-	"ipfs-share/ipfs"
-	nw "ipfs-share/network"
 	"os"
 	"strings"
+
+	"ipfs-share/ipfs"
+	nw "ipfs-share/network"
 )
 
 type UserStorage struct {
@@ -54,8 +55,7 @@ func (u *UserStorage) Init(path string, i *ipfs.IPFS) error {
 }
 
 func (u *UserStorage) build() error {
-
-	return nil
+	return errors.New("not implemented")
 }
 
 func (u *UserStorage) IsFileInRootDir(filePath string) bool {
