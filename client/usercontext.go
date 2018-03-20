@@ -33,14 +33,14 @@ func NewUserContextFromUnamePassw(username, password string, network *nw.Network
 	return &uc
 }
 
-func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Message, channelSig chan os.Signal) error {
+func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Message, channelSig chan os.Signal) {
 	for true {
 		select {
 		case sig := <-channelSig:
 			fmt.Println("received signal", sig)
 			close(channelMsg)
 			close(channelSig)
-			return nil
+			return
 		default:
 			msgs, err := network.GetMessages(username)
 			if err != nil {
@@ -53,7 +53,6 @@ func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Mess
 			time.Sleep(1 * time.Second)
 		}
 	}
-	return nil
 }
 
 func MessageProcessor(channelMsg chan nw.Message) {
