@@ -7,9 +7,6 @@ import (
 	nw "ipfs-share/network"
 )
 
-type EntryProvider interface {
-}
-
 type File struct {
 	Path       string   `json:"path"`
 	Hash       string   `json:"ipfs_hash"`

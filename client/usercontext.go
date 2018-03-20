@@ -35,13 +35,12 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	var uc UserContext
 	uc.User = user
 	uc.Network = network
-	uc.UserStorage = fs.NewUserStorage(dataPath, ipfs, network)
+	uc.UserStorage = fs.NewUserStorage(dataPath, uc.User.Username, ipfs, network)
 
 	uc.channelMsg = make(chan nw.Message)
 	uc.channelSig = make(chan os.Signal)
 	go MessageGetter(uc.User.Username, network, uc.channelMsg, uc.channelSig)
-	go MessageProcessor(uc.channelMsg, uc.User.Username, network, ipfs)
-	fmt.Println("forked")
+	go MessageProcessor(uc.channelMsg, uc.User.Username, uc.UserStorage, network, ipfs)
 
 	return &uc
 }
@@ -68,7 +67,7 @@ func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Mess
 	}
 }
 
-func MessageProcessor(channelMsg chan nw.Message, username string, network *nw.Network, ipfs *ipfs.IPFS) {
+func MessageProcessor(channelMsg chan nw.Message, username string, storage *fs.UserStorage, network *nw.Network, ipfs *ipfs.IPFS) {
 	for msg := range channelMsg {
 		fmt.Print("msgproc: ")
 		fmt.Println(msg)
@@ -81,8 +80,15 @@ func MessageProcessor(channelMsg chan nw.Message, username string, network *nw.N
 			fmt.Println(err)
 		}
 		for _, lo := range listObjects.Objects {
-			fmt.Println(lo)
+			for _, link := range lo.Links {
+				err := storage.AddFileFromIPFS(link.Name, link.Hash)
+				if err != nil {
+					fmt.Println(err)
+				}
+			}
 		}
+		fmt.Println("content of root directory: ")
+		storage.List()
 	}
 }
 

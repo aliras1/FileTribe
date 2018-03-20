@@ -72,7 +72,6 @@ func (i *IPFS) AddFile(filePath string) (*MerkleNode, error) {
 }
 
 func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
-	fmt.Println("addir")
 	dirName := path.Base(dirPath)
 	url := i.host + ":" + i.port + i.version + "add?wrap-with-directory=true&pin=false"
 	m := NewMultipart(url)
@@ -88,13 +87,11 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 		if !f.IsDir() {
 			m.AddFile(dirPath+"/"+f.Name(), dirName+"/"+f.Name())
 		} else {
-			fmt.Println(dirName + "/" + f.Name())
 			m.AddSubDir(dirPath+"/"+f.Name(), dirName+"/"+f.Name())
 		}
 	}
 	resp, err := m.Send()
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 
@@ -112,7 +109,6 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 			return nil, err
 		}
 	}
-	fmt.Println(string(resp))
 	return merkleNodes, err
 }
 
@@ -137,13 +133,12 @@ func (i *IPFS) NamePublish(hash string) error {
 	return nil
 }
 
-func (i *IPFS) Get(hash string) error {
+func (i *IPFS) Get(filePath, hash string) error {
 	b, err := i.getRequest("get?arg=" + hash)
 	if err != nil {
 		return err
 	}
-
-	extractor := &tar.Extractor{"/home/aliras/tmp/tmp"}
+	extractor := &tar.Extractor{filePath}
 	return extractor.Extract(bytes.NewReader(b))
 }
 

@@ -18,7 +18,7 @@ func TestBoxing(t *testing.T) {
 	user2 := NewUser(username2, password2)
 
 	message := "Hello friend!"
-	out := []byte{}
+	var out []byte
 	nonce := user1.Boxer.GetNonce()
 	// user1 -> user2
 	enc := box.Seal(out, []byte(message),
