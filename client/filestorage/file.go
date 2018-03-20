@@ -33,8 +33,8 @@ func (f *File) Share(shareWith []string, baseDirPath string, network *nw.Network
 	if err != nil {
 		return err
 	}
+	// send share messages
 	for _, user := range shareWith {
-		// send share message
 		err = network.SendMessage(f.Owner, user, path.Base(f.Path))
 		if err != nil {
 			return err
