@@ -14,7 +14,8 @@ type UserContext struct {
 	User        *User
 	Network     *nw.Network
 	UserStorage *fs.UserStorage
-	Messages    []*nw.Message
+	channelMsg  chan nw.Message
+	channelSig  chan os.Signal
 }
 
 func NewUserContextFromUnamePassw(username, password string, network *nw.Network, ipfs *ipfs.IPFS) *UserContext {
@@ -22,12 +23,11 @@ func NewUserContextFromUnamePassw(username, password string, network *nw.Network
 	uc.User = NewUser(username, password)
 	uc.Network = network
 	uc.UserStorage = &fs.UserStorage{[]*fs.File{}, "test_user", "./data", ipfs, network}
-	uc.Messages = []*nw.Message{}
 
-	channelMsg := make(chan nw.Message)
-	channelSig := make(chan os.Signal)
-	go MessageGetter(uc.User.Username, network, channelMsg, channelSig)
-	go MessageProcessor(channelMsg)
+	uc.channelMsg = make(chan nw.Message)
+	uc.channelSig = make(chan os.Signal)
+	go MessageGetter(uc.User.Username, network, uc.channelMsg, uc.channelSig)
+	go MessageProcessor(uc.channelMsg)
 	fmt.Println("forked")
 
 	return &uc
