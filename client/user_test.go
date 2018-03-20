@@ -4,6 +4,8 @@ import (
 	"golang.org/x/crypto/nacl/box"
 	"strings"
 	"testing"
+
+	"ipfs-share/network"
 )
 
 func TestBoxing(t *testing.T) {
@@ -37,8 +39,8 @@ func TestBoxing(t *testing.T) {
 func TestKeysOnServer(t *testing.T) {
 	username := "testuser"
 	password := "password"
-	network := Network{"http://0.0.0.0:6000"}
-	user, err := SignUp(username, password, network)
+	network := network.Network{"http://0.0.0.0:6000"}
+	user, err := SignUp(username, password, &network)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,13 +79,13 @@ func TestKeysOnServer(t *testing.T) {
 func TestSignIn(t *testing.T) {
 	username := "testuser3"
 	password := "password3"
-	network := Network{"http://0.0.0.0:6000"}
-	_, err := SignUp(username, password, network)
+	network := network.Network{"http://0.0.0.0:6000"}
+	_, err := SignUp(username, password, &network)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	user_in, err := SignIn(username, password, network)
+	user_in, err := SignIn(username, password, &network)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-from flask import Flask, abort, request, Response
+from flask import Flask, abort, jsonify, request, Response
 
 
 app = Flask(__name__)
@@ -84,11 +84,20 @@ def signup(username):
 def send_message():
     data = request.json
     if data["to"] in messages:
-        messages[data["to"]] += [[data["from"], data["msg"]]]
+        messages[data["to"]] += [{"from": data["from"], "message": data["message"]}]
     else:
-        messages[data["to"]] = [[data["from"], data["msg"]]]
+        messages[data["to"]] = [{"from": data["from"], "message": data["message"]}]
     print(messages)
     return Response()
+
+@app.route('/get/messages/<username>', methods=['GET'])
+def get_messages(username):
+    if username not in messages:
+        return Response(jsonify([]).data)
+    else:
+        msgs = messages[username]
+        del messages[username]
+        return Response(jsonify(msgs).data)
 
 
 if __name__ == "__main__":

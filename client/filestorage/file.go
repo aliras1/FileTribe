@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"ipfs-share/client"
 	"os"
 	"path"
 	"strings"
+
+	nw "ipfs-share/network"
 )
 
 type EntryProvider interface {
@@ -21,7 +22,7 @@ type File struct {
 	WAccess    []string `json:"w_access"`
 }
 
-func (f *File) Share(shareWith []string, baseDirPath string, network *client.Network) error {
+func (f *File) Share(shareWith []string, baseDirPath string, network *nw.Network) error {
 	// TODO check if there exists a more efficient way to merge 2 lists
 	for _, i := range shareWith {
 		skip := false

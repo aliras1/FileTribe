@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/scrypt"
 
 	"ipfs-share/crypto"
+	nw "ipfs-share/network"
 )
 
 type User struct {
@@ -48,8 +49,8 @@ func NewUser(username, password string) *User {
 	}
 }
 
-func SignUp(username, password string, network Network) (*User, error) {
-	exists, err := network.isUsernameRegistered(username)
+func SignUp(username, password string, network *nw.Network) (*User, error) {
+	exists, err := network.IsUsernameRegistered(username)
 	if err != nil {
 		return nil, err
 	}
@@ -71,8 +72,8 @@ func SignUp(username, password string, network Network) (*User, error) {
 	return nil, errors.New("user already exists")
 }
 
-func SignIn(username, password string, network Network) (*User, error) {
-	exists, err := network.isUsernameRegistered(username)
+func SignIn(username, password string, network *nw.Network) (*User, error) {
+	exists, err := network.IsUsernameRegistered(username)
 	if err != nil {
 		return nil, err
 	}

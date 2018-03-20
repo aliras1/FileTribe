@@ -1,4 +1,4 @@
-package client
+package network
 
 import (
 	"bytes"
@@ -12,12 +12,18 @@ import (
 	"ipfs-share/crypto"
 )
 
+type Message struct {
+	From    string `json:"from"`
+	To      string `json:"to,omitempty"`
+	Message string `json:"message"`
+}
+
 type Network struct {
 	Address string
 }
 
 func (n *Network) Get(path string, id string) ([]byte, error) {
-	resp, err := http.Get(fmt.Sprintf("%s%s%s", n.Address, path, id))
+	resp, err := http.Get(fmt.Sprintf(n.Address + path + id))
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +56,7 @@ func (n *Network) GetUserBoxingKey(username string) (crypto.PublicBoxingKey, err
 	return crypto.Base64ToPublicBoxingKey(string(base64PublicBoxingKey))
 }
 
-func (n *Network) isUsernameRegistered(username string) (bool, error) {
+func (n *Network) IsUsernameRegistered(username string) (bool, error) {
 	boolString, err := n.Get("/is/username/registered/", username)
 	if err != nil {
 		return false, err
@@ -58,9 +64,22 @@ func (n *Network) isUsernameRegistered(username string) (bool, error) {
 	return strconv.ParseBool(string(boolString))
 }
 
+func (n *Network) GetMessages(username string) ([]*Message, error) {
+	resp, err := n.Get("/get/messages/", username)
+	if err != nil {
+		return nil, err
+	}
+	var messages []*Message
+	err = json.Unmarshal(resp, &messages)
+	if err != nil {
+		return nil, err
+	}
+	return messages, nil
+}
+
 func (n *Network) Put(path string, contentType string, data []byte) error {
 	resp, err := http.Post(
-		fmt.Sprintf("%s%s", n.Address, path),
+		fmt.Sprintf(n.Address+path),
 		contentType,
 		bytes.NewReader(data),
 	)
@@ -103,11 +122,8 @@ func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) e
 }
 
 func (n *Network) SendMessage(from, to, msg string) error {
-	jsonMap := make(map[string]string)
-	jsonMap["from"] = from
-	jsonMap["to"] = to
-	jsonMap["msg"] = msg
-	byteJson, err := json.Marshal(jsonMap)
+	m := Message{from, to, msg}
+	byteJson, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
