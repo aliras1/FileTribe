@@ -60,7 +60,7 @@ func (us *UserStorage) List() {
 
 func (us *UserStorage) IsFileInRootDir(filePath string) bool {
 	for _, i := range us.RootDir {
-		if strings.Compare(i.Path, filePath) == 0 {
+		if strings.Compare(path.Base(i.Path), path.Base(filePath)) == 0 {
 			return true
 		}
 	}
@@ -143,9 +143,12 @@ func (us *UserStorage) AddFileFromIPFS(name, hash string) error {
 	if err != nil {
 		return err
 	}
+	if us.IsFileInRootDir(readCAP.Name) {
+		return nil
+	}
 	// download and add to root directory
 	filePath := us.DataPath + "/userdata/root/" + readCAP.Name
-	f := File{path.Clean(filePath), readCAP.Owner, readCAP.Owner, []string{}, []string{}}
+	f := File{path.Clean(filePath), readCAP.Hash, readCAP.Owner, []string{}, []string{}}
 	err = us.IPFS.Get(filePath, readCAP.Hash)
 	if err != nil {
 		return err
