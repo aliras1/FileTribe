@@ -21,6 +21,10 @@ type IPFSID struct {
 	ProtocolVersion string   `json:"ProtocolVersion"`
 }
 
+type IPFSNameResolvedHash struct {
+	Path string `json:"Path"`
+}
+
 type ListLink struct {
 	Name string `json:"Name"`
 	Hash string `json:"Hash"`
@@ -112,6 +116,25 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 	return merkleNodes, err
 }
 
+func (i *IPFS) Get(filePath, hash string) error {
+	b, err := i.getRequest("get?arg=" + hash)
+	if err != nil {
+		return err
+	}
+	extractor := &tar.Extractor{filePath}
+	return extractor.Extract(bytes.NewReader(b))
+}
+
+func (i *IPFS) ID() (*IPFSID, error) {
+	bytesID, err := i.getRequest("id")
+	if err != nil {
+		return nil, err
+	}
+	var id IPFSID
+	err = json.Unmarshal(bytesID, &id)
+	return &id, err
+}
+
 func (i *IPFS) List(pathIPFS string) (*ListObjects, error) {
 	bytesListObjectsJSON, err := i.getRequest("ls?arg=" + pathIPFS)
 	if err != nil {
@@ -133,28 +156,29 @@ func (i *IPFS) NamePublish(hash string) error {
 	return nil
 }
 
-func (i *IPFS) Get(filePath, hash string) error {
-	b, err := i.getRequest("get?arg=" + hash)
+func (i *IPFS) NameResolve(ipnsPath string) (string, error) {
+	resp, err := i.getRequest("name/resolve?arg=" + ipnsPath)
 	if err != nil {
-		return err
+		return "", err
 	}
-	extractor := &tar.Extractor{filePath}
-	return extractor.Extract(bytes.NewReader(b))
+	var hash IPFSNameResolvedHash
+	err = json.Unmarshal(resp, &hash)
+	return hash.Path, err
+}
+
+func (i *IPFS) Resolve(anyPath string) (string, error) {
+	resp, err := i.getRequest("resolve?arg=" + anyPath + "&recursive=true")
+	if err != nil {
+		return "", err
+	}
+	var hash IPFSNameResolvedHash
+	err = json.Unmarshal(resp, &hash)
+	return hash.Path, err
 }
 
 func (i *IPFS) Version() (string, error) {
 	version, err := i.getRequest("version")
 	return string(version), err
-}
-
-func (i *IPFS) ID() (*IPFSID, error) {
-	bytesID, err := i.getRequest("id")
-	if err != nil {
-		return nil, err
-	}
-	var id IPFSID
-	err = json.Unmarshal(bytesID, &id)
-	return &id, err
 }
 
 func (i *IPFS) getRequest(path string) ([]byte, error) {

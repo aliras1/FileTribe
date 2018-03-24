@@ -31,11 +31,19 @@ func NewUserContextFromSignUp(username, password, dataPath string, network *nw.N
 	return NewUserContext(dataPath, user, network, ipfs), nil
 }
 
+func NewUserContextFromSignIn(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+	user, err := SignIn(username, password, network)
+	if err != nil {
+		return nil, err
+	}
+	return NewUserContext(dataPath, user, network, ipfs), nil
+}
+
 func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs.IPFS) *UserContext {
 	var uc UserContext
 	uc.User = user
 	uc.Network = network
-	uc.UserStorage = fs.NewUserStorage(dataPath, uc.User.Username, ipfs, network)
+	uc.UserStorage = fs.NewUserStorage(dataPath, uc.User.Username, network, ipfs)
 
 	uc.channelMsg = make(chan nw.Message)
 	uc.channelSig = make(chan os.Signal)
@@ -81,7 +89,7 @@ func MessageProcessor(channelMsg chan nw.Message, username string, storage *fs.U
 		}
 		for _, lo := range listObjects.Objects {
 			for _, link := range lo.Links {
-				err := storage.AddFileFromIPFS(link.Name, link.Hash)
+				err := storage.AddFileFromIPNS(link.Name, link.Hash, ipfsAddr)
 				if err != nil {
 					fmt.Println(err)
 				}

@@ -1,6 +1,8 @@
 package filestorage
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"path"
 
 	"ipfs-share/ipfs"
@@ -9,23 +11,34 @@ import (
 
 type File struct {
 	Path       string   `json:"path"`
-	Hash       string   `json:"ipfs_hash"`
+	IPNSPath   string   `json:"ipnsPath"`
 	Owner      string   `json:"owner"`
 	SharedWith []string `json:"shared_with"`
 	WAccess    []string `json:"w_access"`
 }
 
-func (f *File) Share(shareWith []string, baseDirPath string, network *nw.Network, ipfs *ipfs.IPFS, us *UserStorage) error {
+func NewFileFromShared(filePath string) (*File, error) {
+	bytesFile, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	var file File
+	err = json.Unmarshal(bytesFile, &file)
+	return &file, err
+}
+
+func (f *File) Share(shareWith []string, baseDirPath, ipfsHash string, network *nw.Network, ipfs *ipfs.IPFS, us *UserStorage) error {
 	for _, user := range shareWith {
 		// add to share list
 		f.SharedWith = append(f.SharedWith, user)
 		// make new capability into for_X directory
-		err := us.CreateCapabilityFile(f, baseDirPath+user)
+		err := us.CreateCapabilityFile(f, baseDirPath+user, "/ipfs/"+ipfsHash)
 		if err != nil {
 			return err
 		}
 	}
-	// re-publish the public directory
+	us.CreateFileIntoPublicDir(f.Path)
+	us.StoreFileMetaData(f)
 	err := us.PublishPublicDir()
 	if err != nil {
 		return err
