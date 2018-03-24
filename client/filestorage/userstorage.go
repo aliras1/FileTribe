@@ -170,7 +170,6 @@ func (us *UserStorage) addFileToRootFromCap(cap *ReadCAP) *File {
 }
 
 func (us *UserStorage) downloadFileFromCap(file *File, cap *ReadCAP) error {
-	// download if file does not exist OR it changed since last time
 	err := us.IPFS.Get(file.Path, file.IPNSPath)
 	if err != nil {
 		return err
