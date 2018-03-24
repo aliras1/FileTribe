@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"path"
 
+	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
@@ -27,12 +28,14 @@ func NewFileFromShared(filePath string) (*File, error) {
 	return &file, err
 }
 
-func (f *File) Share(shareWith []string, baseDirPath, ipfsHash string, network *nw.Network, ipfs *ipfs.IPFS, us *UserStorage) error {
+func (f *File) Share(shareWith []string, baseDirPath, ipfsHash string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS, us *UserStorage) error {
+	var newUsers []string
 	for _, user := range shareWith {
 		// add to share list
 		f.SharedWith = append(f.SharedWith, user)
 		// make new capability into for_X directory
-		err := us.CreateCapabilityFile(f, baseDirPath+user, "/ipfs/"+ipfsHash)
+		err := us.CreateCapabilityFile(f, baseDirPath+user, "/ipfs/"+ipfsHash, boxer)
+		newUsers = append(newUsers, user)
 		if err != nil {
 			return err
 		}
@@ -44,7 +47,7 @@ func (f *File) Share(shareWith []string, baseDirPath, ipfsHash string, network *
 		return err
 	}
 	// send share messages
-	for _, user := range shareWith {
+	for _, user := range newUsers {
 		err = network.SendMessage(f.Owner, user, path.Base(f.Path))
 		if err != nil {
 			return err

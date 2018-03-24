@@ -1,7 +1,6 @@
 package client
 
 import (
-	"golang.org/x/crypto/nacl/box"
 	"strings"
 	"testing"
 
@@ -18,16 +17,10 @@ func TestBoxing(t *testing.T) {
 	user2 := NewUser(username2, password2)
 
 	message := "Hello friend!"
-	var out []byte
-	nonce := user1.Boxer.GetNonce()
-	// user1 -> user2
-	enc := box.Seal(out, []byte(message),
-		nonce,
-		user2.Boxer.PublicKey.Bytes(),
-		user1.Boxer.SecretKey.Bytes(),
-	)
-	// user2 read user1
-	plain, success := box.Open(out, enc, nonce, user1.Boxer.PublicKey.Bytes(), user2.Boxer.SecretKey.Bytes())
+	encMsg := user1.Boxer.BoxSeal([]byte(message), &user2.Boxer.PublicKey)
+	var nonce [24]byte
+	copy(nonce[:], encMsg[:24])
+	plain, success := user2.Boxer.BoxOpen(encMsg, &user1.Boxer.PublicKey)
 	if !success {
 		t.Fatal("could not decrypt message")
 	}

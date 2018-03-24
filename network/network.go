@@ -140,6 +140,7 @@ func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) e
 
 func (n *Network) SendMessage(from, to, msg string) error {
 	m := Message{from, to, msg}
+	fmt.Println(m)
 	byteJson, err := json.Marshal(m)
 	if err != nil {
 		return err

@@ -15,7 +15,7 @@ func TestMessageGetter(t *testing.T) {
 	if err != nil {
 		t.Fatal("could not connect to ipfs daemon")
 	}
-	_, err = NewUserContextFromSignUp("test_user", "pw", "./", &network, ipfs)
+	_, err = NewUserContextFromSignUp("test_user", "pw", "./t1", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,8 +41,8 @@ func TestSharingFromUserContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc1.UserStorage.AddAndShareFile("usercontext.go", uc1.User.Username, []string{uc2.User.Username})
-	uc1.UserStorage.AddAndShareFile("usercontext_test.go", uc1.User.Username, []string{uc2.User.Username})
+	uc1.UserStorage.AddAndShareFile("usercontext.go", uc1.User.Username, []string{uc2.User.Username}, &uc1.User.Boxer)
+	uc1.UserStorage.AddAndShareFile("usercontext_test.go", uc1.User.Username, []string{uc2.User.Username}, &uc1.User.Boxer)
 	time.Sleep(3 * time.Second)
 }
 

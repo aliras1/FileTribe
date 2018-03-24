@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 
+	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
@@ -57,9 +58,10 @@ func NewUserStorage(dataPath, username string, network *nw.Network, ipfs *ipfs.I
 
 	os.Mkdir(us.DataPath, 0770)
 	os.MkdirAll(us.DataPath+"/public/files", 0770)
-	os.MkdirAll(us.DataPath+"/userdata/root", 0770)
 	os.MkdirAll(us.DataPath+"/userdata/caps", 0770)
+	os.MkdirAll(us.DataPath+"/userdata/root", 0770)
 	os.MkdirAll(us.DataPath+"/userdata/shared", 0770)
+	os.MkdirAll(us.DataPath+"/userdata/tmp", 0770)
 	err := us.build()
 	if err != nil {
 		fmt.Println(err)
@@ -191,7 +193,7 @@ func (us *UserStorage) CreateFileIntoPublicDir(filePath string) error {
 	return CopyFile(filePath, publicFilePath)
 }
 
-func (us *UserStorage) AddAndShareFile(filePath, owner string, shareWith []string) error {
+func (us *UserStorage) AddAndShareFile(filePath, owner string, shareWith []string, boxer *crypto.BoxingKeyPair) error {
 	if us.IsFileInRootDir(filePath) {
 		return errors.New("file already in root dir")
 	}
@@ -202,7 +204,7 @@ func (us *UserStorage) AddAndShareFile(filePath, owner string, shareWith []strin
 		return err
 	}
 	file := File{filePath, ipnsPath, owner, []string{}, []string{}}
-	err = file.Share(shareWith, us.DataPath+"/public/for/", merkleNode.Hash, us.Network, us.IPFS, us)
+	err = file.Share(shareWith, us.DataPath+"/public/for/", merkleNode.Hash, boxer, us.Network, us.IPFS, us)
 	if err != nil {
 		return err
 	}
@@ -218,7 +220,7 @@ func (us *UserStorage) StoreFileMetaData(f *File) error {
 	return ioutil.WriteFile(us.DataPath+"/userdata/shared/"+path.Base(f.Path)+".json", byteJson, 0644)
 }
 
-func (us *UserStorage) CreateCapabilityFile(f *File, forPath, ipfsHash string) error {
+func (us *UserStorage) CreateCapabilityFile(f *File, forPath, ipfsHash string, boxer *crypto.BoxingKeyPair) error {
 	err := os.MkdirAll(forPath, 0770)
 	if err != nil {
 		fmt.Println(err) /* TODO check for permission errors */
@@ -226,8 +228,14 @@ func (us *UserStorage) CreateCapabilityFile(f *File, forPath, ipfsHash string) e
 	readCAP := ReadCAP{path.Base(f.Path), f.IPNSPath, ipfsHash, us.Username}
 	fmt.Print("create cap file: ")
 	fmt.Println(f.IPNSPath)
-	byteJson, err := json.Marshal(readCAP)
-	return ioutil.WriteFile(forPath+"/"+path.Base(f.Path)+".json", byteJson, 0644)
+	byteJSON, err := json.Marshal(readCAP)
+	otherPK, err := us.Network.GetUserBoxingKey(path.Base(forPath))
+	if err != nil {
+		return err
+	}
+
+	encJSON := boxer.BoxSeal(byteJSON, &otherPK)
+	return ioutil.WriteFile(forPath+"/"+path.Base(f.Path)+".json", encJSON, 0644)
 }
 
 func (us *UserStorage) PublishPublicDir() error {
@@ -248,17 +256,42 @@ func (us *UserStorage) PublishPublicDir() error {
 	return nil
 }
 
-func (us *UserStorage) AddFileFromIPNS(capName, capIPFSHash, ipfsAddr string) error {
+func (us *UserStorage) AddFileFromIPNS(capName, capIPFSHash, ipfsAddr string, otherPK *crypto.PublicBoxingKey, boxer *crypto.BoxingKeyPair) error {
 	// download cap file
-	tmpFilePath := us.DataPath + "/userdata/caps/" + capName
+	tmpFilePath := us.DataPath + "/userdata/tmp/" + capName
 	err := us.IPFS.Get(tmpFilePath, capIPFSHash)
 	if err != nil {
 		return err
 	}
-
-	readCAP, err := NewReadCAPFromFile(tmpFilePath)
+	capFilePath := us.DataPath + "/userdata/caps/" + capName
+	bytesEnc, err := ioutil.ReadFile(tmpFilePath)
 	if err != nil {
 		return err
+	}
+
+	bytesDecr, success := boxer.BoxOpen(bytesEnc, otherPK)
+	if !success {
+		return errors.New("could not decrypt capability")
+	}
+
+	f, err := os.Create(capFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(bytesDecr)
+	if err != nil {
+		return err
+	}
+	f.Sync()
+
+	//	if err := ioutil.WriteFile(capFilePath, bytesDecr, 644); err != nil {
+	//		return errors.New("error by WriteFile: " + err.Error())
+	//	}
+
+	readCAP, err := NewReadCAPFromFile(capFilePath)
+	if err != nil {
+		return errors.New("error by NewReadCAPFromFile: " + err.Error())
 	}
 	file := us.addFileToRootFromCap(readCAP)
 	if file == nil {

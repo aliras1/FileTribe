@@ -7,14 +7,15 @@ import (
 	"time"
 
 	fs "ipfs-share/client/filestorage"
+	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
 
 type UserContext struct {
-	User        *User
+	User        *User // TODO lock boxer
 	Network     *nw.Network
-	UserStorage *fs.UserStorage
+	UserStorage *fs.UserStorage // TODO lock
 	channelMsg  chan nw.Message
 	channelSig  chan os.Signal
 }
@@ -48,7 +49,7 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	uc.channelMsg = make(chan nw.Message)
 	uc.channelSig = make(chan os.Signal)
 	go MessageGetter(uc.User.Username, network, uc.channelMsg, uc.channelSig)
-	go MessageProcessor(uc.channelMsg, uc.User.Username, uc.UserStorage, network, ipfs)
+	go MessageProcessor(uc.channelMsg, uc.User.Username, &uc.User.Boxer, uc.UserStorage, network, ipfs)
 
 	return &uc
 }
@@ -75,13 +76,20 @@ func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Mess
 	}
 }
 
-func MessageProcessor(channelMsg chan nw.Message, username string, storage *fs.UserStorage, network *nw.Network, ipfs *ipfs.IPFS) {
+func MessageProcessor(channelMsg chan nw.Message, username string, boxer *crypto.BoxingKeyPair, storage *fs.UserStorage, network *nw.Network, ipfs *ipfs.IPFS) {
+	fmt.Println("msg processing...")
 	for msg := range channelMsg {
 		fmt.Print("msgproc: ")
 		fmt.Println(msg)
 		ipfsAddr, err := network.GetUserIPFSAddr(msg.From)
 		if err != nil {
 			fmt.Println(err)
+			continue
+		}
+		otherPK, err := network.GetUserBoxingKey(msg.From)
+		if err != nil {
+			fmt.Println(err)
+			continue
 		}
 		listObjects, err := ipfs.List("/ipns/" + ipfsAddr + "/for/" + username)
 		if err != nil {
@@ -89,7 +97,7 @@ func MessageProcessor(channelMsg chan nw.Message, username string, storage *fs.U
 		}
 		for _, lo := range listObjects.Objects {
 			for _, link := range lo.Links {
-				err := storage.AddFileFromIPNS(link.Name, link.Hash, ipfsAddr)
+				err := storage.AddFileFromIPNS(link.Name, link.Hash, ipfsAddr, &otherPK, boxer)
 				if err != nil {
 					fmt.Println(err)
 				}
