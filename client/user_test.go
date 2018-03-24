@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"bytes"
 	nw "ipfs-share/network"
 )
 
@@ -26,6 +27,23 @@ func TestBoxing(t *testing.T) {
 	}
 	if strings.Compare(string(plain), message) != 0 {
 		t.Fatal("the original and the decrypted messages are not the same")
+	}
+}
+
+func TestSiging(t *testing.T) {
+	username1 := "testuser1"
+	password1 := "password1"
+
+	user1 := NewUser(username1, password1)
+
+	message := "Hello friend!"
+	signedMessage := user1.Signer.SecretKey.Sign(nil, []byte(message))
+	msg, ok := user1.Signer.PublicKey.Open(nil, signedMessage)
+	if !ok {
+		t.Fatal("failed to verify")
+	}
+	if !bytes.Equal(msg, []byte(message)) {
+		t.Fatal("messages do not match")
 	}
 }
 

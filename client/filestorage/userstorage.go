@@ -1,6 +1,7 @@
 package filestorage
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,16 +11,19 @@ import (
 	"path"
 	"strings"
 
+	"golang.org/x/crypto/ed25519"
+
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
 
 type ReadCAP struct {
-	Name     string `json:"name"`
-	IPNSPath string `json:"ipns_path"`
-	IPFSHash string `json:"ipfs_hash"`
-	Owner    string `json:"owner"`
+	Name      string                  `json:"name"`
+	IPNSPath  string                  `json:"ipns_path"`
+	IPFSHash  string                  `json:"ipfs_hash"`
+	Owner     string                  `json:"owner"`
+	VerifyKey crypto.PublicSigningKey `json:"verify_key"`
 }
 
 func (rc *ReadCAP) Store(capPath string) error {
@@ -42,10 +46,19 @@ func NewReadCAPFromFile(capPath string) (*ReadCAP, error) {
 
 type UserStorage struct {
 	RootDir  []*File
-	DataPath string
 	Username string
 	IPFS     *ipfs.IPFS
 	Network  *nw.Network
+
+	DataPath        string
+	PublicPath      string
+	PublicFilesPath string
+	PublicForPath   string
+	UserDataPath    string
+	CapsPath        string
+	RootPath        string
+	SharedPath      string
+	TmpPath         string
 }
 
 func NewUserStorage(dataPath, username string, network *nw.Network, ipfs *ipfs.IPFS) *UserStorage {
@@ -53,15 +66,24 @@ func NewUserStorage(dataPath, username string, network *nw.Network, ipfs *ipfs.I
 	us.Username = username
 	us.IPFS = ipfs
 	us.Network = network
-	us.DataPath = "./" + path.Clean(dataPath+"/data/")
 	us.RootDir = []*File{}
+	us.DataPath = "./" + path.Clean(dataPath+"/data/")
+	us.PublicPath = us.DataPath + "/public"
+	us.PublicFilesPath = us.DataPath + "/public/files"
+	us.PublicForPath = us.DataPath + "/public/for"
+	us.UserDataPath = us.DataPath + "/userdata"
+	us.CapsPath = us.DataPath + "/userdata/caps"
+	us.RootPath = us.DataPath + "/userdata/root"
+	us.SharedPath = us.DataPath + "/userdata/shared"
+	us.TmpPath = us.DataPath + "/userdata/tmp"
 
 	os.Mkdir(us.DataPath, 0770)
-	os.MkdirAll(us.DataPath+"/public/files", 0770)
-	os.MkdirAll(us.DataPath+"/userdata/caps", 0770)
-	os.MkdirAll(us.DataPath+"/userdata/root", 0770)
-	os.MkdirAll(us.DataPath+"/userdata/shared", 0770)
-	os.MkdirAll(us.DataPath+"/userdata/tmp", 0770)
+	os.MkdirAll(us.PublicFilesPath, 0770)
+	os.MkdirAll(us.PublicForPath, 0770)
+	os.MkdirAll(us.CapsPath, 0770)
+	os.MkdirAll(us.RootPath, 0770)
+	os.MkdirAll(us.SharedPath, 0770)
+	os.MkdirAll(us.TmpPath, 0770)
 	err := us.build()
 	if err != nil {
 		fmt.Println(err)
@@ -80,8 +102,7 @@ func NewUserStorage(dataPath, username string, network *nw.Network, ipfs *ipfs.I
 // user.
 func (us *UserStorage) build() error {
 	// read capabilities from caps and try to refresh them
-	capsPath := us.DataPath + "/userdata/caps"
-	entries, err := ioutil.ReadDir(capsPath)
+	entries, err := ioutil.ReadDir(us.CapsPath)
 	if err != nil {
 		return err
 	}
@@ -89,7 +110,7 @@ func (us *UserStorage) build() error {
 		if entry.IsDir() {
 			continue // do not care about directories
 		}
-		cap, err := NewReadCAPFromFile(capsPath + "/" + entry.Name())
+		cap, err := NewReadCAPFromFile(us.CapsPath + "/" + entry.Name())
 		if err != nil {
 			continue // do not care about trash files
 		}
@@ -105,8 +126,7 @@ func (us *UserStorage) build() error {
 	}
 
 	// read share information
-	sharedPath := us.DataPath + "/userdata/shared"
-	entries, err = ioutil.ReadDir(sharedPath)
+	entries, err = ioutil.ReadDir(us.SharedPath)
 	if err != nil {
 		return err
 	}
@@ -114,7 +134,7 @@ func (us *UserStorage) build() error {
 		if entry.IsDir() {
 			continue
 		}
-		file, err := NewFileFromShared(sharedPath + "/" + entry.Name())
+		file, err := NewFileFromShared(us.SharedPath + "/" + entry.Name())
 		if err != nil {
 			fmt.Println(err)
 			continue
@@ -130,7 +150,7 @@ func (us *UserStorage) build() error {
 // return true as well. Otherwise it returns false.
 func (us *UserStorage) RefreshCAP(cap *ReadCAP) (bool, error) {
 	fileExists := false
-	if _, err := os.Stat(us.DataPath + "/userdata/root/" + cap.Name); err == nil {
+	if _, err := os.Stat(us.RootPath + "/" + cap.Name); err == nil {
 		fileExists = true
 	}
 	resolvedHash, err := us.IPFS.Resolve(cap.IPNSPath)
@@ -140,7 +160,7 @@ func (us *UserStorage) RefreshCAP(cap *ReadCAP) (bool, error) {
 	}
 	if fileChanged {
 		cap.IPFSHash = resolvedHash
-		cap.Store(us.DataPath + "/userdata/caps/" + cap.Name + ".json")
+		cap.Store(us.CapsPath + "/" + cap.Name + ".json")
 	}
 	if !fileExists || fileChanged {
 		return true, nil
@@ -165,17 +185,33 @@ func (us *UserStorage) addFileToRootFromCap(cap *ReadCAP) *File {
 	if us.IsFileInRootDir(cap.Name) {
 		return us.getFileFromRootDir(cap.Name)
 	}
-	filePath := us.DataPath + "/userdata/root/" + cap.Name
-	file := &File{path.Clean(filePath), cap.IPNSPath, cap.Owner, []string{}, []string{}}
+	filePath := us.RootPath + "/" + cap.Name
+	file := &File{path.Clean(filePath), cap.IPNSPath, cap.Owner, []string{}, []string{}, cap.VerifyKey, crypto.SecretSigningKey{}}
 	us.addFileToRootDir(file)
 	return file
 }
 
 func (us *UserStorage) downloadFileFromCap(file *File, cap *ReadCAP) error {
-	err := us.IPFS.Get(file.Path, file.IPNSPath)
+	tmpFilePath := us.TmpPath + "/" + path.Base(file.Path)
+	err := us.IPFS.Get(tmpFilePath, file.IPNSPath)
 	if err != nil {
 		return err
 	}
+	bytesSignedFile, err := ioutil.ReadFile(tmpFilePath)
+	if err != nil {
+		return err
+	}
+	bytesRawFile, ok := file.VerifyKey.Open(nil, bytesSignedFile)
+	if !ok {
+		return errors.New("by downloadFileFromCap(): could not verify file")
+	}
+	f, err := os.Create(file.Path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	f.Write(bytesRawFile)
+	f.Sync()
 	return nil
 }
 
@@ -189,7 +225,7 @@ func (us *UserStorage) IsFileInRootDir(filePath string) bool {
 }
 
 func (us *UserStorage) CreateFileIntoPublicDir(filePath string) error {
-	publicFilePath := us.DataPath + "/public/files/" + path.Base(filePath)
+	publicFilePath := us.PublicFilesPath + "/" + path.Base(filePath)
 	return CopyFile(filePath, publicFilePath)
 }
 
@@ -197,18 +233,51 @@ func (us *UserStorage) AddAndShareFile(filePath, owner string, shareWith []strin
 	if us.IsFileInRootDir(filePath) {
 		return errors.New("file already in root dir")
 	}
-	merkleNode, err := us.IPFS.AddFile(filePath)
-	ipfsID, err := us.IPFS.ID()
-	ipnsPath := "/ipns/" + ipfsID.ID + "/files/" + path.Base(filePath)
+	vk, wk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return err
 	}
-	file := File{filePath, ipnsPath, owner, []string{}, []string{}}
-	err = file.Share(shareWith, us.DataPath+"/public/for/", merkleNode.Hash, boxer, us.Network, us.IPFS, us)
+	verifyKey := crypto.PublicSigningKey(vk)
+	writeKey := crypto.SecretSigningKey(wk)
+	fmt.Println(verifyKey)
+
+	publicPath := us.PublicFilesPath + "/" + path.Base(filePath)
+	err = us.SignAndAddFileToPublic(filePath, publicPath, writeKey)
+	if err != nil {
+		return err
+	}
+
+	merkleNode, err := us.IPFS.AddFile(publicPath)
+	ipfsID, err := us.IPFS.ID()
+	ipnsPath := "/ipns/" + ipfsID.ID + "/files/" + path.Base(publicPath)
+	if err != nil {
+		return err
+	}
+	file := File{filePath, ipnsPath, owner, []string{}, []string{}, verifyKey, writeKey}
+	err = file.Share(shareWith, us.PublicForPath+"/", merkleNode.Hash, boxer, us.Network, us.IPFS, us)
 	if err != nil {
 		return err
 	}
 	us.addFileToRootDir(&file)
+	return nil
+}
+
+func (us *UserStorage) SignAndAddFileToPublic(filePath, publicPath string, writeKey crypto.SecretSigningKey) error {
+	bytesFile, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+	signedFile := writeKey.Sign(nil, bytesFile)
+	f, err := os.Create(publicPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(signedFile)
+	if err != nil {
+		return err
+	}
+	f.Sync()
 	return nil
 }
 
@@ -217,7 +286,7 @@ func (us *UserStorage) StoreFileMetaData(f *File) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(us.DataPath+"/userdata/shared/"+path.Base(f.Path)+".json", byteJson, 0644)
+	return ioutil.WriteFile(us.SharedPath+"/"+path.Base(f.Path)+".json", byteJson, 0644)
 }
 
 func (us *UserStorage) CreateCapabilityFile(f *File, forPath, ipfsHash string, boxer *crypto.BoxingKeyPair) error {
@@ -225,7 +294,7 @@ func (us *UserStorage) CreateCapabilityFile(f *File, forPath, ipfsHash string, b
 	if err != nil {
 		fmt.Println(err) /* TODO check for permission errors */
 	}
-	readCAP := ReadCAP{path.Base(f.Path), f.IPNSPath, ipfsHash, us.Username}
+	readCAP := ReadCAP{path.Base(f.Path), f.IPNSPath, ipfsHash, us.Username, f.VerifyKey}
 	fmt.Print("create cap file: ")
 	fmt.Println(f.IPNSPath)
 	byteJSON, err := json.Marshal(readCAP)
@@ -258,12 +327,12 @@ func (us *UserStorage) PublishPublicDir() error {
 
 func (us *UserStorage) AddFileFromIPNS(capName, capIPFSHash, ipfsAddr string, otherPK *crypto.PublicBoxingKey, boxer *crypto.BoxingKeyPair) error {
 	// download cap file
-	tmpFilePath := us.DataPath + "/userdata/tmp/" + capName
+	tmpFilePath := us.TmpPath + "/" + capName
 	err := us.IPFS.Get(tmpFilePath, capIPFSHash)
 	if err != nil {
 		return err
 	}
-	capFilePath := us.DataPath + "/userdata/caps/" + capName
+	capFilePath := us.CapsPath + "/" + capName
 	bytesEnc, err := ioutil.ReadFile(tmpFilePath)
 	if err != nil {
 		return err
@@ -284,10 +353,6 @@ func (us *UserStorage) AddFileFromIPNS(capName, capIPFSHash, ipfsAddr string, ot
 		return err
 	}
 	f.Sync()
-
-	//	if err := ioutil.WriteFile(capFilePath, bytesDecr, 644); err != nil {
-	//		return errors.New("error by WriteFile: " + err.Error())
-	//	}
 
 	readCAP, err := NewReadCAPFromFile(capFilePath)
 	if err != nil {

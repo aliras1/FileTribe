@@ -11,11 +11,13 @@ import (
 )
 
 type File struct {
-	Path       string   `json:"path"`
-	IPNSPath   string   `json:"ipnsPath"`
-	Owner      string   `json:"owner"`
-	SharedWith []string `json:"shared_with"`
-	WAccess    []string `json:"w_access"`
+	Path       string                  `json:"path"`
+	IPNSPath   string                  `json:"ipnsPath"`
+	Owner      string                  `json:"owner"`
+	SharedWith []string                `json:"shared_with"`
+	WAccess    []string                `json:"w_access"`
+	VerifyKey  crypto.PublicSigningKey `json:"verify_key"`
+	WriteKey   crypto.SecretSigningKey `json:"write_key"`
 }
 
 func NewFileFromShared(filePath string) (*File, error) {
@@ -40,7 +42,7 @@ func (f *File) Share(shareWith []string, baseDirPath, ipfsHash string, boxer *cr
 			return err
 		}
 	}
-	us.CreateFileIntoPublicDir(f.Path)
+	//us.CreateFileIntoPublicDir(f.Path)
 	us.StoreFileMetaData(f)
 	err := us.PublishPublicDir()
 	if err != nil {
