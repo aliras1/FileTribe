@@ -32,7 +32,7 @@ func TestUserStorage_build_shared(t *testing.T) {
 	if us == nil {
 		t.Fatal("could not instantiate UserStorage")
 	}
-	for _, file := range us.RootDir {
+	for _, file := range us.Storage {
 		fmt.Println(file)
 	}
 }
@@ -47,7 +47,7 @@ func TestUserStorage_build_caps(t *testing.T) {
 	if us == nil {
 		t.Fatal("could not instantiate UserStorage")
 	}
-	for _, file := range us.RootDir {
+	for _, file := range us.Storage {
 		fmt.Println(file)
 	}
 }

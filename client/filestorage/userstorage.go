@@ -45,7 +45,7 @@ func NewReadCAPFromFile(capPath string) (*ReadCAP, error) {
 }
 
 type UserStorage struct {
-	RootDir  []*File
+	Storage  []*File
 	Username string
 	IPFS     *ipfs.IPFS
 	Network  *nw.Network
@@ -56,7 +56,7 @@ type UserStorage struct {
 	PublicForPath   string
 	UserDataPath    string
 	CapsPath        string
-	RootPath        string
+	StoragePath     string
 	SharedPath      string
 	TmpPath         string
 }
@@ -66,14 +66,14 @@ func NewUserStorage(dataPath, username string, network *nw.Network, ipfs *ipfs.I
 	us.Username = username
 	us.IPFS = ipfs
 	us.Network = network
-	us.RootDir = []*File{}
+	us.Storage = []*File{}
 	us.DataPath = "./" + path.Clean(dataPath+"/data/")
 	us.PublicPath = us.DataPath + "/public"
 	us.PublicFilesPath = us.DataPath + "/public/files"
 	us.PublicForPath = us.DataPath + "/public/for"
 	us.UserDataPath = us.DataPath + "/userdata"
 	us.CapsPath = us.DataPath + "/userdata/caps"
-	us.RootPath = us.DataPath + "/userdata/root"
+	us.StoragePath = us.DataPath + "/userdata/root"
 	us.SharedPath = us.DataPath + "/userdata/shared"
 	us.TmpPath = us.DataPath + "/userdata/tmp"
 
@@ -81,7 +81,7 @@ func NewUserStorage(dataPath, username string, network *nw.Network, ipfs *ipfs.I
 	os.MkdirAll(us.PublicFilesPath, 0770)
 	os.MkdirAll(us.PublicForPath, 0770)
 	os.MkdirAll(us.CapsPath, 0770)
-	os.MkdirAll(us.RootPath, 0770)
+	os.MkdirAll(us.StoragePath, 0770)
 	os.MkdirAll(us.SharedPath, 0770)
 	os.MkdirAll(us.TmpPath, 0770)
 	err := us.build()
@@ -118,7 +118,7 @@ func (us *UserStorage) build() error {
 		if err != nil {
 			return err
 		}
-		file := us.addFileToRootFromCap(cap)
+		file := us.addFileToStorageFromCap(cap)
 		if changed {
 			fmt.Println("changed")
 			us.downloadFileFromCap(file, cap)
@@ -139,7 +139,7 @@ func (us *UserStorage) build() error {
 			fmt.Println(err)
 			continue
 		}
-		us.addFileToRootDir(file)
+		us.addFileToStorage(file)
 	}
 	return nil
 }
@@ -149,8 +149,9 @@ func (us *UserStorage) build() error {
 // the function returns true. If the file is not present the function
 // return true as well. Otherwise it returns false.
 func (us *UserStorage) RefreshCAP(cap *ReadCAP) (bool, error) {
+	// TODO this could be a CAP function
 	fileExists := false
-	if _, err := os.Stat(us.RootPath + "/" + cap.Name); err == nil {
+	if _, err := os.Stat(us.StoragePath + "/" + cap.Name); err == nil {
 		fileExists = true
 	}
 	resolvedHash, err := us.IPFS.Resolve(cap.IPNSPath)
@@ -168,12 +169,12 @@ func (us *UserStorage) RefreshCAP(cap *ReadCAP) (bool, error) {
 	return false, nil
 }
 
-func (us *UserStorage) addFileToRootDir(file *File) {
-	us.RootDir = append(us.RootDir, file)
+func (us *UserStorage) addFileToStorage(file *File) {
+	us.Storage = append(us.Storage, file)
 }
 
-func (us *UserStorage) getFileFromRootDir(name string) *File {
-	for _, file := range us.RootDir {
+func (us *UserStorage) getFileFromStorage(name string) *File {
+	for _, file := range us.Storage {
 		if strings.Compare(path.Base(file.Path), name) == 0 {
 			return file
 		}
@@ -181,13 +182,13 @@ func (us *UserStorage) getFileFromRootDir(name string) *File {
 	return nil
 }
 
-func (us *UserStorage) addFileToRootFromCap(cap *ReadCAP) *File {
-	if us.IsFileInRootDir(cap.Name) {
-		return us.getFileFromRootDir(cap.Name)
+func (us *UserStorage) addFileToStorageFromCap(cap *ReadCAP) *File {
+	if us.IsFileInStorage(cap.Name) {
+		return us.getFileFromStorage(cap.Name)
 	}
-	filePath := us.RootPath + "/" + cap.Name
+	filePath := us.StoragePath + "/" + cap.Name
 	file := &File{path.Clean(filePath), cap.IPNSPath, cap.Owner, []string{}, []string{}, cap.VerifyKey, crypto.SecretSigningKey{}}
-	us.addFileToRootDir(file)
+	us.addFileToStorage(file)
 	return file
 }
 
@@ -201,22 +202,19 @@ func (us *UserStorage) downloadFileFromCap(file *File, cap *ReadCAP) error {
 	if err != nil {
 		return err
 	}
+	os.Remove(tmpFilePath)
 	bytesRawFile, ok := file.VerifyKey.Open(nil, bytesSignedFile)
 	if !ok {
 		return errors.New("by downloadFileFromCap(): could not verify file")
 	}
-	f, err := os.Create(file.Path)
-	if err != nil {
+	if err := WriteFile(file.Path, bytesRawFile); err != nil {
 		return err
 	}
-	defer f.Close()
-	f.Write(bytesRawFile)
-	f.Sync()
 	return nil
 }
 
-func (us *UserStorage) IsFileInRootDir(filePath string) bool {
-	for _, i := range us.RootDir {
+func (us *UserStorage) IsFileInStorage(filePath string) bool {
+	for _, i := range us.Storage {
 		if strings.Compare(path.Base(i.Path), path.Base(filePath)) == 0 {
 			return true
 		}
@@ -224,13 +222,13 @@ func (us *UserStorage) IsFileInRootDir(filePath string) bool {
 	return false
 }
 
-func (us *UserStorage) CreateFileIntoPublicDir(filePath string) error {
+func (us *UserStorage) CopyFileIntoPublicDir(filePath string) error {
 	publicFilePath := us.PublicFilesPath + "/" + path.Base(filePath)
 	return CopyFile(filePath, publicFilePath)
 }
 
 func (us *UserStorage) AddAndShareFile(filePath, owner string, shareWith []string, boxer *crypto.BoxingKeyPair) error {
-	if us.IsFileInRootDir(filePath) {
+	if us.IsFileInStorage(filePath) {
 		return errors.New("file already in root dir")
 	}
 	vk, wk, err := ed25519.GenerateKey(rand.Reader)
@@ -239,10 +237,9 @@ func (us *UserStorage) AddAndShareFile(filePath, owner string, shareWith []strin
 	}
 	verifyKey := crypto.PublicSigningKey(vk)
 	writeKey := crypto.SecretSigningKey(wk)
-	fmt.Println(verifyKey)
 
 	publicPath := us.PublicFilesPath + "/" + path.Base(filePath)
-	err = us.SignAndAddFileToPublic(filePath, publicPath, writeKey)
+	err = us.SignAndCopyFileToPublicDir(filePath, publicPath, writeKey)
 	if err != nil {
 		return err
 	}
@@ -258,26 +255,19 @@ func (us *UserStorage) AddAndShareFile(filePath, owner string, shareWith []strin
 	if err != nil {
 		return err
 	}
-	us.addFileToRootDir(&file)
+	us.addFileToStorage(&file)
 	return nil
 }
 
-func (us *UserStorage) SignAndAddFileToPublic(filePath, publicPath string, writeKey crypto.SecretSigningKey) error {
+func (us *UserStorage) SignAndCopyFileToPublicDir(filePath, publicPath string, writeKey crypto.SecretSigningKey) error {
 	bytesFile, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
 	signedFile := writeKey.Sign(nil, bytesFile)
-	f, err := os.Create(publicPath)
-	if err != nil {
+	if err := WriteFile(publicPath, signedFile); err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = f.Write(signedFile)
-	if err != nil {
-		return err
-	}
-	f.Sync()
 	return nil
 }
 
@@ -286,7 +276,7 @@ func (us *UserStorage) StoreFileMetaData(f *File) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(us.SharedPath+"/"+path.Base(f.Path)+".json", byteJson, 0644)
+	return WriteFile(us.SharedPath+"/"+path.Base(f.Path)+".json", byteJson)
 }
 
 func (us *UserStorage) CreateCapabilityFile(f *File, forPath, ipfsHash string, boxer *crypto.BoxingKeyPair) error {
@@ -295,8 +285,6 @@ func (us *UserStorage) CreateCapabilityFile(f *File, forPath, ipfsHash string, b
 		fmt.Println(err) /* TODO check for permission errors */
 	}
 	readCAP := ReadCAP{path.Base(f.Path), f.IPNSPath, ipfsHash, us.Username, f.VerifyKey}
-	fmt.Print("create cap file: ")
-	fmt.Println(f.IPNSPath)
 	byteJSON, err := json.Marshal(readCAP)
 	otherPK, err := us.Network.GetUserBoxingKey(path.Base(forPath))
 	if err != nil {
@@ -342,23 +330,16 @@ func (us *UserStorage) AddFileFromIPNS(capName, capIPFSHash, ipfsAddr string, ot
 	if !success {
 		return errors.New("could not decrypt capability")
 	}
-
-	f, err := os.Create(capFilePath)
-	if err != nil {
+	os.Remove(tmpFilePath)
+	if err := WriteFile(capFilePath, bytesDecr); err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = f.Write(bytesDecr)
-	if err != nil {
-		return err
-	}
-	f.Sync()
 
 	readCAP, err := NewReadCAPFromFile(capFilePath)
 	if err != nil {
 		return errors.New("error by NewReadCAPFromFile: " + err.Error())
 	}
-	file := us.addFileToRootFromCap(readCAP)
+	file := us.addFileToStorageFromCap(readCAP)
 	if file == nil {
 		return errors.New("could not add file to root dir from cap")
 	}
@@ -367,7 +348,7 @@ func (us *UserStorage) AddFileFromIPNS(capName, capIPFSHash, ipfsAddr string, ot
 
 func (us *UserStorage) List() {
 	fmt.Println(us.Username)
-	for _, f := range us.RootDir {
+	for _, f := range us.Storage {
 		fmt.Print("\t--> ")
 		fmt.Println(*f)
 	}
@@ -391,4 +372,18 @@ func CopyFile(src, dst string) error {
 		return err
 	}
 	return destFile.Sync()
+}
+
+func WriteFile(filePath string, data []byte) error {
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(data)
+	if err != nil {
+		return err
+	}
+	f.Sync()
+	return nil
 }

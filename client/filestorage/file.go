@@ -42,7 +42,7 @@ func (f *File) Share(shareWith []string, baseDirPath, ipfsHash string, boxer *cr
 			return err
 		}
 	}
-	//us.CreateFileIntoPublicDir(f.Path)
+	//us.CopyFileIntoPublicDir(f.Path)
 	us.StoreFileMetaData(f)
 	err := us.PublishPublicDir()
 	if err != nil {
