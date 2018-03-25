@@ -3,21 +3,26 @@ package client
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
+	"path"
+	"strings"
 	"time"
 
 	fs "ipfs-share/client/filestorage"
-	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
 
 type UserContext struct {
 	User        *User // TODO lock boxer
+	Repo        []*fs.File
 	Network     *nw.Network
+	IPFS        *ipfs.IPFS
 	UserStorage *fs.UserStorage // TODO lock
-	channelMsg  chan nw.Message
-	channelSig  chan os.Signal
+
+	channelMsg chan nw.Message
+	channelSig chan os.Signal
 }
 
 func NewUserContextFromSignUp(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
@@ -41,15 +46,21 @@ func NewUserContextFromSignIn(username, password, dataPath string, network *nw.N
 }
 
 func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs.IPFS) *UserContext {
+	var err error
 	var uc UserContext
 	uc.User = user
 	uc.Network = network
-	uc.UserStorage = fs.NewUserStorage(dataPath, uc.User.Username, network, ipfs)
+	uc.IPFS = ipfs
+	uc.UserStorage = fs.NewUserStorage(dataPath)
+	uc.Repo, err = uc.UserStorage.BuildRepo(ipfs)
+	if err != nil {
+		log.Println(err)
+	}
 
 	uc.channelMsg = make(chan nw.Message)
 	uc.channelSig = make(chan os.Signal)
 	go MessageGetter(uc.User.Username, network, uc.channelMsg, uc.channelSig)
-	go MessageProcessor(uc.channelMsg, uc.User.Username, &uc.User.Boxer, uc.UserStorage, network, ipfs)
+	go MessageProcessor(uc.channelMsg, uc.User.Username, &uc)
 
 	return &uc
 }
@@ -76,35 +87,26 @@ func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Mess
 	}
 }
 
-func MessageProcessor(channelMsg chan nw.Message, username string, boxer *crypto.BoxingKeyPair, storage *fs.UserStorage, network *nw.Network, ipfs *ipfs.IPFS) {
+func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserContext) {
 	fmt.Println("msg processing...")
 	for msg := range channelMsg {
 		fmt.Print("msgproc: ")
 		fmt.Println(msg)
-		ipfsAddr, err := network.GetUserIPFSAddr(msg.From)
+
+		cap, err := fs.DownloadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.UserStorage, ctx.Network, ctx.IPFS)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			continue
 		}
-		otherPK, err := network.GetUserBoxingKey(msg.From)
+		file, err := fs.NewFileFromCAP(cap, ctx.UserStorage, ctx.IPFS)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			continue
 		}
-		listObjects, err := ipfs.List("/ipns/" + ipfsAddr + "/for/" + username)
-		if err != nil {
-			fmt.Println(err)
-		}
-		for _, lo := range listObjects.Objects {
-			for _, link := range lo.Links {
-				err := storage.AddFileFromIPNS(link.Name, link.Hash, ipfsAddr, &otherPK, boxer)
-				if err != nil {
-					fmt.Println(err)
-				}
-			}
-		}
+		ctx.addFileToRepo(file)
+
 		fmt.Println("content of root directory: ")
-		storage.List()
+		ctx.List()
 	}
 }
 
@@ -150,4 +152,50 @@ func SignIn(username, password string, network *nw.Network) (*User, error) {
 		return nil, errors.New("incorrect password")
 	}
 	return user, nil
+}
+
+func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {
+	if uc.isFileInRepo(filePath) {
+		return errors.New("file already in root dir")
+	}
+	file, err := fs.NewSharedFile(filePath, uc.User.Username, uc.UserStorage, uc.IPFS)
+	if err != nil {
+		return err
+	}
+	err = file.Share(shareWith, &uc.User.Boxer, uc.UserStorage, uc.Network, uc.IPFS)
+	if err != nil {
+		return err
+	}
+	uc.addFileToRepo(file)
+	return nil
+}
+
+func (uc *UserContext) isFileInRepo(filePath string) bool {
+	for _, i := range uc.Repo {
+		if strings.Compare(path.Base(i.Path), path.Base(filePath)) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (uc *UserContext) addFileToRepo(file *fs.File) {
+	uc.Repo = append(uc.Repo, file)
+}
+
+func (uc *UserContext) getFileFromRepo(name string) *fs.File {
+	for _, file := range uc.Repo {
+		if strings.Compare(path.Base(file.Path), name) == 0 {
+			return file
+		}
+	}
+	return nil
+}
+
+func (uc *UserContext) List() {
+	fmt.Println(uc.User.Username)
+	for _, f := range uc.Repo {
+		fmt.Print("\t--> ")
+		fmt.Println(*f)
+	}
 }

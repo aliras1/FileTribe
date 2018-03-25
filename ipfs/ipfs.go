@@ -26,7 +26,7 @@ type IPFSNameResolvedHash struct {
 }
 
 type ListLink struct {
-	Name string `json:"Name"`
+	Name string `json:"FileName"`
 	Hash string `json:"Hash"`
 	Size int    `json:"Size"`
 	Type int    `json:"Type"`
