@@ -14,6 +14,8 @@ import (
 )
 
 type File struct {
+	// TODO  don't publish file on IPNS, refresh every time
+	// TODO  the capability instead
 	Path       string                  `json:"path"`
 	IPNSPath   string                  `json:"ipnsPath"`
 	IPFSAddr   string                  `json:"ipfs_addr"`
@@ -36,7 +38,7 @@ func NewFileFromShared(filePath string) (*File, error) {
 }
 
 // New File object from local data, found in /userdata/caps
-func NewFileFromCAP(cap *ReadCAP, storage *UserStorage, ipfs *ipfs.IPFS) (*File, error) {
+func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*File, error) {
 	filePath := storage.storagePath + "/" + cap.FileName
 	file := File{path.Clean(filePath), cap.IPNSPath, cap.IPFSHash, cap.Owner, []string{}, []string{}, cap.VerifyKey, crypto.SecretSigningKey{}}
 	if !storage.ExistsFile(storage.storagePath + "/" + cap.FileName) {
@@ -49,7 +51,7 @@ func NewFileFromCAP(cap *ReadCAP, storage *UserStorage, ipfs *ipfs.IPFS) (*File,
 }
 
 // Create a new shared file object from a local file
-func NewSharedFile(filePath, owner string, storage *UserStorage, ipfs *ipfs.IPFS) (*File, error) {
+func NewSharedFile(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*File, error) {
 	vk, wk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
@@ -68,7 +70,7 @@ func NewSharedFile(filePath, owner string, storage *UserStorage, ipfs *ipfs.IPFS
 // capabilities are made and copied in the corresponding 'public/for/'
 // directories. The 'public' directory is re-published into IPNS. After
 // that, notification messages are sent out.
-func (f *File) Share(shareWith []string, boxer *crypto.BoxingKeyPair, us *UserStorage, network *nw.Network, ipfs *ipfs.IPFS) error {
+func (f *File) Share(shareWith []string, boxer *crypto.BoxingKeyPair, us *Storage, network *nw.Network, ipfs *ipfs.IPFS) error {
 	var newUsers []string
 	for _, user := range shareWith {
 		// add to share list

@@ -1,12 +1,17 @@
 package ipfs
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/whyrusleeping/tar-utils"
 	"io/ioutil"
+	"ipfs-share/crypto"
+	"log"
+	"net"
 	"net/http"
 	"path"
 	"strconv"
@@ -21,24 +26,52 @@ type IPFSID struct {
 	ProtocolVersion string   `json:"ProtocolVersion"`
 }
 
+type PubsubMessage struct {
+	From             string   `json:"from"`
+	Data             string   `json:"data"`
+	Seqno            string   `json:"seqno"`
+	TopicIDs         []string `json:"topicIDs"`
+	XXX_unrecognized []uint8  `json:"XXX_unrecognized,omitempty"`
+}
+
+func (psm *PubsubMessage) Decode() ([]byte, error) {
+	var msgLVL1 []byte
+	msgLVL1, err := base64.StdEncoding.DecodeString(psm.Data)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(string(msgLVL1))
+	var msgLVL2 []byte
+	msgLVL2, err = base64.URLEncoding.DecodeString(string(msgLVL1))
+	if err != nil {
+		return nil, err
+	}
+	return msgLVL2, nil
+}
+
+func (psm *PubsubMessage) Verify(key crypto.PublicSigningKey) ([]byte, bool) {
+	signedGroupMsg, err := psm.Decode()
+	if err != nil {
+		log.Println(err)
+		return nil, false
+	}
+	return key.Open(nil, signedGroupMsg)
+}
+
 type IPFSNameResolvedHash struct {
 	Path string `json:"Path"`
 }
 
-type ListLink struct {
-	Name string `json:"FileName"`
-	Hash string `json:"Hash"`
-	Size int    `json:"Size"`
-	Type int    `json:"Type"`
-}
-
-type ListObject struct {
-	Hash  string     `json:"Hash"`
-	Links []ListLink `json:"Links"`
-}
-
 type ListObjects struct {
-	Objects []ListObject `json:"Objects"`
+	Objects []struct {
+		Hash  string `json:"Hash"`
+		Links []struct {
+			Name string `json:"FileName"`
+			Hash string `json:"Hash"`
+			Size int    `json:"Size"`
+			Type int    `json:"Type"`
+		} `json:"Links"`
+	} `json:"Objects"`
 }
 
 type IPFS struct {
@@ -164,6 +197,43 @@ func (i *IPFS) NameResolve(ipnsPath string) (string, error) {
 	var hash IPFSNameResolvedHash
 	err = json.Unmarshal(resp, &hash)
 	return hash.Path, err
+}
+
+func (i *IPFS) PubsubPublish(channel string, message []byte) error {
+	_, err := i.getRequest("pubsub/pub?arg=" + channel + "&arg=" + base64.URLEncoding.EncodeToString(message))
+	return err
+}
+
+func (i *IPFS) PubsubSubscribe(channel string, dst chan PubsubMessage) error {
+	conn, err := net.Dial("tcp", "127.0.0.1:5001")
+	if err != nil {
+		return err
+	}
+	req := "GET /api/v0/pubsub/sub?arg=" + channel + " HTTP/1.1\nHost: localhost:5001\n\n"
+	conn.Write([]byte(req))
+	_, err = bufio.NewReader(conn).ReadString('\n') // HTTP 200 response
+	if err != nil {
+		return err
+	}
+	// pubsub messages
+	for {
+		rawStr, err := bufio.NewReader(conn).ReadString('}')
+		if err != nil {
+			return err
+		}
+		split := strings.Split(rawStr, "\n")
+		if len(split) < 2 {
+			log.Println("invalid pubsub message")
+			continue
+		}
+		var msg PubsubMessage
+		err = json.Unmarshal([]byte((split)[1]), &msg)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		dst <- msg
+	}
 }
 
 func (i *IPFS) Resolve(anyPath string) (string, error) {

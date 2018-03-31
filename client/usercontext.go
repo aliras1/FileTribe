@@ -16,13 +16,24 @@ import (
 
 type UserContext struct {
 	User        *User // TODO lock boxer
+	Groups      []*GroupContext
 	Repo        []*fs.File
 	Network     *nw.Network
 	IPFS        *ipfs.IPFS
-	UserStorage *fs.UserStorage // TODO lock
+	UserStorage *fs.Storage // TODO lock
 
 	channelMsg chan nw.Message
 	channelSig chan os.Signal
+}
+
+func (uc *UserContext) CreateGroup(groupName string) {
+	group := NewGroup(groupName)
+	err := group.Register(uc.Network)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 }
 
 func NewUserContextFromSignUp(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
@@ -51,7 +62,8 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	uc.User = user
 	uc.Network = network
 	uc.IPFS = ipfs
-	uc.UserStorage = fs.NewUserStorage(dataPath)
+	uc.UserStorage = fs.NewStorage(dataPath)
+	uc.Groups = []*GroupContext{}
 	uc.Repo, err = uc.UserStorage.BuildRepo(ipfs)
 	if err != nil {
 		log.Println(err)
@@ -80,6 +92,7 @@ func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Mess
 				break
 			}
 			for _, msg := range msgs {
+				// TODO validate message signature
 				channelMsg <- *msg
 			}
 			time.Sleep(1 * time.Second)
@@ -108,50 +121,6 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 		fmt.Println("content of root directory: ")
 		ctx.List()
 	}
-}
-
-func SignUp(username, password, ipfsAddr string, network *nw.Network) (*User, error) {
-	exists, err := network.IsUsernameRegistered(username)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		return nil, errors.New("user already exists")
-	}
-	user := NewUser(username, password)
-	if user == nil {
-		return nil, errors.New("could not generate user")
-	}
-	err = network.RegisterUsername(username, user.PublicKeyHash)
-	if err != nil {
-		return nil, err
-	}
-	network.PutSigningKey(user.PublicKeyHash, user.Signer.PublicKey)
-	network.PutBoxingKey(user.PublicKeyHash, user.Boxer.PublicKey)
-	network.PutIPFSAddr(user.PublicKeyHash, ipfsAddr)
-	return user, nil
-}
-
-func SignIn(username, password string, network *nw.Network) (*User, error) {
-	exists, err := network.IsUsernameRegistered(username)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.New("username does not exists")
-	}
-	user := NewUser(username, password)
-	if user == nil {
-		return nil, errors.New("could not generate user")
-	}
-	publicKeyHash, err := network.GetUserPublicKeyHash(username)
-	if err != nil {
-		return nil, err
-	}
-	if !publicKeyHash.Equals(&user.PublicKeyHash) {
-		return nil, errors.New("incorrect password")
-	}
-	return user, nil
 }
 
 func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {

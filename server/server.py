@@ -14,6 +14,14 @@ h_to_sign_key = {
 }
 h_to_ipfs = {}
 messages = {}
+groups = {}
+
+
+@app.route('/is/group/registered/<group_name>', methods=['GET'])
+def is_group_registered(group_name):
+    if group_name not in groups:
+        return Response("false")
+    return Response("true")
 
 
 @app.route('/is/username/registered/<username>', methods=['GET'])
@@ -21,6 +29,13 @@ def is_username_registered(username):
     if username not in users:
         return Response("false")
     return Response("true")
+
+
+@app.route('/get/group/signkey/<group_name>', methods=['GET'])
+def get_group_signing_key(group_name):
+    if group_name not in groups:
+        return Response()
+    return groups[group_name]
 
 
 @app.route('/get/user/publickeyhash/<user>', methods=['GET'])
@@ -90,6 +105,16 @@ def put_ipfs_addr():
     if hash in h_to_ipfs:
         Response("ipfs address for hash {} already exists".format(hash))
     h_to_ipfs[hash] = ipfs
+    return Response()
+
+
+@app.route('/register/group/<group_name>', methods=['POST'])
+def register_group(group_name):
+    data = request.data
+    print(data.decode())
+    if group_name in groups:
+        Response("user already exists")
+    groups[group_name] = data.decode()
     return Response()
 
 

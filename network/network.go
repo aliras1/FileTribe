@@ -32,6 +32,14 @@ func (n *Network) Get(path string, id string) ([]byte, error) {
 	return body, nil
 }
 
+func (n *Network) GetGroupSigningKey(groupName string) (crypto.PublicSigningKey, error) {
+	base64PublicSigningKey, err := n.Get("/get/group/signkey/", groupName)
+	if err != nil {
+		return nil, err
+	}
+	return crypto.Base64ToPublicSigningKey(string(base64PublicSigningKey))
+}
+
 func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, error) {
 	base64PublicKeyHash, err := n.Get("/get/user/publickeyhash/", username)
 	if err != nil {
@@ -62,6 +70,14 @@ func (n *Network) GetUserIPFSAddr(username string) (string, error) {
 		return "", err
 	}
 	return string(bytesIPFSAddr), nil
+}
+
+func (n *Network) IsGroupRegistered(groupName string) (bool, error) {
+	boolString, err := n.Get("/is/group/registered/", groupName)
+	if err != nil {
+		return false, err
+	}
+	return strconv.ParseBool(string(boolString))
 }
 
 func (n *Network) IsUsernameRegistered(username string) (bool, error) {
@@ -127,6 +143,14 @@ func (n *Network) PutIPFSAddr(hash crypto.PublicKeyHash, ipfsAddr string) error 
 		"/put/ipfsaddr",
 		"application/json",
 		[]byte(jsonStr),
+	)
+}
+
+func (n *Network) RegisterGroup(groupName string, key crypto.PublicSigningKey) error {
+	return n.Put(
+		fmt.Sprintf("/register/group/%s", groupName),
+		"application/octet-stream",
+		[]byte(key.ToBase64()),
 	)
 }
 

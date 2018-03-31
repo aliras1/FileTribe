@@ -15,7 +15,7 @@ import (
 	nw "ipfs-share/network"
 )
 
-type UserStorage struct {
+type Storage struct {
 	dataPath        string
 	publicPath      string
 	publicFilesPath string
@@ -27,8 +27,8 @@ type UserStorage struct {
 	tmpPath         string
 }
 
-func NewUserStorage(dataPath string) *UserStorage {
-	var us UserStorage
+func NewStorage(dataPath string) *Storage {
+	var us Storage
 	us.dataPath = "./" + path.Clean(dataPath+"/data/")
 	us.publicPath = us.dataPath + "/public"
 	us.publicFilesPath = us.dataPath + "/public/files"
@@ -50,7 +50,7 @@ func NewUserStorage(dataPath string) *UserStorage {
 	return &us
 }
 
-func (us *UserStorage) ExistsFile(filePath string) bool {
+func (us *Storage) ExistsFile(filePath string) bool {
 	if _, err := os.Stat(filePath); err == nil {
 		return true
 	}
@@ -65,7 +65,7 @@ func (us *UserStorage) ExistsFile(filePath string) bool {
 // last time or not. The other half of files comes from data/userdata/shared.
 // These files are JSON representation of a File that were shared by the
 // user.
-func (us *UserStorage) BuildRepo(ipfs *ipfs.IPFS) ([]*File, error) {
+func (us *Storage) BuildRepo(ipfs *ipfs.IPFS) ([]*File, error) {
 	var repo []*File
 	// read capabilities from caps and try to refresh them
 	entries, err := ioutil.ReadDir(us.capsPath)
@@ -112,7 +112,7 @@ func (us *UserStorage) BuildRepo(ipfs *ipfs.IPFS) ([]*File, error) {
 }
 
 // Downloads and verifies the file, described in the capability.
-func (us *UserStorage) DownloadFileFromCap(file *File, cap *ReadCAP, ipfs *ipfs.IPFS) error {
+func (us *Storage) DownloadFileFromCap(file *File, cap *ReadCAP, ipfs *ipfs.IPFS) error {
 	tmpFilePath := us.tmpPath + "/" + path.Base(file.Path)
 	err := ipfs.Get(tmpFilePath, file.IPNSPath)
 	if err != nil {
@@ -133,7 +133,7 @@ func (us *UserStorage) DownloadFileFromCap(file *File, cap *ReadCAP, ipfs *ipfs.
 	return nil
 }
 
-func (us *UserStorage) CopyFileIntoPublicDir(filePath string) error {
+func (us *Storage) CopyFileIntoPublicDir(filePath string) error {
 	publicFilePath := us.publicFilesPath + "/" + path.Base(filePath)
 	return CopyFile(filePath, publicFilePath)
 }
@@ -141,7 +141,7 @@ func (us *UserStorage) CopyFileIntoPublicDir(filePath string) error {
 // Signs the files with the Write key and then the function adds
 // it to IPFS. The function returns with the future IPNS path of
 // the file and with the IPFS hash of the file
-func (us *UserStorage) SignAndAddFileToIPFS(filePath string, writeKey crypto.SecretSigningKey, ipfs *ipfs.IPFS) (string, string, error) {
+func (us *Storage) SignAndAddFileToIPFS(filePath string, writeKey crypto.SecretSigningKey, ipfs *ipfs.IPFS) (string, string, error) {
 	publicPath := us.publicFilesPath + "/" + path.Base(filePath)
 	bytesFile, err := ioutil.ReadFile(filePath)
 	if err != nil {
@@ -162,7 +162,7 @@ func (us *UserStorage) SignAndAddFileToIPFS(filePath string, writeKey crypto.Sec
 
 // Saves a File object (containing meta-data of a file) in json format
 // locally
-func (us *UserStorage) StoreFileMetaData(f *File) error {
+func (us *Storage) StoreFileMetaData(f *File) error {
 	byteJson, err := json.Marshal(f)
 	if err != nil {
 		return err
@@ -170,7 +170,7 @@ func (us *UserStorage) StoreFileMetaData(f *File) error {
 	return WriteFile(us.sharedPath+"/"+path.Base(f.Path)+".json", byteJson)
 }
 
-func (us *UserStorage) CreateCAPForUser(f *File, forUserPath, ipfsHash string, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
+func (us *Storage) CreateCAPForUser(f *File, forUserPath, ipfsHash string, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
 	err := os.MkdirAll(forUserPath, 0770)
 	if err != nil {
 		fmt.Println(err) /* TODO check for permission errors */
@@ -186,7 +186,7 @@ func (us *UserStorage) CreateCAPForUser(f *File, forUserPath, ipfsHash string, b
 	return ioutil.WriteFile(forUserPath+"/"+path.Base(f.Path)+".json", encJSON, 0644)
 }
 
-func (us *UserStorage) PublishPublicDir(ipfs *ipfs.IPFS) error {
+func (us *Storage) PublishPublicDir(ipfs *ipfs.IPFS) error {
 	publicDir := us.dataPath + "/public"
 	merkleNodes, err := ipfs.AddDir(publicDir)
 	if err != nil {

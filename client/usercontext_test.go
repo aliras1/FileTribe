@@ -42,7 +42,7 @@ func TestSharingFromUserContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	uc1.AddAndShareFile("usercontext.go", []string{uc2.User.Username})
-	//uc1.UserStorage.AddAndShareFile("usercontext_test.go", uc1.User.Username, []string{uc2.User.Username}, &uc1.User.Boxer)
+	//uc1.Storage.AddAndShareFile("usercontext_test.go", uc1.User.Username, []string{uc2.User.Username}, &uc1.User.Boxer)
 	time.Sleep(3 * time.Second)
 }
 

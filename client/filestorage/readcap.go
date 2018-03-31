@@ -42,7 +42,7 @@ func NewReadCAPFromFile(capPath string) (*ReadCAP, error) {
 
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
-func DownloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *UserStorage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
+func DownloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
 	// get address and key
 	ipfsAddr, err := network.GetUserIPFSAddr(fromUser)
 	if err != nil {
@@ -84,8 +84,7 @@ func DownloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 // Checks if the by ReadCap represented file has changed since last time
 // or not. It is done via checking the IPFS hash of the file. If it has
 // changed, the function returns true. Otherwise it returns false.
-func (rc *ReadCAP) RefreshCAP(storage *UserStorage, ipfs *ipfs.IPFS) (bool, error) {
-	// TODO this could be a CAP function
+func (rc *ReadCAP) RefreshCAP(storage *Storage, ipfs *ipfs.IPFS) (bool, error) {
 	resolvedHash, err := ipfs.Resolve(rc.IPNSPath)
 	fileChanged := strings.Compare(resolvedHash, rc.IPFSHash) != 0
 	if err != nil {
