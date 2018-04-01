@@ -9,13 +9,14 @@ import (
 	"fmt"
 	"github.com/whyrusleeping/tar-utils"
 	"io/ioutil"
-	"ipfs-share/crypto"
 	"log"
 	"net"
 	"net/http"
 	"path"
 	"strconv"
 	"strings"
+
+	"ipfs-share/crypto"
 )
 
 type IPFSID struct {
@@ -40,7 +41,6 @@ func (psm *PubsubMessage) Decode() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(string(msgLVL1))
 	var msgLVL2 []byte
 	msgLVL2, err = base64.URLEncoding.DecodeString(string(msgLVL1))
 	if err != nil {
@@ -49,13 +49,13 @@ func (psm *PubsubMessage) Decode() ([]byte, error) {
 	return msgLVL2, nil
 }
 
-func (psm *PubsubMessage) Verify(key crypto.PublicSigningKey) ([]byte, bool) {
+func (psm *PubsubMessage) Decrypt(key crypto.SymmetricKey) ([]byte, bool) {
 	signedGroupMsg, err := psm.Decode()
 	if err != nil {
 		log.Println(err)
 		return nil, false
 	}
-	return key.Open(nil, signedGroupMsg)
+	return key.BoxOpen(signedGroupMsg)
 }
 
 type IPFSNameResolvedHash struct {
@@ -116,7 +116,7 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 	// list dir
 	files, err := ioutil.ReadDir(dirPath)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return nil, err
 	}
 
@@ -237,12 +237,15 @@ func (i *IPFS) PubsubSubscribe(channel string, dst chan PubsubMessage) error {
 }
 
 func (i *IPFS) Resolve(anyPath string) (string, error) {
+	fmt.Println("resolving...: " + anyPath)
 	resp, err := i.getRequest("resolve?arg=" + anyPath + "&recursive=true")
 	if err != nil {
+		fmt.Println(err)
 		return "", err
 	}
 	var hash IPFSNameResolvedHash
 	err = json.Unmarshal(resp, &hash)
+	fmt.Println("resolved")
 	return hash.Path, err
 }
 

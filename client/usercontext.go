@@ -1,6 +1,7 @@
 package client
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log"
@@ -15,25 +16,15 @@ import (
 )
 
 type UserContext struct {
-	User        *User // TODO lock boxer
-	Groups      []*GroupContext
-	Repo        []*fs.File
-	Network     *nw.Network
-	IPFS        *ipfs.IPFS
-	UserStorage *fs.Storage // TODO lock
+	User    *User // TODO lock boxer
+	Groups  []*GroupContext
+	Repo    []*fs.File
+	Network *nw.Network
+	IPFS    *ipfs.IPFS
+	Storage *fs.Storage // TODO lock
 
 	channelMsg chan nw.Message
 	channelSig chan os.Signal
-}
-
-func (uc *UserContext) CreateGroup(groupName string) {
-	group := NewGroup(groupName)
-	err := group.Register(uc.Network)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
 }
 
 func NewUserContextFromSignUp(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
@@ -62,9 +53,9 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	uc.User = user
 	uc.Network = network
 	uc.IPFS = ipfs
-	uc.UserStorage = fs.NewStorage(dataPath)
+	uc.Storage = fs.NewStorage(dataPath)
 	uc.Groups = []*GroupContext{}
-	uc.Repo, err = uc.UserStorage.BuildRepo(ipfs)
+	uc.Repo, err = uc.Storage.BuildRepo(ipfs)
 	if err != nil {
 		log.Println(err)
 	}
@@ -105,33 +96,77 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 	for msg := range channelMsg {
 		fmt.Print("msgproc: ")
 		fmt.Println(msg)
+		switch msg.Type {
+		case "PTP READ CAP":
+			cap, err := ctx.Storage.DownloadReadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			file, err := fs.NewFileFromCAP(cap, ctx.Storage, ctx.IPFS)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			ctx.addFileToRepo(file)
 
-		cap, err := fs.DownloadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.UserStorage, ctx.Network, ctx.IPFS)
-		if err != nil {
-			log.Println(err)
-			continue
+			fmt.Println("content of root directory: ")
+			ctx.List()
+		case "GROUP INVITE":
+			fmt.Println("group invite....")
+			cap, err := ctx.Storage.DownloadGroupAccessCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			cap.Boxer.RNG = rand.Reader
+			err = ctx.NewGroupFromCAP(msg.From, cap)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
 		}
-		file, err := fs.NewFileFromCAP(cap, ctx.UserStorage, ctx.IPFS)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		ctx.addFileToRepo(file)
-
-		fmt.Println("content of root directory: ")
-		ctx.List()
 	}
+}
+
+func (uc *UserContext) CreateGroup(groupName string) error {
+	group := NewGroup(groupName)
+	err := group.Register(uc.Network)
+	if err != nil {
+		return err
+	}
+	uc.Storage.CreateGroupStorage(groupName)
+	groupCtx := GroupContext{group, nil, []string{uc.User.Username}, uc.Network, uc.IPFS, uc.Storage}
+	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
+	uc.Groups = append(uc.Groups, &groupCtx)
+	return groupCtx.Save()
+}
+
+func (uc *UserContext) NewGroupFromCAP(from string, cap *fs.GroupAccessCAP) error {
+	group := &Group{cap.GroupName, cap.Boxer}
+	uc.Storage.CreateGroupStorage(group.GroupName)
+	groupCtx := GroupContext{group, nil, []string{uc.User.Username}, uc.Network, uc.IPFS, uc.Storage}
+	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
+	uc.Groups = append(uc.Groups, &groupCtx)
+	fmt.Println("pulling g data")
+	err := groupCtx.PullGroupData(from)
+	if err != nil {
+		return err
+	}
+	fmt.Print("members: ")
+	fmt.Println(groupCtx.Members)
+	return groupCtx.Save()
 }
 
 func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {
 	if uc.isFileInRepo(filePath) {
 		return errors.New("file already in root dir")
 	}
-	file, err := fs.NewSharedFile(filePath, uc.User.Username, uc.UserStorage, uc.IPFS)
+	file, err := fs.NewSharedFile(filePath, uc.User.Username, uc.Storage, uc.IPFS)
 	if err != nil {
 		return err
 	}
-	err = file.Share(shareWith, &uc.User.Boxer, uc.UserStorage, uc.Network, uc.IPFS)
+	err = file.Share(shareWith, &uc.User.Boxer, uc.Storage, uc.Network, uc.IPFS)
 	if err != nil {
 		return err
 	}

@@ -12,6 +12,11 @@ import (
 	nw "ipfs-share/network"
 )
 
+type GroupAccessCAP struct {
+	GroupName string
+	Boxer     crypto.SymmetricKey
+}
+
 type ReadCAP struct {
 	FileName  string                  `json:"name"`
 	IPNSPath  string                  `json:"ipns_path"`
@@ -40,9 +45,33 @@ func NewReadCAPFromFile(capPath string) (*ReadCAP, error) {
 	return &cap, err
 }
 
+func (s *Storage) DownloadReadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
+	capBytes, err := s.downloadCAP(s.capsPath, fromUser, username, capName, boxer, network, ipfs)
+	if err != nil {
+		return nil, err
+	}
+	var cap *ReadCAP
+	if err := json.Unmarshal(capBytes, cap); err != nil {
+		return nil, err
+	}
+	return cap, nil
+}
+
+func (s *Storage) DownloadGroupAccessCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) (*GroupAccessCAP, error) {
+	capBytes, err := s.downloadCAP(s.capsGAPath, fromUser, username, capName, boxer, network, ipfs)
+	if err != nil {
+		return nil, err
+	}
+	var cap GroupAccessCAP
+	if err := json.Unmarshal(capBytes, &cap); err != nil {
+		return nil, err
+	}
+	return &cap, nil
+}
+
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
-func DownloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
+func (s *Storage) downloadCAP(basePath, fromUser, username, capName string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
 	// get address and key
 	ipfsAddr, err := network.GetUserIPFSAddr(fromUser)
 	if err != nil {
@@ -54,12 +83,12 @@ func DownloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 	}
 	ipnsPath := "/ipns/" + ipfsAddr + "/for/" + username + "/" + capName
 	// download cap file
-	tmpFilePath := storage.tmpPath + "/" + capName
+	tmpFilePath := s.tmpPath + "/" + capName
 	err = ipfs.Get(tmpFilePath, ipnsPath)
 	if err != nil {
 		return nil, err
 	}
-	capFilePath := storage.capsPath + "/" + capName
+	capFilePath := basePath + "/" + capName
 	bytesEnc, err := ioutil.ReadFile(tmpFilePath)
 	if err != nil {
 		return nil, err
@@ -73,12 +102,7 @@ func DownloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 	if err := WriteFile(capFilePath, bytesDecr); err != nil {
 		return nil, err
 	}
-
-	readCAP, err := NewReadCAPFromFile(capFilePath)
-	if err != nil {
-		return nil, errors.New("error by NewReadCAPFromFile: " + err.Error())
-	}
-	return readCAP, nil
+	return bytesDecr, nil
 }
 
 // Checks if the by ReadCap represented file has changed since last time

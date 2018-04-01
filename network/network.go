@@ -15,6 +15,7 @@ import (
 type Message struct {
 	From    string `json:"from"`
 	To      string `json:"to,omitempty"`
+	Type    string `json:"type"`
 	Message string `json:"message"`
 }
 
@@ -146,12 +147,9 @@ func (n *Network) PutIPFSAddr(hash crypto.PublicKeyHash, ipfsAddr string) error 
 	)
 }
 
-func (n *Network) RegisterGroup(groupName string, key crypto.PublicSigningKey) error {
-	return n.Put(
-		fmt.Sprintf("/register/group/%s", groupName),
-		"application/octet-stream",
-		[]byte(key.ToBase64()),
-	)
+func (n *Network) RegisterGroup(groupName string) error {
+	_, err := n.Get("/register/group/", groupName)
+	return err
 }
 
 func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) error {
@@ -162,8 +160,8 @@ func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) e
 	)
 }
 
-func (n *Network) SendMessage(from, to, msg string) error {
-	m := Message{from, to, msg}
+func (n *Network) SendMessage(from, to, msgType, msgData string) error {
+	m := Message{from, to, msgType, msgData}
 	fmt.Println(m)
 	byteJson, err := json.Marshal(m)
 	if err != nil {

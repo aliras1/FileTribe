@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
-	"log"
 )
 
 type Synchronizer struct {
@@ -33,9 +34,9 @@ func NewSynchronizer(username string, userSigner *crypto.SigningKeyPair, groupCt
 }
 
 func (s *Synchronizer) MessageProcessor() {
-	fmt.Println("forking...")
+	fmt.Println("synch forking...")
 	for psMsg := range s.channelPubSub {
-		groupMsgBytes, ok := psMsg.Verify(s.groupCtx.Group.Signer.PublicKey)
+		groupMsgBytes, ok := psMsg.Decrypt(s.groupCtx.Group.Boxer)
 		if !ok {
 			log.Println("invalid group message")
 			continue
@@ -47,20 +48,74 @@ func (s *Synchronizer) MessageProcessor() {
 		}
 		switch groupMsg.Type {
 		case "proposal":
-			proposal, err := s.verifyProposal(groupMsg.Data)
-			if err != nil {
+			if err := s.processProposal(groupMsg); err != nil {
 				log.Println(err)
 				continue
 			}
-			// TODO dont need signature
-			err = s.validateProposal(proposal)
-			if err != nil {
+		case "commit":
+			if err := s.processCommitMsg(groupMsg); err != nil {
 				log.Println(err)
 				continue
 			}
-			s.approveProposal(s.username, proposal)
 		}
 	}
+}
+
+func (s *Synchronizer) processProposal(groupMsg GroupMessage) error {
+	proposal, err := s.verifyProposal(groupMsg.Data)
+	if err != nil {
+		return err
+	}
+	// TODO dont need signature
+	err = s.validateProposal(proposal)
+	if err != nil {
+		return err
+	}
+	return s.approveProposal(s.username, proposal)
+}
+
+func (s *Synchronizer) processCommitMsg(groupMsg GroupMessage) error {
+	var commitMsg CommitMsg
+	err := json.Unmarshal(groupMsg.Data, &commitMsg)
+	if err != nil {
+		return err
+	}
+	if len(commitMsg.SignedBy) < len(s.groupCtx.Members)/2 {
+		return errors.New("not enough approvals")
+	}
+	proposalBytes, err := json.Marshal(commitMsg.Proposal)
+	if err != nil {
+		return err
+	}
+	hash := sha256.Sum256(proposalBytes)
+	numValidApprovals := 0
+	for _, sign := range commitMsg.SignedBy {
+		approval := Approval{sign.User, hash}
+		approvalBytes, err := json.Marshal(approval)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		signedApproval := sign.Signature[:]
+		signedApproval = append(signedApproval, approvalBytes...)
+		verifyKey, err := s.groupCtx.Network.GetUserSigningKey(sign.User)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		_, ok := verifyKey.Open(nil, signedApproval)
+		if !ok {
+			log.Println("invalid approval in commit")
+			continue
+		}
+		numValidApprovals += 1
+	}
+	if numValidApprovals < len(s.groupCtx.Members)/2 {
+		return errors.New("not enough valid approvals")
+	}
+	fmt.Println(numValidApprovals)
+	// TODO execute command
+	return nil
 }
 
 func (s *Synchronizer) approveProposal(username string, proposal *Proposal) error {
@@ -76,8 +131,8 @@ func (s *Synchronizer) approveProposal(username string, proposal *Proposal) erro
 		return err
 	}
 	userSignedApproval := s.userSigner.SecretKey.Sign(nil, approvalBytes)
-	groupSignedApproval := s.groupCtx.Group.Signer.SecretKey.Sign(nil, userSignedApproval)
-	return s.groupCtx.IPFS.PubsubPublish(channelName, groupSignedApproval)
+	groupEncApproval := s.groupCtx.Group.Boxer.BoxSeal(userSignedApproval)
+	return s.groupCtx.IPFS.PubsubPublish(channelName, groupEncApproval)
 }
 
 // verify if the proposal really comes from the given user

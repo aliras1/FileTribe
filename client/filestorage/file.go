@@ -76,7 +76,7 @@ func (f *File) Share(shareWith []string, boxer *crypto.BoxingKeyPair, us *Storag
 		// add to share list
 		f.SharedWith = append(f.SharedWith, user)
 		// make new capability into for_X directory
-		err := us.CreateCAPForUser(f, us.publicForPath+"/"+user, f.IPFSAddr, boxer, network)
+		err := us.CreateFileReadCAPForUser(f, us.publicForPath+"/"+user, f.IPFSAddr, boxer, network)
 		newUsers = append(newUsers, user)
 		if err != nil {
 			return err
@@ -89,7 +89,7 @@ func (f *File) Share(shareWith []string, boxer *crypto.BoxingKeyPair, us *Storag
 	}
 	// send share messages
 	for _, user := range newUsers {
-		err = network.SendMessage(f.Owner, user, path.Base(f.Path)+".json")
+		err = network.SendMessage(f.Owner, user, "GROUP INVITE", path.Base(f.Path)+".json")
 		if err != nil {
 			return err
 		}

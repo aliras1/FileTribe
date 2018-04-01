@@ -132,9 +132,9 @@ def signup(username):
 def send_message():
     data = request.json
     if data["to"] in messages:
-        messages[data["to"]] += [{"from": data["from"], "message": data["message"]}]
+        messages[data["to"]] += [{"from": data["from"], "type": data["type"], "message": data["message"]}]
     else:
-        messages[data["to"]] = [{"from": data["from"], "message": data["message"]}]
+        messages[data["to"]] = [{"from": data["from"], "type": data["type"], "message": data["message"]}]
     print(messages)
     return Response()
 

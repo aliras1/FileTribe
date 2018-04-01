@@ -9,6 +9,32 @@ import (
 	nw "ipfs-share/network"
 )
 
+func TestGroupInvite(t *testing.T) {
+	ipfs, err := i.NewIPFS("http://127.0.0.1", 5001)
+	network := nw.Network{"http://0.0.0.0:6000"}
+	if err != nil {
+		t.Fatal("could not connect to ipfs daemon")
+	}
+	username1 := "test_user"
+	username2 := "test_user2"
+	uc1, err := NewUserContextFromSignUp(username1, "pw", "./t1/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc2, err := NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := uc1.CreateGroup("test_group"); err != nil {
+		t.Fatal(err)
+	}
+	if err := uc1.Groups[0].Invite(username1, username2, &uc1.User.Boxer, &uc1.User.Signer.SecretKey); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(uc2)
+	time.Sleep(60 * time.Second)
+}
+
 func TestMessageGetter(t *testing.T) {
 	ipfs, err := i.NewIPFS("http://127.0.0.1", 5001)
 	network := nw.Network{"http://0.0.0.0:6000"}
@@ -20,8 +46,8 @@ func TestMessageGetter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	network.SendMessage("from", "test_user", "hello friend!")
-	network.SendMessage("from", "test_user", "hello friend, again!")
+	network.SendMessage("from", "test_user", "test", "hello friend!")
+	network.SendMessage("from", "test_user", "test", "hello friend, again!")
 	fmt.Println("Sleeping...")
 	time.Sleep(3 * time.Second)
 	fmt.Println("End of test")

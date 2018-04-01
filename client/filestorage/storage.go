@@ -22,6 +22,7 @@ type Storage struct {
 	publicForPath   string
 	userDataPath    string
 	capsPath        string
+	capsGAPath      string // group access caps
 	storagePath     string
 	sharedPath      string
 	tmpPath         string
@@ -35,6 +36,7 @@ func NewStorage(dataPath string) *Storage {
 	us.publicForPath = us.dataPath + "/public/for"
 	us.userDataPath = us.dataPath + "/userdata"
 	us.capsPath = us.dataPath + "/userdata/caps"
+	us.capsGAPath = us.dataPath + "/userdata/caps/GA"
 	us.storagePath = us.dataPath + "/userdata/root"
 	us.sharedPath = us.dataPath + "/userdata/shared"
 	us.tmpPath = us.dataPath + "/userdata/tmp"
@@ -43,6 +45,7 @@ func NewStorage(dataPath string) *Storage {
 	os.MkdirAll(us.publicFilesPath, 0770)
 	os.MkdirAll(us.publicForPath, 0770)
 	os.MkdirAll(us.capsPath, 0770)
+	os.MkdirAll(us.capsGAPath, 0770)
 	os.MkdirAll(us.storagePath, 0770)
 	os.MkdirAll(us.sharedPath, 0770)
 	os.MkdirAll(us.tmpPath, 0770)
@@ -170,23 +173,85 @@ func (us *Storage) StoreFileMetaData(f *File) error {
 	return WriteFile(us.sharedPath+"/"+path.Base(f.Path)+".json", byteJson)
 }
 
-func (us *Storage) CreateCAPForUser(f *File, forUserPath, ipfsHash string, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
+func (s *Storage) CreateFileReadCAPForUser(f *File, forUserPath, ipfsHash string, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
+	user := path.Base(forUserPath)
+	cap := ReadCAP{path.Base(f.Path), f.IPNSPath, ipfsHash, f.Owner, f.VerifyKey}
+	capBytes, err := json.Marshal(cap)
+	if err != nil {
+		return err
+	}
+	return s.createFileForUser(user, path.Base(f.Path), capBytes, boxer, network)
+}
+
+func (s *Storage) createFileForUser(user, capName string, data []byte, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
+	forUserPath := s.publicForPath + "/" + user
 	err := os.MkdirAll(forUserPath, 0770)
 	if err != nil {
 		fmt.Println(err) /* TODO check for permission errors */
 	}
-	readCAP := ReadCAP{path.Base(f.Path), f.IPNSPath, ipfsHash, f.Owner, f.VerifyKey}
-	byteJSON, err := json.Marshal(readCAP)
 	otherPK, err := network.GetUserBoxingKey(path.Base(forUserPath))
 	if err != nil {
 		return err
 	}
-
-	encJSON := boxer.BoxSeal(byteJSON, &otherPK)
-	return ioutil.WriteFile(forUserPath+"/"+path.Base(f.Path)+".json", encJSON, 0644)
+	encData := boxer.BoxSeal(data, &otherPK)
+	return ioutil.WriteFile(forUserPath+"/"+capName+".json", encData, 0644)
 }
 
+// +------------------------------+
+// |   Group specific functions   |
+// +------------------------------+
+
+func (s *Storage) CreateGroupStorage(groupName string) {
+	os.MkdirAll(s.publicForPath+"/"+groupName, 0770)
+	os.MkdirAll(s.storagePath+"/"+groupName, 0770)
+}
+
+func (s *Storage) DownloadGroupData(groupName, file, from string, ipfs *ipfs.IPFS, network *nw.Network) (string, error) {
+	ipns, err := network.GetUserIPFSAddr(from)
+	if err != nil {
+		return "", err
+	}
+	ipnsPath := "/ipns/" + ipns + "/for/" + groupName + "/" + file
+	ipfsHash, err := ipfs.Resolve(ipnsPath)
+	if err != nil {
+		return "", err
+	}
+	filePath := s.publicForPath + "/" + groupName + "/" + file
+	return filePath, ipfs.Get(filePath, ipfsHash)
+}
+
+func (s *Storage) CreateGroupAccessCAPForUser(user, group string, key crypto.SymmetricKey, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
+	cap := GroupAccessCAP{group, key}
+	capBytes, err := json.Marshal(cap)
+	if err != nil {
+		return err
+	}
+	return s.createFileForUser(user, group, capBytes, boxer, network)
+}
+
+func (s *Storage) StoreGroupAccessCAP(group string, key crypto.SymmetricKey) error {
+	cap := GroupAccessCAP{group, key}
+	capBytes, err := json.Marshal(cap)
+	if err != nil {
+		return err
+	}
+	filePath := s.capsGAPath + "/" + group + ".json"
+	return WriteFile(filePath, capBytes)
+}
+
+func (s *Storage) SaveGroupData(groupName, fileName string, boxer crypto.SymmetricKey, data []byte) error {
+	// group data goes always into the /public/for/group/ directory
+	filePath := s.publicForPath + "/" + groupName + "/" + fileName
+	encData := boxer.BoxSeal(data)
+	return WriteFile(filePath, encData)
+}
+
+// +------------------------------+
+// |       Helper functions       |
+// +------------------------------+
+
 func (us *Storage) PublishPublicDir(ipfs *ipfs.IPFS) error {
+	fmt.Println("[*] Publishing...")
 	publicDir := us.dataPath + "/public"
 	merkleNodes, err := ipfs.AddDir(publicDir)
 	if err != nil {
@@ -201,6 +266,7 @@ func (us *Storage) PublishPublicDir(ipfs *ipfs.IPFS) error {
 			break
 		}
 	}
+	fmt.Println("[*] Publishing ended")
 	return nil
 }
 

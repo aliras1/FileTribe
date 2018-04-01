@@ -140,7 +140,7 @@ func Sign(privateKey PrivateKey, message []byte) []byte {
 	return signature
 }
 
-// Verify reports whether sig is a valid signature of message by publicKey. It
+// Decrypt reports whether sig is a valid signature of message by publicKey. It
 // will panic if len(publicKey) is not PublicKeySize.
 func Verify(publicKey PublicKey, message, sig []byte) bool {
 	if l := len(publicKey); l != PublicKeySize {

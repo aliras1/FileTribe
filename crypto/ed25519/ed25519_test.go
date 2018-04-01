@@ -85,7 +85,7 @@ func TestCryptoSigner(t *testing.T) {
 	}
 
 	if !Verify(public, message, signature) {
-		t.Errorf("Verify failed on signature from Sign()")
+		t.Errorf("Decrypt failed on signature from Sign()")
 	}
 }
 

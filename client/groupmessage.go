@@ -45,9 +45,9 @@ func VerifyApproval(signedApproval []byte, network *nw.Network) (*Approval, [64]
 	return &approval, signature, nil
 }
 
-func ValidateApproval(psm *ipfs.PubsubMessage, hash [32]byte, groupVerifyKey crypto.PublicSigningKey, network *nw.Network) (SignedBy, error) {
+func ValidateApproval(psm *ipfs.PubsubMessage, hash [32]byte, groupSymKey crypto.SymmetricKey, network *nw.Network) (SignedBy, error) {
 	signedBy := SignedBy{}
-	signedApproval, ok := psm.Verify(groupVerifyKey)
+	signedApproval, ok := psm.Decrypt(groupSymKey)
 	if !ok {
 		return signedBy, errors.New("invalid group pubsub msg")
 	}
