@@ -14,6 +14,7 @@ import (
 
 type Synchronizer struct {
 	userSigner *crypto.SigningKeyPair
+	userBoxer  *crypto.BoxingKeyPair
 	groupCtx   *GroupContext
 	username   string
 
@@ -80,6 +81,7 @@ func (s *Synchronizer) processCommitMsg(groupMsg GroupMessage) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("commit msg from : " + commitMsg.Proposal.From)
 	if len(commitMsg.SignedBy) < len(s.groupCtx.Members)/2 {
 		return errors.New("not enough approvals")
 	}
@@ -114,7 +116,8 @@ func (s *Synchronizer) processCommitMsg(groupMsg GroupMessage) error {
 		return errors.New("not enough valid approvals")
 	}
 	fmt.Println(numValidApprovals)
-	// TODO execute command
+	cmd := CMDFromProposal(commitMsg.Proposal)
+	cmd.Execute(s.groupCtx)
 	return nil
 }
 

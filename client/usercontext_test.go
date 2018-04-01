@@ -5,12 +5,13 @@ import (
 	"testing"
 	"time"
 
-	i "ipfs-share/ipfs"
+	ipfsapi "ipfs-share/ipfs"
 	nw "ipfs-share/network"
+	"strings"
 )
 
 func TestGroupInvite(t *testing.T) {
-	ipfs, err := i.NewIPFS("http://127.0.0.1", 5001)
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
 	network := nw.Network{"http://0.0.0.0:6000"}
 	if err != nil {
 		t.Fatal("could not connect to ipfs daemon")
@@ -33,10 +34,49 @@ func TestGroupInvite(t *testing.T) {
 	}
 	fmt.Println(uc2)
 	time.Sleep(60 * time.Second)
+	if len(uc1.Groups) != len(uc2.Groups) {
+		t.Fatal("#groups does not match")
+	}
+	if len(uc1.Groups[0].Members) != len(uc2.Groups[0].Members) {
+		t.Fatal("#(group members) does not match")
+	}
+	for i := 0; i < len(uc1.Groups[0].Members); i++ {
+		str1 := uc1.Groups[0].Members[i]
+		str2 := uc2.Groups[0].Members[i]
+		if strings.Compare(str1, str2) != 0 {
+			t.Fatal("group members do not match")
+		}
+	}
+	fmt.Println("invite 1st member succeeded")
+
+	username3 := "test_user3"
+	uc3, err := NewUserContextFromSignUp(username3, "pw", "./t3/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := uc1.Groups[0].Invite(username1, username3, &uc1.User.Boxer, &uc1.User.Signer.SecretKey); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(60 * time.Second)
+	fmt.Println(uc1.Groups[0].Members)
+	fmt.Println(uc2.Groups[0].Members)
+	if len(uc1.Groups) != len(uc3.Groups) {
+		t.Fatal("#groups does not match")
+	}
+	if len(uc1.Groups[0].Members) != len(uc3.Groups[0].Members) {
+		t.Fatal("#(group members) does not match")
+	}
+	for i := 0; i < len(uc1.Groups[0].Members); i++ {
+		str1 := uc1.Groups[0].Members[i]
+		str2 := uc3.Groups[0].Members[i]
+		if strings.Compare(str1, str2) != 0 {
+			t.Fatal("group members do not match")
+		}
+	}
 }
 
 func TestMessageGetter(t *testing.T) {
-	ipfs, err := i.NewIPFS("http://127.0.0.1", 5001)
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
 	network := nw.Network{"http://0.0.0.0:6000"}
 	if err != nil {
 		t.Fatal("could not connect to ipfs daemon")
@@ -54,7 +94,7 @@ func TestMessageGetter(t *testing.T) {
 }
 
 func TestSharingFromUserContext(t *testing.T) {
-	ipfs, err := i.NewIPFS("http://127.0.0.1", 5001)
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
 	network := nw.Network{"http://0.0.0.0:6000"}
 	if err != nil {
 		t.Fatal("could not connect to ipfs daemon")
@@ -73,7 +113,7 @@ func TestSharingFromUserContext(t *testing.T) {
 }
 
 func TestNewUserContextFromSignIn(t *testing.T) {
-	ipfs, err := i.NewIPFS("http://127.0.0.1", 5001)
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
 	network := nw.Network{"http://0.0.0.0:6000"}
 	if err != nil {
 		t.Fatal("could not connect to ipfs daemon")

@@ -45,6 +45,7 @@ func NewMemberListFromFile(filePath string, key crypto.SymmetricKey) (*MemberLis
 }
 
 type GroupContext struct {
+	User    *User
 	Group   *Group
 	Repo    []*fs.File
 	Members MemberList
@@ -55,9 +56,8 @@ type GroupContext struct {
 
 func (gc *GroupContext) Invite(username, newMember string, boxer *crypto.BoxingKeyPair, signer *crypto.SecretSigningKey) error {
 	if len(gc.Members) == 1 {
-		cmd := InviteCMD{username, boxer, newMember, gc}
-		cmd.Execute(gc.Network)
-		return nil
+		cmd := InviteCMD{username, newMember}
+		return cmd.Execute(gc)
 	}
 
 	prevHash := hashOfMembers(gc.Members)
@@ -114,9 +114,12 @@ func (gc *GroupContext) collectApprovals(username string, proposal Proposal) {
 					log.Println(err)
 					return
 				}
-				gc.sendToAll(groupMsgBytes)
-				// TODO execute cmd
-
+				if err := gc.sendToAll(groupMsgBytes); err != nil {
+					log.Println(err)
+					return
+				}
+				// current user also gets the commit message
+				// which will be executed in the Synchronizer
 				return
 			}
 

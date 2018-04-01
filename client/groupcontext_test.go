@@ -30,9 +30,9 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 	group := NewGroup("cucc")
 
-	gc1 := GroupContext{group, nil, []string{username1, username2}, &network, ipfs, nil}
+	gc1 := GroupContext{user1, group, nil, []string{username1, username2}, &network, ipfs, nil}
 
-	gc2 := GroupContext{group, nil, []string{username1, username2}, &network, ipfs, nil}
+	gc2 := GroupContext{user2, group, nil, []string{username1, username2}, &network, ipfs, nil}
 	synch2 := NewSynchronizer(user2.Username, &user2.Signer, &gc2)
 	fmt.Println(synch2)
 
