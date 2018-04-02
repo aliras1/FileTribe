@@ -65,6 +65,10 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	go MessageGetter(uc.User.Username, network, uc.channelMsg, uc.channelSig)
 	go MessageProcessor(uc.channelMsg, uc.User.Username, &uc)
 
+	if err := uc.BuildGroups(); err != nil {
+		log.Println(err)
+	}
+	uc.Storage.PublishPublicDir(uc.IPFS)
 	return &uc
 }
 
@@ -120,13 +124,27 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 				continue
 			}
 			cap.Boxer.RNG = rand.Reader
-			err = ctx.NewGroupFromCAP(msg.From, cap)
+			err = ctx.CreateGroupFromCAP(cap, msg.From)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
+			//ctx.Storage.PublishPublicDir(ctx.IPFS)
 		}
 	}
+}
+
+func (uc *UserContext) BuildGroups() error {
+	caps, err := uc.Storage.GetGroupCAPs()
+	if err != nil {
+		return err
+	}
+	for _, cap := range caps {
+		if err := uc.CreateGroupFromCAP(&cap, ""); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (uc *UserContext) CreateGroup(groupName string) error {
@@ -137,7 +155,7 @@ func (uc *UserContext) CreateGroup(groupName string) error {
 	}
 	uc.Storage.CreateGroupStorage(groupName)
 	groupCtx := GroupContext{uc.User, group, nil,
-		&MemberList{[]Member{{uc.User.Username, nil}}},
+		&MemberList{[]Member{{uc.User.Username, uc.User.Signer.PublicKey}}},
 		&ActiveMemberList{}, uc.Network, uc.IPFS, uc.Storage}
 
 	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
@@ -145,22 +163,30 @@ func (uc *UserContext) CreateGroup(groupName string) error {
 	return groupCtx.Save()
 }
 
-func (uc *UserContext) NewGroupFromCAP(from string, cap *fs.GroupAccessCAP) error {
+func (uc *UserContext) CreateGroupFromCAP(cap *fs.GroupAccessCAP, from string) error {
 	group := &Group{cap.GroupName, cap.Boxer}
 	uc.Storage.CreateGroupStorage(group.GroupName)
-	groupCtx := GroupContext{uc.User, group, nil,
-		&MemberList{[]Member{{uc.User.Username, nil}}},
+
+	memberList := &MemberList{[]Member{}}
+	memberList = memberList.Append(uc.User.Username, uc.Network)
+	if strings.Compare(from, "") != 0 {
+		memberList = memberList.Append(from, uc.Network)
+	}
+	groupCtx := GroupContext{uc.User, group, nil, memberList,
 		&ActiveMemberList{}, uc.Network, uc.IPFS, uc.Storage}
 
-	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
-	uc.Groups = append(uc.Groups, &groupCtx)
-	fmt.Println("pulling g data")
-	err := groupCtx.PullGroupData(from)
-	if err != nil {
+	// load local members to have an idea, who are the good guys.
+	// note, that by an invite request 'from' is not a null string
+	// therefore we have a valid member we can contact
+	if err := groupCtx.LoadGroupData("members.json"); err != nil {
 		return err
 	}
-	fmt.Print("members: ")
-	fmt.Println(groupCtx.Members)
+	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
+	time.Sleep(1 * time.Second) // wait for heartbeats of active members
+	uc.Groups = append(uc.Groups, &groupCtx)
+	if err := groupCtx.PullGroupData("members.json"); err != nil {
+		return err
+	}
 	return groupCtx.Save()
 }
 

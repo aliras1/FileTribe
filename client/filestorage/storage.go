@@ -10,9 +10,11 @@ import (
 	"path"
 	"strings"
 
+	"crypto/rand"
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
+	"log"
 )
 
 type Storage struct {
@@ -83,7 +85,7 @@ func (us *Storage) BuildRepo(ipfs *ipfs.IPFS) ([]*File, error) {
 		if err != nil {
 			continue // do not care about trash files
 		}
-		changed, err := cap.RefreshCAP(us, ipfs)
+		changed, err := cap.Refresh(us, ipfs)
 		if err != nil {
 			return nil, err
 		}
@@ -201,23 +203,107 @@ func (s *Storage) createFileForUser(user, capName string, data []byte, boxer *cr
 // |   Group specific functions   |
 // +------------------------------+
 
+// Gets all the locally stored group access capabilities from
+// directory data/userdata/caps/GA/
+func (s *Storage) GetGroupCAPs() ([]GroupAccessCAP, error) {
+	var caps []GroupAccessCAP
+	// read capabilities from caps and try to refresh them
+	entries, err := ioutil.ReadDir(s.capsGAPath)
+	if err != nil {
+		return caps, err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue // do not care about directories
+		}
+		capBytes, err := ioutil.ReadFile(s.capsGAPath + "/" + entry.Name())
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		var cap GroupAccessCAP
+		if err := json.Unmarshal(capBytes, &cap); err != nil {
+			log.Println(err)
+			continue
+		}
+		cap.Boxer.RNG = rand.Reader
+		caps = append(caps, cap)
+	}
+	return caps, nil
+}
+
+// Creates the directory structure needed by a group
 func (s *Storage) CreateGroupStorage(groupName string) {
 	os.MkdirAll(s.publicForPath+"/"+groupName, 0770)
 	os.MkdirAll(s.storagePath+"/"+groupName, 0770)
 }
 
-func (s *Storage) DownloadGroupData(groupName, file, from string, ipfs *ipfs.IPFS, network *nw.Network) (string, error) {
-	ipns, err := network.GetUserIPFSAddr(from)
+// Gets the ipfs hash of the given group meta data stored locally
+// like members, ACL, etc... If it is not present, it returns with
+// a null string
+func (s *Storage) GetLocalGroupDataHash(groupname, data string, ipfs *ipfs.IPFS) (string, error) {
+	filePath := s.publicForPath + "/" + groupname + "/" + data
+	if !FileExists(filePath) {
+		fmt.Println("do not exist")
+		return "", nil
+	}
+	mn, err := ipfs.AddFile(filePath)
 	if err != nil {
 		return "", err
 	}
-	ipnsPath := "/ipns/" + ipns + "/for/" + groupName + "/" + file
-	ipfsHash, err := ipfs.Resolve(ipnsPath)
+	return mn.Hash, nil
+}
+
+// Returns the path of the wanted group meta data
+func (s *Storage) GetGroupDataPath(groupname, data string) string {
+	return s.publicForPath + "/" + groupname + "/" + data
+}
+
+// Checks if the given meta data is present and if so, whether it
+// changed (accorting to other members) since last time or not. If
+// changes are detected, it returns with the new ipfs hash of the
+// meta data
+func (s *Storage) GroupDataChanged(groupname, data string, activeMembers []string, ipfs *ipfs.IPFS, network *nw.Network) (string, error) {
+	memberHash, err := s.GetLocalGroupDataHash(groupname, "members.json", ipfs)
 	if err != nil {
 		return "", err
 	}
+	// only active member is current user
+	if len(activeMembers) == 1 {
+		fmt.Println("only active")
+		return "", nil
+	}
+	membersAgreeOnData := 0
+	commonHash := ""
+	for _, member := range activeMembers {
+		ipns, err := network.GetUserIPFSAddr(member)
+		if err != nil {
+			return "", err
+		}
+		ipnsPath := "/ipns/" + ipns + "/for/" + groupname + "/" + data
+		ipfsHash, err := ipfs.Resolve(ipnsPath)
+		if err != nil {
+			return "", err
+		}
+		if strings.Compare(commonHash, "") == 0 {
+			commonHash = ipfsHash
+		} else if strings.Compare(commonHash, ipfsHash) == 0 {
+			membersAgreeOnData += 1
+		}
+	}
+	if membersAgreeOnData < len(activeMembers)/2 {
+		return "", errors.New("members do not agree on data: " + data)
+	}
+	if strings.Compare(memberHash, commonHash) == 0 {
+		return "", nil
+	}
+	return commonHash, nil
+}
+
+// Downloads the given group meta data
+func (s *Storage) DownloadGroupData(groupName, file, ipfsHash string, ipfs *ipfs.IPFS, network *nw.Network) error {
 	filePath := s.publicForPath + "/" + groupName + "/" + file
-	return filePath, ipfs.Get(filePath, ipfsHash)
+	return ipfs.Get(filePath, ipfsHash)
 }
 
 func (s *Storage) CreateGroupAccessCAPForUser(user, group string, key crypto.SymmetricKey, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
@@ -229,21 +315,84 @@ func (s *Storage) CreateGroupAccessCAPForUser(user, group string, key crypto.Sym
 	return s.createFileForUser(user, group, capBytes, boxer, network)
 }
 
-func (s *Storage) StoreGroupAccessCAP(group string, key crypto.SymmetricKey) error {
-	cap := GroupAccessCAP{group, key}
-	capBytes, err := json.Marshal(cap)
-	if err != nil {
-		return err
-	}
-	filePath := s.capsGAPath + "/" + group + ".json"
-	return WriteFile(filePath, capBytes)
-}
-
+// Stores the given group meta data in data/public/for/group/
 func (s *Storage) SaveGroupData(groupName, fileName string, boxer crypto.SymmetricKey, data []byte) error {
 	// group data goes always into the /public/for/group/ directory
 	filePath := s.publicForPath + "/" + groupName + "/" + fileName
 	encData := boxer.BoxSeal(data)
 	return WriteFile(filePath, encData)
+}
+
+// +------------------------------+
+// |     Capability functions     |
+// +------------------------------+
+
+func (s *Storage) StoreGroupAccessCAP(group string, key crypto.SymmetricKey) error {
+	cap := GroupAccessCAP{group, key}
+	filePath := s.capsGAPath + "/" + group + ".json"
+	return cap.Store(filePath)
+}
+
+func (s *Storage) DownloadReadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
+	capBytes, err := s.downloadCAP(s.capsPath, fromUser, username, capName, boxer, network, ipfs)
+	if err != nil {
+		return nil, err
+	}
+	var cap *ReadCAP
+	if err := json.Unmarshal(capBytes, cap); err != nil {
+		return nil, err
+	}
+	return cap, nil
+}
+
+func (s *Storage) DownloadGroupAccessCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) (*GroupAccessCAP, error) {
+	capBytes, err := s.downloadCAP(s.capsGAPath, fromUser, username, capName, boxer, network, ipfs)
+	if err != nil {
+		return nil, err
+	}
+	var cap GroupAccessCAP
+	if err := json.Unmarshal(capBytes, &cap); err != nil {
+		return nil, err
+	}
+	return &cap, nil
+}
+
+// Downloads the capability identified by capName from
+// /ipns/from/for/username/capName
+func (s *Storage) downloadCAP(basePath, fromUser, username, capName string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
+	// get address and key
+	ipfsAddr, err := network.GetUserIPFSAddr(fromUser)
+	if err != nil {
+		return nil, err
+	}
+	otherPK, err := network.GetUserBoxingKey(fromUser)
+	if err != nil {
+		return nil, err
+	}
+	ipnsPath := "/ipns/" + ipfsAddr + "/for/" + username + "/" + capName
+	// download cap file
+	tmpFilePath := s.tmpPath + "/" + capName
+	err = ipfs.Get(tmpFilePath, ipnsPath)
+	if err != nil {
+		return nil, err
+	}
+	capFilePath := basePath + "/" + capName
+	bytesEnc, err := ioutil.ReadFile(tmpFilePath)
+	if err != nil {
+		return nil, err
+	}
+	bytesDecr, success := boxer.BoxOpen(bytesEnc, &otherPK)
+	if !success {
+		fmt.Println("trying decrypt cap")
+		fmt.Println(fromUser)
+		fmt.Println(ipnsPath)
+		return nil, errors.New("could not decrypt capability")
+	}
+	os.Remove(tmpFilePath)
+	if err := WriteFile(capFilePath, bytesDecr); err != nil {
+		return nil, err
+	}
+	return bytesDecr, nil
 }
 
 // +------------------------------+
@@ -302,4 +451,11 @@ func WriteFile(filePath string, data []byte) error {
 	}
 	f.Sync()
 	return nil
+}
+
+func FileExists(filePath string) bool {
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return false
+	}
+	return true
 }

@@ -33,7 +33,7 @@ func TestGroupInvite(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Println(uc2)
-	time.Sleep(60 * time.Second)
+	time.Sleep(45 * time.Second)
 	if len(uc1.Groups) != len(uc2.Groups) {
 		t.Fatal("#groups does not match")
 	}
@@ -57,7 +57,7 @@ func TestGroupInvite(t *testing.T) {
 	if err := uc1.Groups[0].Invite(username1, username3, &uc1.User.Boxer, &uc1.User.Signer.SecretKey); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(60 * time.Second)
+	time.Sleep(45 * time.Second)
 	fmt.Println(uc1.Groups[0].Members)
 	fmt.Println(uc2.Groups[0].Members)
 	if len(uc1.Groups) != len(uc3.Groups) {
@@ -69,6 +69,44 @@ func TestGroupInvite(t *testing.T) {
 	for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
 		str1 := uc1.Groups[0].Members.List[i].Name
 		str2 := uc3.Groups[0].Members.List[i].Name
+		if strings.Compare(str1, str2) != 0 {
+			t.Fatal("group members do not match")
+		}
+	}
+}
+
+func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
+	network := nw.Network{"http://0.0.0.0:6000"}
+	if err != nil {
+		t.Fatal("could not connect to ipfs daemon")
+	}
+	username1 := "test_user"
+	username2 := "test_user2"
+	uc1, err := NewUserContextFromSignIn(username1, "pw", "./t1/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc2, err := NewUserContextFromSignIn(username2, "pw", "./t2/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(3 * time.Second)
+	fmt.Println(uc1)
+	fmt.Println(uc2)
+	if len(uc1.Groups) < 1 || len(uc2.Groups) < 1 {
+		t.Fatal("did not built any groups")
+	}
+	fmt.Println("----- members -----")
+	fmt.Println(uc1.Groups[0].Members)
+	fmt.Println(uc2.Groups[0].Members)
+	fmt.Println("----- active members -----")
+	fmt.Println(uc1.Groups[0].ActiveMembers)
+	fmt.Println(uc2.Groups[0].ActiveMembers)
+
+	for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
+		str1 := uc1.Groups[0].Members.List[i].Name
+		str2 := uc2.Groups[0].Members.List[i].Name
 		if strings.Compare(str1, str2) != 0 {
 			t.Fatal("group members do not match")
 		}

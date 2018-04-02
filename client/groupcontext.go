@@ -126,6 +126,17 @@ func (aml *ActiveMemberList) Set(member Member) {
 	aml.List = append(aml.List, newActiveMember)
 }
 
+func (aml *ActiveMemberList) ToStrList() []string {
+	var list []string
+	for _, member := range aml.List {
+		list = append(list, member.Name)
+	}
+	return list
+}
+
+// Every 2 seconds checks if an appropriate heartbeat has came
+// from members. If a member's heartbeat is too old he is
+// considered as inactive and is removed from the list
 func (aml *ActiveMemberList) Refresh() {
 	for {
 		currentTime := time.Now()
@@ -152,33 +163,10 @@ type GroupContext struct {
 	Storage       *fs.Storage
 }
 
-func (gc *GroupContext) Invite(username, newMember string, boxer *crypto.BoxingKeyPair, signer *crypto.SecretSigningKey) error {
-	if gc.Members.Length() == 1 {
-		cmd := InviteCMD{username, newMember}
-		return cmd.Execute(gc)
-	}
-
-	prevHash := gc.Members.Hash()
-	newMembers := gc.Members.Append(newMember, gc.Network)
-	newHash := newMembers.Hash()
-
-	proposalMsg := Proposal{username, "invite", []string{newMember}, prevHash, newHash}
-	go gc.collectApprovals(username, proposalMsg)
-
-	proposalMsgBytes, err := json.Marshal(proposalMsg)
-	if err != nil {
-		return err
-	}
-	signedProposalMsg := signer.Sign(nil, proposalMsgBytes)
-	groupMsg := GroupMessage{"proposal", signedProposalMsg}
-	groupMsgBytes, err := json.Marshal(groupMsg)
-	if err != nil {
-		return err
-	}
-	gc.sendToAll(groupMsgBytes)
-	return nil
-}
-
+// By operations (e.g. Invite()) a given number of valid approvals
+// is needed to be able to commit the current operation. This func
+// collects these approvals and upon receiving enough approvals it
+// commits the operation
 func (gc *GroupContext) collectApprovals(username string, proposal Proposal) {
 	channelName := gc.Group.GroupName + username
 	channel := make(chan ipfs.PubsubMessage)
@@ -228,6 +216,33 @@ func (gc *GroupContext) collectApprovals(username string, proposal Proposal) {
 	}
 }
 
+func (gc *GroupContext) Invite(username, newMember string, boxer *crypto.BoxingKeyPair, signer *crypto.SecretSigningKey) error {
+	if gc.Members.Length() == 1 {
+		cmd := InviteCMD{username, newMember}
+		return cmd.Execute(gc)
+	}
+
+	prevHash := gc.Members.Hash()
+	newMembers := gc.Members.Append(newMember, gc.Network)
+	newHash := newMembers.Hash()
+
+	proposalMsg := Proposal{username, "invite", []string{newMember}, prevHash, newHash}
+	go gc.collectApprovals(username, proposalMsg)
+
+	proposalMsgBytes, err := json.Marshal(proposalMsg)
+	if err != nil {
+		return err
+	}
+	signedProposalMsg := signer.Sign(nil, proposalMsgBytes)
+	groupMsg := GroupMessage{"proposal", signedProposalMsg}
+	groupMsgBytes, err := json.Marshal(groupMsg)
+	if err != nil {
+		return err
+	}
+	gc.sendToAll(groupMsgBytes)
+	return nil
+}
+
 func (gc *GroupContext) Save() error {
 	if err := gc.Group.Save(gc.Storage); err != nil {
 		return err
@@ -235,23 +250,44 @@ func (gc *GroupContext) Save() error {
 	if err := gc.Members.Save(gc.Group.GroupName, gc.Group.Boxer, gc.Storage, gc.IPFS); err != nil {
 		return err
 	}
-	// ... //
+	// should take out publish public dir from here, because it
+	// publishes too often by signing in
 	return gc.Storage.PublishPublicDir(gc.IPFS)
+	//return nil
 }
 
+// Sends pubsub messages to all members of the group
 func (gc *GroupContext) sendToAll(data []byte) error {
 	encGroupMsg := gc.Group.Boxer.BoxSeal(data)
 	return gc.IPFS.PubsubPublish(gc.Group.GroupName, encGroupMsg)
 }
 
-func (gc *GroupContext) PullGroupData(from string) error {
-	// TODO some hash agreement
+// Pulls from others the given group meta data
+func (gc *GroupContext) PullGroupData(data string) error {
 	groupName := gc.Group.GroupName
-	filePath, err := gc.Storage.DownloadGroupData(groupName, "members.json", from, gc.IPFS, gc.Network)
+	ipfsHash, err := gc.Storage.GroupDataChanged(gc.Group.GroupName, data, gc.ActiveMembers.ToStrList(), gc.IPFS, gc.Network)
 	if err != nil {
 		return err
 	}
-	pml, err := NewMemberListFromFile(filePath, gc.Group.Boxer, gc.Network)
+	if strings.Compare(ipfsHash, "") != 0 {
+		if err := gc.Storage.DownloadGroupData(groupName, data, ipfsHash, gc.IPFS, gc.Network); err != nil {
+			return err
+		}
+	}
+	if err := gc.LoadGroupData(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Loads the locally available group meta data (stored in the
+// data/public/for/GROUP/ directory).
+func (gc *GroupContext) LoadGroupData(data string) error {
+	memberFilePath := gc.Storage.GetGroupDataPath(gc.Group.GroupName, data)
+	if !fs.FileExists(memberFilePath) {
+		return nil
+	}
+	pml, err := NewMemberListFromFile(memberFilePath, gc.Group.Boxer, gc.Network)
 	if err != nil {
 		return err
 	}

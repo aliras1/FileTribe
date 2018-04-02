@@ -19,8 +19,7 @@ func (i *InviteCMD) Execute(ctx *GroupContext) error {
 		return err
 	}
 	ctx.Members = ctx.Members.Append(i.NewMember, ctx.Network)
-	err = ctx.Save()
-	if err != nil {
+	if err = ctx.Save(); err != nil {
 		return err
 	}
 	if strings.Compare(i.From, ctx.User.Username) == 0 {

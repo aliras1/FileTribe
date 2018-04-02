@@ -87,7 +87,7 @@ func TestHeartBeat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = SignUp(username3, "pw3", ipfsID.ID, &network)
+	user3, err := SignUp(username3, "pw3", ipfsID.ID, &network)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,5 +122,17 @@ func TestHeartBeat(t *testing.T) {
 	}
 	if _, in := synch2.groupCtx.ActiveMembers.Get(username3); in {
 		t.Fatal(username3 + " in synch2")
+	}
+	gc3 := GroupContext{user3, group, nil, memberList, &ActiveMemberList{}, &network, ipfs, nil}
+	synch3 := NewSynchronizer(user1.Username, &user1.Signer, &gc3)
+	time.Sleep(2 * time.Second)
+	if _, in := synch3.groupCtx.ActiveMembers.Get(username1); !in {
+		t.Fatal(username1 + " not in synch3")
+	}
+	if _, in := synch3.groupCtx.ActiveMembers.Get(username2); !in {
+		t.Fatal(username2 + " not in synch3")
+	}
+	if _, in := synch3.groupCtx.ActiveMembers.Get(username3); in {
+		t.Fatal(username3 + " not in synch3")
 	}
 }
