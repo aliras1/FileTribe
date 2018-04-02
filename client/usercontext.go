@@ -113,9 +113,7 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 			fmt.Println("content of root directory: ")
 			ctx.List()
 		case "GROUP INVITE":
-			// TODO create group access cap for inviter
 			fmt.Println("group invite....")
-			fmt.Println("getting g cap from: " + msg.From)
 			cap, err := ctx.Storage.DownloadGroupAccessCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
 			if err != nil {
 				log.Println(err)
@@ -138,7 +136,10 @@ func (uc *UserContext) CreateGroup(groupName string) error {
 		return err
 	}
 	uc.Storage.CreateGroupStorage(groupName)
-	groupCtx := GroupContext{uc.User, group, nil, []string{uc.User.Username}, uc.Network, uc.IPFS, uc.Storage}
+	groupCtx := GroupContext{uc.User, group, nil,
+		&MemberList{[]Member{{uc.User.Username, nil}}},
+		&ActiveMemberList{}, uc.Network, uc.IPFS, uc.Storage}
+
 	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
 	uc.Groups = append(uc.Groups, &groupCtx)
 	return groupCtx.Save()
@@ -147,7 +148,10 @@ func (uc *UserContext) CreateGroup(groupName string) error {
 func (uc *UserContext) NewGroupFromCAP(from string, cap *fs.GroupAccessCAP) error {
 	group := &Group{cap.GroupName, cap.Boxer}
 	uc.Storage.CreateGroupStorage(group.GroupName)
-	groupCtx := GroupContext{uc.User, group, nil, []string{uc.User.Username}, uc.Network, uc.IPFS, uc.Storage}
+	groupCtx := GroupContext{uc.User, group, nil,
+		&MemberList{[]Member{{uc.User.Username, nil}}},
+		&ActiveMemberList{}, uc.Network, uc.IPFS, uc.Storage}
+
 	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
 	uc.Groups = append(uc.Groups, &groupCtx)
 	fmt.Println("pulling g data")

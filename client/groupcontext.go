@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 	"time"
 
 	fs "ipfs-share/client/filestorage"
@@ -15,7 +16,47 @@ import (
 	nw "ipfs-share/network"
 )
 
-type MemberList []string
+type Member struct {
+	Name      string                  `json:"name"`
+	VerifyKey crypto.PublicSigningKey `json:"-"`
+}
+
+type MemberList struct {
+	List []Member
+}
+
+func (ml *MemberList) Length() int {
+	return len(ml.List)
+}
+
+func (ml *MemberList) Hash() [32]byte {
+	var data []byte
+	for _, member := range ml.List {
+		data = append(data, []byte(member.Name)...)
+	}
+	return sha256.Sum256(data)
+}
+
+func (ml *MemberList) Append(user string, network *nw.Network) *MemberList {
+	verifyKey, err := network.GetUserSigningKey(user)
+	if err != nil {
+		log.Println(err)
+		return ml
+	}
+	newList := make([]Member, len(ml.List))
+	copy(newList, ml.List)
+	newList = append(newList, Member{user, verifyKey})
+	return &MemberList{newList}
+}
+
+func (ml *MemberList) Get(user string) (Member, bool) {
+	for i := 0; i < ml.Length(); i++ {
+		if strings.Compare(ml.List[i].Name, user) == 0 {
+			return ml.List[i], true
+		}
+	}
+	return Member{}, false
+}
 
 func (ml *MemberList) Save(groupName string, boxer crypto.SymmetricKey, storage *fs.Storage, ipfs *ipfs.IPFS) error {
 	// store only in public, as on sign in groups are
@@ -27,7 +68,7 @@ func (ml *MemberList) Save(groupName string, boxer crypto.SymmetricKey, storage 
 	return storage.SaveGroupData(groupName, "members.json", boxer, memberBytes)
 }
 
-func NewMemberListFromFile(filePath string, key crypto.SymmetricKey) (*MemberList, error) {
+func NewMemberListFromFile(filePath string, key crypto.SymmetricKey, network *nw.Network) (*MemberList, error) {
 	box, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -41,28 +82,85 @@ func NewMemberListFromFile(filePath string, key crypto.SymmetricKey) (*MemberLis
 	if err != nil {
 		return nil, err
 	}
+	for i := 0; i < memberList.Length(); i++ {
+		user := memberList.List[i].Name
+		verifyKey, err := network.GetUserSigningKey(user)
+		if err != nil {
+			return nil, err
+		}
+		memberList.List[i].VerifyKey = verifyKey
+	}
 	return &memberList, nil
 }
 
+type ActiveMember struct {
+	Member
+	Time time.Time
+}
+
+type ActiveMemberList struct {
+	List []ActiveMember
+}
+
+func (aml *ActiveMemberList) Length() int {
+	return len(aml.List)
+}
+
+func (aml *ActiveMemberList) Get(user string) (ActiveMember, bool) {
+	for i := 0; i < aml.Length(); i++ {
+		if strings.Compare(aml.List[i].Name, user) == 0 {
+			return aml.List[i], true
+		}
+	}
+	return ActiveMember{}, false
+}
+
+func (aml *ActiveMemberList) Set(member Member) {
+	for i := 0; i < aml.Length(); i++ {
+		if strings.Compare(aml.List[i].Name, member.Name) == 0 {
+			aml.List[i].Time = time.Now()
+			return
+		}
+	}
+	newActiveMember := ActiveMember{member, time.Now()}
+	aml.List = append(aml.List, newActiveMember)
+}
+
+func (aml *ActiveMemberList) Refresh() {
+	for {
+		currentTime := time.Now()
+		var newList []ActiveMember
+		for i := 0; i < aml.Length(); i++ {
+			if currentTime.Sub(aml.List[i].Time) < 2*time.Second {
+				newList = append(newList, aml.List[i])
+			}
+		}
+		aml.List = newList
+		fmt.Println(aml.List)
+		time.Sleep(2 * time.Second)
+	}
+}
+
 type GroupContext struct {
-	User    *User
-	Group   *Group
-	Repo    []*fs.File
-	Members MemberList
-	Network *nw.Network
-	IPFS    *ipfs.IPFS
-	Storage *fs.Storage
+	User          *User
+	Group         *Group
+	Repo          []*fs.File
+	Members       *MemberList
+	ActiveMembers *ActiveMemberList
+	Network       *nw.Network
+	IPFS          *ipfs.IPFS
+	Storage       *fs.Storage
 }
 
 func (gc *GroupContext) Invite(username, newMember string, boxer *crypto.BoxingKeyPair, signer *crypto.SecretSigningKey) error {
-	if len(gc.Members) == 1 {
+	if gc.Members.Length() == 1 {
 		cmd := InviteCMD{username, newMember}
 		return cmd.Execute(gc)
 	}
 
-	prevHash := hashOfMembers(gc.Members)
-	newMembers := append(gc.Members, newMember)
-	newHash := hashOfMembers(newMembers)
+	prevHash := gc.Members.Hash()
+	newMembers := gc.Members.Append(newMember, gc.Network)
+	newHash := newMembers.Hash()
 
 	proposalMsg := Proposal{username, "invite", []string{newMember}, prevHash, newHash}
 	go gc.collectApprovals(username, proposalMsg)
@@ -102,7 +200,7 @@ func (gc *GroupContext) collectApprovals(username string, proposal Proposal) {
 				continue
 			}
 			commitMsg.SignedBy = append(commitMsg.SignedBy, signedBy)
-			if len(commitMsg.SignedBy) >= len(gc.Members)/2 {
+			if len(commitMsg.SignedBy) >= gc.Members.Length()/2 {
 				commitMsgBytes, err := json.Marshal(commitMsg)
 				if err != nil {
 					log.Println(err)
@@ -153,18 +251,10 @@ func (gc *GroupContext) PullGroupData(from string) error {
 	if err != nil {
 		return err
 	}
-	pml, err := NewMemberListFromFile(filePath, gc.Group.Boxer)
+	pml, err := NewMemberListFromFile(filePath, gc.Group.Boxer, gc.Network)
 	if err != nil {
 		return err
 	}
-	gc.Members = *pml
+	gc.Members = pml
 	return nil
-}
-
-func hashOfMembers(members []string) [32]byte {
-	var data []byte
-	for _, member := range members {
-		data = append(data, []byte(member)...)
-	}
-	return sha256.Sum256(data)
 }

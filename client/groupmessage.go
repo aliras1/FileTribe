@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
@@ -12,6 +13,11 @@ import (
 type GroupMessage struct {
 	Type string `json:"type"`
 	Data []byte `json:"data"`
+}
+
+type HeartBeat struct {
+	From string `json:"from"`
+	Rand []byte `json:"rand"`
 }
 
 type Proposal struct {

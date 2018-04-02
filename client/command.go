@@ -18,7 +18,7 @@ func (i *InviteCMD) Execute(ctx *GroupContext) error {
 	if err != nil {
 		return err
 	}
-	ctx.Members = append(ctx.Members, i.NewMember)
+	ctx.Members = ctx.Members.Append(i.NewMember, ctx.Network)
 	err = ctx.Save()
 	if err != nil {
 		return err

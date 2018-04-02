@@ -2,12 +2,12 @@ package client
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	ipfsapi "ipfs-share/ipfs"
 	nw "ipfs-share/network"
-	"strings"
 )
 
 func TestGroupInvite(t *testing.T) {
@@ -37,12 +37,12 @@ func TestGroupInvite(t *testing.T) {
 	if len(uc1.Groups) != len(uc2.Groups) {
 		t.Fatal("#groups does not match")
 	}
-	if len(uc1.Groups[0].Members) != len(uc2.Groups[0].Members) {
+	if uc1.Groups[0].Members.Length() != uc2.Groups[0].Members.Length() {
 		t.Fatal("#(group members) does not match")
 	}
-	for i := 0; i < len(uc1.Groups[0].Members); i++ {
-		str1 := uc1.Groups[0].Members[i]
-		str2 := uc2.Groups[0].Members[i]
+	for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
+		str1 := uc1.Groups[0].Members.List[i].Name
+		str2 := uc2.Groups[0].Members.List[i].Name
 		if strings.Compare(str1, str2) != 0 {
 			t.Fatal("group members do not match")
 		}
@@ -63,12 +63,12 @@ func TestGroupInvite(t *testing.T) {
 	if len(uc1.Groups) != len(uc3.Groups) {
 		t.Fatal("#groups does not match")
 	}
-	if len(uc1.Groups[0].Members) != len(uc3.Groups[0].Members) {
+	if uc1.Groups[0].Members.Length() != uc3.Groups[0].Members.Length() {
 		t.Fatal("#(group members) does not match")
 	}
-	for i := 0; i < len(uc1.Groups[0].Members); i++ {
-		str1 := uc1.Groups[0].Members[i]
-		str2 := uc3.Groups[0].Members[i]
+	for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
+		str1 := uc1.Groups[0].Members.List[i].Name
+		str2 := uc3.Groups[0].Members.List[i].Name
 		if strings.Compare(str1, str2) != 0 {
 			t.Fatal("group members do not match")
 		}

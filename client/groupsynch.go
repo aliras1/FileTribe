@@ -2,11 +2,13 @@ package client
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
@@ -30,6 +32,7 @@ func NewSynchronizer(username string, userSigner *crypto.SigningKeyPair, groupCt
 
 	go synch.groupCtx.IPFS.PubsubSubscribe(synch.groupCtx.Group.GroupName, synch.channelPubSub)
 	go synch.MessageProcessor()
+	go synch.heartBeat()
 
 	return &synch
 }
@@ -48,6 +51,11 @@ func (s *Synchronizer) MessageProcessor() {
 			continue
 		}
 		switch groupMsg.Type {
+		case "HB":
+			if err := s.processHeartBeat(groupMsg); err != nil {
+				log.Println(err)
+				continue
+			}
 		case "proposal":
 			if err := s.processProposal(groupMsg); err != nil {
 				log.Println(err)
@@ -62,8 +70,26 @@ func (s *Synchronizer) MessageProcessor() {
 	}
 }
 
-func (s *Synchronizer) processProposal(groupMsg GroupMessage) error {
-	proposal, err := s.verifyProposal(groupMsg.Data)
+func (s *Synchronizer) processHeartBeat(message GroupMessage) error {
+	var heartBeat HeartBeat
+	err := json.Unmarshal(message.Data, &heartBeat)
+	if err != nil {
+		return err
+	}
+	member, in := s.groupCtx.Members.Get(heartBeat.From)
+	if !in {
+		return errors.New("heart beat from a non member user")
+	}
+	_, ok := member.VerifyKey.Open(nil, heartBeat.Rand)
+	if !ok {
+		return errors.New("invalid heart beat message")
+	}
+	s.groupCtx.ActiveMembers.Set(member)
+	return nil
+}
+
+func (s *Synchronizer) processProposal(message GroupMessage) error {
+	proposal, err := s.verifyProposal(message.Data)
 	if err != nil {
 		return err
 	}
@@ -75,14 +101,14 @@ func (s *Synchronizer) processProposal(groupMsg GroupMessage) error {
 	return s.approveProposal(s.username, proposal)
 }
 
-func (s *Synchronizer) processCommitMsg(groupMsg GroupMessage) error {
+func (s *Synchronizer) processCommitMsg(message GroupMessage) error {
 	var commitMsg CommitMsg
-	err := json.Unmarshal(groupMsg.Data, &commitMsg)
+	err := json.Unmarshal(message.Data, &commitMsg)
 	if err != nil {
 		return err
 	}
 	fmt.Println("commit msg from : " + commitMsg.Proposal.From)
-	if len(commitMsg.SignedBy) < len(s.groupCtx.Members)/2 {
+	if len(commitMsg.SignedBy) < s.groupCtx.Members.Length()/2 {
 		return errors.New("not enough approvals")
 	}
 	proposalBytes, err := json.Marshal(commitMsg.Proposal)
@@ -112,13 +138,35 @@ func (s *Synchronizer) processCommitMsg(groupMsg GroupMessage) error {
 		}
 		numValidApprovals += 1
 	}
-	if numValidApprovals < len(s.groupCtx.Members)/2 {
+	if numValidApprovals < s.groupCtx.Members.Length()/2 {
 		return errors.New("not enough valid approvals")
 	}
 	fmt.Println(numValidApprovals)
 	cmd := CMDFromProposal(commitMsg.Proposal)
 	cmd.Execute(s.groupCtx)
 	return nil
+}
+
+func (s *Synchronizer) heartBeat() {
+	for {
+		var randomBytes [32]byte
+		rand.Read(randomBytes[:])
+		signedRand := s.userSigner.SecretKey.Sign(nil, randomBytes[:])
+		heartBeat := HeartBeat{s.username, signedRand}
+		hbBytes, err := json.Marshal(heartBeat)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		msg := GroupMessage{"HB", hbBytes}
+		msgBytes, err := json.Marshal(msg)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		s.groupCtx.sendToAll(msgBytes)
+		time.Sleep(1 * time.Second)
+	}
 }
 
 func (s *Synchronizer) approveProposal(username string, proposal *Proposal) error {
@@ -164,13 +212,13 @@ func (s *Synchronizer) validateProposal(proposal *Proposal) error {
 			return errors.New("invalid #Args in invite proposal")
 		}
 		newMember := proposal.Args[0]
-		prevHash := hashOfMembers(s.groupCtx.Members)
+		prevHash := s.groupCtx.Members.Hash()
 		otherPrevHash := proposal.PrevHash
 		if !bytes.Equal(prevHash[:], otherPrevHash[:]) {
 			return errors.New("prev hashes do not match")
 		}
-		newMembers := append(s.groupCtx.Members, newMember)
-		newHash := hashOfMembers(newMembers)
+		newMembers := s.groupCtx.Members.Append(newMember, s.groupCtx.Network)
+		newHash := newMembers.Hash()
 		otherNewHash := proposal.NewHash
 		if !bytes.Equal(newHash[:], otherNewHash[:]) {
 			return errors.New("new hashes do not match")
