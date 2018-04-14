@@ -59,7 +59,7 @@ func (psm *PubsubMessage) Decrypt(key crypto.SymmetricKey) ([]byte, bool) {
 }
 
 type IPFSNameResolvedHash struct {
-	Path string `json:"Path"`
+	Path string `json:"Name"`
 }
 
 type ListObjects struct {

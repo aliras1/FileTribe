@@ -143,8 +143,7 @@ func (s *Synchronizer) processCommitMsg(message GroupMessage) error {
 	}
 	fmt.Println(numValidApprovals)
 	cmd := CMDFromProposal(commitMsg.Proposal)
-	cmd.Execute(s.groupCtx)
-	return nil
+	return cmd.Execute(s.groupCtx)
 }
 
 func (s *Synchronizer) heartBeat() {
