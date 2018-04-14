@@ -2,7 +2,6 @@ package client
 
 import (
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -18,7 +17,7 @@ import (
 type UserContext struct {
 	User    *User // TODO lock boxer
 	Groups  []*GroupContext
-	Repo    []*fs.File
+	Repo    []*fs.FilePTP
 	Network *nw.Network
 	IPFS    *ipfs.IPFS
 	Storage *fs.Storage // TODO lock
@@ -55,7 +54,7 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	uc.IPFS = ipfs
 	uc.Storage = fs.NewStorage(dataPath)
 	uc.Groups = []*GroupContext{}
-	uc.Repo, err = uc.Storage.BuildRepo(ipfs)
+	uc.Repo, err = uc.Storage.BuildRepo(user.Username, &user.Boxer, network, ipfs)
 	if err != nil {
 		log.Println(err)
 	}
@@ -102,11 +101,13 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 		fmt.Println(msg)
 		switch msg.Type {
 		case "PTP READ CAP":
-			cap, err := ctx.Storage.DownloadReadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
+			cap, err := fs.DownloadReadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
+			cap.Store(ctx.Storage)
+			fmt.Println(cap)
 			file, err := fs.NewFileFromCAP(cap, ctx.Storage, ctx.IPFS)
 			if err != nil {
 				log.Println(err)
@@ -120,12 +121,19 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 			fmt.Println("group invite....")
 			cap, err := ctx.Storage.DownloadGroupAccessCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
 			if err != nil {
+				log.Println("====== E ======")
+				log.Println(err)
+				continue
+			}
+			if err := cap.Store(ctx.Storage); err != nil {
+				log.Println("====== E2 ======")
 				log.Println(err)
 				continue
 			}
 			cap.Boxer.RNG = rand.Reader
 			err = ctx.CreateGroupFromCAP(cap, msg.From)
 			if err != nil {
+				log.Println("====== A ======")
 				log.Println(err)
 				continue
 			}
@@ -168,10 +176,10 @@ func (uc *UserContext) CreateGroupFromCAP(cap *fs.GroupAccessCAP, from string) e
 	uc.Storage.CreateGroupStorage(group.GroupName)
 
 	memberList := &MemberList{[]Member{}}
-	memberList = memberList.Append(uc.User.Username, uc.Network)
 	if strings.Compare(from, "") != 0 {
 		memberList = memberList.Append(from, uc.Network)
 	}
+	memberList = memberList.Append(uc.User.Username, uc.Network)
 	groupCtx := GroupContext{uc.User, group, nil, memberList,
 		&ActiveMemberList{}, uc.Network, uc.IPFS, uc.Storage}
 
@@ -191,9 +199,6 @@ func (uc *UserContext) CreateGroupFromCAP(cap *fs.GroupAccessCAP, from string) e
 }
 
 func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {
-	if uc.isFileInRepo(filePath) {
-		return errors.New("file already in root dir")
-	}
 	file, err := fs.NewSharedFile(filePath, uc.User.Username, uc.Storage, uc.IPFS)
 	if err != nil {
 		return err
@@ -208,20 +213,20 @@ func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) erro
 
 func (uc *UserContext) isFileInRepo(filePath string) bool {
 	for _, i := range uc.Repo {
-		if strings.Compare(path.Base(i.Path), path.Base(filePath)) == 0 {
+		if strings.Compare(path.Base(i.Name), path.Base(filePath)) == 0 {
 			return true
 		}
 	}
 	return false
 }
 
-func (uc *UserContext) addFileToRepo(file *fs.File) {
+func (uc *UserContext) addFileToRepo(file *fs.FilePTP) {
 	uc.Repo = append(uc.Repo, file)
 }
 
-func (uc *UserContext) getFileFromRepo(name string) *fs.File {
+func (uc *UserContext) getFileFromRepo(name string) *fs.FilePTP {
 	for _, file := range uc.Repo {
-		if strings.Compare(path.Base(file.Path), name) == 0 {
+		if strings.Compare(path.Base(file.Name), name) == 0 {
 			return file
 		}
 	}

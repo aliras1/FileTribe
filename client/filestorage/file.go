@@ -13,36 +13,40 @@ import (
 	nw "ipfs-share/network"
 )
 
-type File struct {
+type File interface {
+	Share()
+	//NewFileFromCAP(cap CAP, )
+}
+
+type FilePTP struct {
 	// TODO  don't publish file on IPNS, refresh every time
 	// TODO  the capability instead
-	Path       string                  `json:"path"`
-	IPNSPath   string                  `json:"ipnsPath"`
-	IPFSAddr   string                  `json:"ipfs_addr"`
+	Name       string                  `json:"name"`
 	Owner      string                  `json:"owner"`
+	Path       string                  `json:"path"`
 	SharedWith []string                `json:"shared_with"`
 	WAccess    []string                `json:"w_access"`
 	VerifyKey  crypto.PublicSigningKey `json:"verify_key"`
 	WriteKey   crypto.SecretSigningKey `json:"write_key"`
 }
 
-// New File object from local data, found in /userdata/shared
-func NewFileFromShared(filePath string) (*File, error) {
+// New FilePTP object from local data, found in /userdata/shared
+func NewFileFromShared(filePath string) (*FilePTP, error) {
 	bytesFile, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
-	var file File
+	var file FilePTP
 	err = json.Unmarshal(bytesFile, &file)
 	return &file, err
 }
 
-// New File object from local data, found in /userdata/caps
-func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*File, error) {
-	filePath := storage.storagePath + "/" + cap.FileName
-	file := File{path.Clean(filePath), cap.IPNSPath, cap.IPFSHash, cap.Owner, []string{}, []string{}, cap.VerifyKey, crypto.SecretSigningKey{}}
-	if !storage.ExistsFile(storage.storagePath + "/" + cap.FileName) {
-		err := storage.DownloadFileFromCap(&file, cap, ipfs)
+// New FilePTP object from local data, found in /userdata/caps
+func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
+	filePath := storage.fileRootPath + "/" + cap.Owner + "/" + cap.FileName
+	file := FilePTP{cap.FileName, cap.Owner, filePath, []string{}, []string{}, cap.VerifyKey, crypto.SecretSigningKey{}}
+	if !storage.ExistsFile(storage.fileRootPath + "/" + cap.FileName) {
+		err := storage.DownloadFileFromCap(cap, ipfs)
 		if err != nil {
 			return nil, err
 		}
@@ -51,7 +55,12 @@ func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*File, err
 }
 
 // Create a new shared file object from a local file
-func NewSharedFile(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*File, error) {
+func NewSharedFile(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
+	newFilePath, err := storage.CopyFileIntoMyFiles(filePath)
+	if err != nil {
+		return nil, err
+	}
+
 	vk, wk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
@@ -59,37 +68,36 @@ func NewSharedFile(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*
 	verifyKey := crypto.PublicSigningKey(vk)
 	writeKey := crypto.SecretSigningKey(wk)
 
-	ipnsPath, ipfsAddr, err := storage.SignAndAddFileToIPFS(filePath, writeKey, ipfs)
-	if err != nil {
-		return nil, err
-	}
-	return &File{filePath, ipnsPath, ipfsAddr, owner, []string{}, []string{}, verifyKey, writeKey}, nil
+	return &FilePTP{path.Base(filePath), owner, newFilePath, []string{}, []string{}, verifyKey, writeKey}, nil
 }
 
 // Share file with a set of users, described by shareWith. Encrypted
 // capabilities are made and copied in the corresponding 'public/for/'
 // directories. The 'public' directory is re-published into IPNS. After
 // that, notification messages are sent out.
-func (f *File) Share(shareWith []string, boxer *crypto.BoxingKeyPair, us *Storage, network *nw.Network, ipfs *ipfs.IPFS) error {
+func (f *FilePTP) Share(shareWith []string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) error {
 	var newUsers []string
 	for _, user := range shareWith {
 		// add to share list
 		f.SharedWith = append(f.SharedWith, user)
-		// make new capability into for_X directory
-		err := us.CreateFileReadCAPForUser(f, us.publicForPath+"/"+user, f.IPFSAddr, boxer, network)
-		newUsers = append(newUsers, user)
+		ipfsAddr, err := storage.SignAndAddFileToIPFS(f.Path, f.WriteKey, ipfs)
 		if err != nil {
 			return err
 		}
+		// make new capability into for_X directory
+		if err := storage.CreateFileReadCAPForUser(f, user, ipfsAddr, boxer, network); err != nil {
+			return err
+		}
+		newUsers = append(newUsers, user)
 	}
-	us.StoreFileMetaData(f)
-	err := us.PublishPublicDir(ipfs)
+	storage.StoreFileMetaData(f)
+	err := storage.PublishPublicDir(ipfs)
 	if err != nil {
 		return err
 	}
 	// send share messages
 	for _, user := range newUsers {
-		err = network.SendMessage(f.Owner, user, "GROUP INVITE", path.Base(f.Path)+".json")
+		err = network.SendMessage(f.Owner, user, "PTP READ CAP", path.Base(f.Name)+".json")
 		if err != nil {
 			return err
 		}

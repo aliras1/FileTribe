@@ -155,7 +155,7 @@ func (aml *ActiveMemberList) Refresh() {
 type GroupContext struct {
 	User          *User
 	Group         *Group
-	Repo          []*fs.File
+	Repo          []*fs.FilePTP
 	Members       *MemberList
 	ActiveMembers *ActiveMemberList
 	Network       *nw.Network

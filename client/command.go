@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -14,15 +15,20 @@ type InviteCMD struct {
 }
 
 func (i *InviteCMD) Execute(ctx *GroupContext) error {
+	fmt.Println(ctx.User.Username + " executing invite cmd...")
 	err := ctx.Storage.CreateGroupAccessCAPForUser(i.NewMember, ctx.Group.GroupName, ctx.Group.Boxer, &ctx.User.Boxer, ctx.Network)
 	if err != nil {
 		return err
 	}
+	fmt.Println(ctx.User.Username + " 1...")
 	ctx.Members = ctx.Members.Append(i.NewMember, ctx.Network)
 	if err = ctx.Save(); err != nil {
 		return err
 	}
+	fmt.Println(ctx.User.Username + " 2...")
+	fmt.Println(ctx.User.Username + " - " + i.From)
 	if strings.Compare(i.From, ctx.User.Username) == 0 {
+		fmt.Println(ctx.User.Username + " sending invite msg...")
 		return ctx.Network.SendMessage(i.From, i.NewMember, "GROUP INVITE", ctx.Group.GroupName+".json")
 	}
 	return nil
