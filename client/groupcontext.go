@@ -266,7 +266,10 @@ func (gc *GroupContext) sendToAll(data []byte) error {
 func (gc *GroupContext) PullGroupData(data string) error {
 	groupName := gc.Group.GroupName
 	ipfsHash, err := gc.Storage.GroupDataChanged(gc.Group.GroupName, data, gc.ActiveMembers.ToStrList(), gc.IPFS, gc.Network)
+	fmt.Println("== PULL members.json")
+	fmt.Println("ipfs hash: " + ipfsHash)
 	if err != nil {
+		fmt.Println("error: " + err.Error())
 		return err
 	}
 	if strings.Compare(ipfsHash, "") != 0 {

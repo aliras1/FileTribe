@@ -281,6 +281,8 @@ func (storage *Storage) GroupDataChanged(groupname, data string, activeMembers [
 	if err != nil {
 		return "", err
 	}
+	fmt.Print("active members: ")
+	fmt.Println(activeMembers)
 	// only active member is current user
 	if len(activeMembers) == 1 {
 		fmt.Println("only active member")

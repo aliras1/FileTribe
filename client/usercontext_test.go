@@ -57,9 +57,10 @@ func TestGroupInvite(t *testing.T) {
 	if err := uc1.Groups[0].Invite(username1, username3, &uc1.User.Boxer, &uc1.User.Signer.SecretKey); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(45 * time.Second)
+	time.Sleep(120 * time.Second)
 	fmt.Println(uc1.Groups[0].Members)
 	fmt.Println(uc2.Groups[0].Members)
+	fmt.Println(uc3.Groups[0].Members)
 	if len(uc1.Groups) != len(uc3.Groups) {
 		t.Fatal("#groups does not match")
 	}

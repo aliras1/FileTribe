@@ -107,6 +107,8 @@ func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 	if err != nil {
 		return nil, err
 	}
+	fmt.Print("group cap bytes: ")
+	fmt.Println(bytesEnc)
 	bytesDecr, success := boxer.BoxOpen(bytesEnc, &otherPK)
 	if !success {
 		fmt.Println("trying decrypt cap")

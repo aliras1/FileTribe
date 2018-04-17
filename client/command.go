@@ -22,7 +22,10 @@ func (i *InviteCMD) Execute(ctx *GroupContext) error {
 	}
 	fmt.Println(ctx.User.Username + " 1...")
 	ctx.Members = ctx.Members.Append(i.NewMember, ctx.Network)
+	fmt.Println(ctx.User.Username + " 1.5...")
 	if err = ctx.Save(); err != nil {
+		fmt.Println("==> ctx Save")
+		fmt.Println(err)
 		return err
 	}
 	fmt.Println(ctx.User.Username + " 2...")

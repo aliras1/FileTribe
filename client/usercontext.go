@@ -183,6 +183,8 @@ func (uc *UserContext) CreateGroupFromCAP(cap *fs.GroupAccessCAP, from string) e
 	groupCtx := GroupContext{uc.User, group, nil, memberList,
 		&ActiveMemberList{}, uc.Network, uc.IPFS, uc.Storage}
 
+	fmt.Print(uc.User.Username + " memberlist: ")
+	fmt.Println(groupCtx.Members.List)
 	// load local members to have an idea, who are the good guys.
 	// note, that by an invite request 'from' is not a null string
 	// therefore we have a valid member we can contact
