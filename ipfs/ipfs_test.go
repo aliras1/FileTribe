@@ -2,6 +2,7 @@ package ipfs
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -66,15 +67,29 @@ func TestIPFS_List(t *testing.T) {
 }
 
 func TestIPFS_NamePublish(t *testing.T) {
+	if err := os.MkdirAll("./test/public/files", 0770); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create("./test/public/files/test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	f.Sync()
+
 	ipfs, err := NewIPFS("http://127.0.0.1", 5001)
 	if err != nil {
 		t.Fatal(err)
 	}
-	merkleNodes, err := ipfs.AddDir("../client/filestorage/data/public")
+	merkleNodes, err := ipfs.AddDir("./test/public")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, mn := range merkleNodes {
+		fmt.Println(mn)
 		if strings.Compare(mn.Name, "public") == 0 {
 			err = ipfs.NamePublish(mn.Hash)
 			if err != nil {
@@ -87,7 +102,7 @@ func TestIPFS_NamePublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	listObjects, err := ipfs.List("/ipns/" + ipfsID.ID + "/for")
+	listObjects, err := ipfs.List("/ipns/" + ipfsID.ID + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,4 +137,51 @@ func TestIPFS_ID(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Println(ipfs.ID())
+}
+
+func TestIPFS_Resolve(t *testing.T) {
+	if err := os.MkdirAll("./test/public/files", 0770); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create("./test/public/files/test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	f.Sync()
+
+	ipfs, err := NewIPFS("http://127.0.0.1", 5001)
+	if err != nil {
+		t.Fatal(err)
+	}
+	merkleNodes, err := ipfs.AddDir("./test/public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mn := range merkleNodes {
+		fmt.Println(mn)
+		if strings.Compare(mn.Name, "public") == 0 {
+			err = ipfs.NamePublish(mn.Hash)
+			if err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	ipfsID, err := ipfs.ID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	listObjects, err := ipfs.List("/ipns/" + ipfsID.ID + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lo := range listObjects.Objects {
+		fmt.Println(lo)
+	}
+
+	fmt.Println(ipfs.Resolve("/ipns/" + ipfsID.ID + "/files/test.txt"))
 }

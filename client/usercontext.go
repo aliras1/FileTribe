@@ -15,12 +15,13 @@ import (
 )
 
 type UserContext struct {
-	User    *User // TODO lock boxer
-	Groups  []*GroupContext
-	Repo    []*fs.FilePTP
-	Network *nw.Network
-	IPFS    *ipfs.IPFS
-	Storage *fs.Storage // TODO lock
+	User     *User // TODO lock boxer
+	Groups   []*GroupContext
+	Repo     []*fs.FilePTP
+	IPNSAddr string
+	Network  *nw.Network
+	IPFS     *ipfs.IPFS
+	Storage  *fs.Storage // TODO lock
 
 	channelMsg chan nw.Message
 	channelSig chan os.Signal
@@ -53,11 +54,17 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	uc.Network = network
 	uc.IPFS = ipfs
 	uc.Storage = fs.NewStorage(dataPath)
+	uc.Storage.Init()
 	uc.Groups = []*GroupContext{}
 	uc.Repo, err = uc.Storage.BuildRepo(user.Username, &user.Boxer, network, ipfs)
 	if err != nil {
 		log.Println(err)
 	}
+	ipfsID, err := ipfs.ID()
+	if err != nil {
+		log.Printf("could not get ipfs id: NewUserContect: %s", err)
+	}
+	uc.IPNSAddr = ipfsID.ID
 
 	uc.channelMsg = make(chan nw.Message)
 	uc.channelSig = make(chan os.Signal)
@@ -103,14 +110,16 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 		case "PTP READ CAP":
 			cap, err := fs.DownloadReadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
 			if err != nil {
-				log.Println(err)
+				log.Printf("could not download read cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", msg.Message, err)
 				continue
 			}
-			cap.Store(ctx.Storage)
-			fmt.Println(cap)
+			if ctx.isFileInRepo(cap.IPNSPath) {
+				log.Printf("file '%s' is already in the repo", cap.IPNSPath)
+				continue
+			}
 			file, err := fs.NewFileFromCAP(cap, ctx.Storage, ctx.IPFS)
 			if err != nil {
-				log.Println(err)
+				log.Printf("could not instantiate a new file from cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", cap.FileName, err)
 				continue
 			}
 			ctx.addFileToRepo(file)
@@ -131,12 +140,13 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 				continue
 			}
 			cap.Boxer.RNG = rand.Reader
-			err = ctx.CreateGroupFromCAP(cap, msg.From)
+			groupCtx, err := NewGroupContextFromCAP(cap, ctx.User, ctx.Network, ctx.IPFS, ctx.Storage)
 			if err != nil {
 				log.Println("====== A ======")
 				log.Println(err)
 				continue
 			}
+			ctx.Groups = append(ctx.Groups, groupCtx)
 			//ctx.Storage.PublishPublicDir(ctx.IPFS)
 		}
 	}
@@ -148,74 +158,49 @@ func (uc *UserContext) BuildGroups() error {
 		return err
 	}
 	for _, cap := range caps {
-		if err := uc.CreateGroupFromCAP(&cap, ""); err != nil {
+		groupCtx, err := NewGroupContextFromCAP(&cap, uc.User, uc.Network, uc.IPFS, uc.Storage)
+		if err != nil {
 			return err
 		}
+		uc.Groups = append(uc.Groups, groupCtx)
 	}
 	return nil
 }
 
-func (uc *UserContext) CreateGroup(groupName string) error {
-	group := NewGroup(groupName)
-	err := group.Register(uc.Network)
+func (uc *UserContext) CreateGroup(groupname string) error {
+	group := NewGroup(groupname)
+	if err := group.Register(uc.User.Username, uc.Network); err != nil {
+		return err
+	}
+	group.Save(uc.Storage)
+	groupCtx, err := NewGroupContext(group, uc.User, uc.Network, uc.IPFS, uc.Storage)
 	if err != nil {
 		return err
 	}
-	uc.Storage.CreateGroupStorage(groupName)
-	groupCtx := GroupContext{uc.User, group, nil,
-		&MemberList{[]Member{{uc.User.Username, uc.User.Signer.PublicKey}}},
-		&ActiveMemberList{}, uc.Network, uc.IPFS, uc.Storage}
-
-	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
-	uc.Groups = append(uc.Groups, &groupCtx)
-	return groupCtx.Save()
-}
-
-func (uc *UserContext) CreateGroupFromCAP(cap *fs.GroupAccessCAP, from string) error {
-	group := &Group{cap.GroupName, cap.Boxer}
-	uc.Storage.CreateGroupStorage(group.GroupName)
-
-	memberList := &MemberList{[]Member{}}
-	if strings.Compare(from, "") != 0 {
-		memberList = memberList.Append(from, uc.Network)
-	}
-	memberList = memberList.Append(uc.User.Username, uc.Network)
-	groupCtx := GroupContext{uc.User, group, nil, memberList,
-		&ActiveMemberList{}, uc.Network, uc.IPFS, uc.Storage}
-
-	fmt.Print(uc.User.Username + " memberlist: ")
-	fmt.Println(groupCtx.Members.List)
-	// load local members to have an idea, who are the good guys.
-	// note, that by an invite request 'from' is not a null string
-	// therefore we have a valid member we can contact
-	if err := groupCtx.LoadGroupData("members.json"); err != nil {
-		return err
-	}
-	NewSynchronizer(uc.User.Username, &uc.User.Signer, &groupCtx)
-	time.Sleep(1 * time.Second) // wait for heartbeats of active members
-	uc.Groups = append(uc.Groups, &groupCtx)
-	if err := groupCtx.PullGroupData("members.json"); err != nil {
-		return err
-	}
-	return groupCtx.Save()
+	uc.Groups = append(uc.Groups, groupCtx)
+	NewSynchronizer(uc.User.Username, &uc.User.Signer, groupCtx)
+	return nil
 }
 
 func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {
+	if uc.isFileInRepo("/ipns/" + uc.IPNSAddr + "/files/" + path.Base(filePath)) {
+		return fmt.Errorf("file is already added to the repo: UserContext.AddAndShareFile")
+	}
 	file, err := fs.NewSharedFile(filePath, uc.User.Username, uc.Storage, uc.IPFS)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not create new shared file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
 	}
 	err = file.Share(shareWith, &uc.User.Boxer, uc.Storage, uc.Network, uc.IPFS)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not share file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
 	}
 	uc.addFileToRepo(file)
 	return nil
 }
 
-func (uc *UserContext) isFileInRepo(filePath string) bool {
-	for _, i := range uc.Repo {
-		if strings.Compare(path.Base(i.Name), path.Base(filePath)) == 0 {
+func (uc *UserContext) isFileInRepo(ipnsPath string) bool {
+	for _, file := range uc.Repo {
+		if strings.Compare(file.IPNSPath, ipnsPath) == 0 {
 			return true
 		}
 	}

@@ -59,7 +59,7 @@ func (psm *PubsubMessage) Decrypt(key crypto.SymmetricKey) ([]byte, bool) {
 }
 
 type IPFSNameResolvedHash struct {
-	Path string `json:"Name"`
+	Path string `json:"Path"`
 }
 
 type ListObjects struct {
@@ -243,10 +243,16 @@ func (i *IPFS) Resolve(anyPath string) (string, error) {
 		fmt.Println(err)
 		return "", err
 	}
+	fmt.Println(string(resp))
 	var hash IPFSNameResolvedHash
-	err = json.Unmarshal(resp, &hash)
+	if err := json.Unmarshal(resp, &hash); err != nil {
+		return "", fmt.Errorf("could not unmarshal IPFSNameResolvedHash '%s': IPFS.Resolve: %s", anyPath, err)
+	}
 	fmt.Println("resolved")
-	return hash.Path, err
+	if strings.Compare(hash.Path, "") == 0 {
+		return "", fmt.Errorf("could not resolve path '%s': IPFS.Resolve", anyPath)
+	}
+	return hash.Path, nil
 }
 
 func (i *IPFS) Version() (string, error) {

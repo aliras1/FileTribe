@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"crypto/sha256"
+	"encoding/base64"
 	"ipfs-share/crypto"
 )
 
@@ -23,8 +25,12 @@ type Network struct {
 	Address string
 }
 
-func (n *Network) Get(path string, id string) ([]byte, error) {
-	resp, err := http.Get(fmt.Sprintf(n.Address + path + id))
+func (n *Network) Get(path string, args ...string) ([]byte, error) {
+	url := n.Address + path
+	for _, arg := range args {
+		url += "/" + arg
+	}
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -33,16 +39,20 @@ func (n *Network) Get(path string, id string) ([]byte, error) {
 	return body, nil
 }
 
-func (n *Network) GetGroupSigningKey(groupName string) (crypto.PublicSigningKey, error) {
-	base64PublicSigningKey, err := n.Get("/get/group/signkey/", groupName)
+func (n *Network) GetGroupMembers(groupName string) ([]string, error) {
+	membersBytes, err := n.Get("/get/group/members", groupName)
 	if err != nil {
 		return nil, err
 	}
-	return crypto.Base64ToPublicSigningKey(string(base64PublicSigningKey))
+	fmt.Print("bytes: ")
+	fmt.Println(string(membersBytes))
+	members := []string{}
+	err = json.Unmarshal(membersBytes, &members)
+	return members, err
 }
 
 func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, error) {
-	base64PublicKeyHash, err := n.Get("/get/user/publickeyhash/", username)
+	base64PublicKeyHash, err := n.Get("/get/user/publickeyhash", username)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +60,7 @@ func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, e
 }
 
 func (n *Network) GetUserSigningKey(username string) (crypto.PublicSigningKey, error) {
-	base64PublicSigningKey, err := n.Get("/get/user/signkey/", username)
+	base64PublicSigningKey, err := n.Get("/get/user/signkey", username)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +68,7 @@ func (n *Network) GetUserSigningKey(username string) (crypto.PublicSigningKey, e
 }
 
 func (n *Network) GetUserBoxingKey(username string) (crypto.PublicBoxingKey, error) {
-	base64PublicBoxingKey, err := n.Get("/get/user/boxkey/", username)
+	base64PublicBoxingKey, err := n.Get("/get/user/boxkey", username)
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -66,7 +76,7 @@ func (n *Network) GetUserBoxingKey(username string) (crypto.PublicBoxingKey, err
 }
 
 func (n *Network) GetUserIPFSAddr(username string) (string, error) {
-	bytesIPFSAddr, err := n.Get("/get/user/ipfsaddr/", username)
+	bytesIPFSAddr, err := n.Get("/get/user/ipfsaddr", username)
 	if err != nil {
 		return "", err
 	}
@@ -74,7 +84,7 @@ func (n *Network) GetUserIPFSAddr(username string) (string, error) {
 }
 
 func (n *Network) IsGroupRegistered(groupName string) (bool, error) {
-	boolString, err := n.Get("/is/group/registered/", groupName)
+	boolString, err := n.Get("/is/group/registered", groupName)
 	if err != nil {
 		return false, err
 	}
@@ -82,7 +92,7 @@ func (n *Network) IsGroupRegistered(groupName string) (bool, error) {
 }
 
 func (n *Network) IsUsernameRegistered(username string) (bool, error) {
-	boolString, err := n.Get("/is/username/registered/", username)
+	boolString, err := n.Get("/is/username/registered", username)
 	if err != nil {
 		return false, err
 	}
@@ -90,7 +100,7 @@ func (n *Network) IsUsernameRegistered(username string) (bool, error) {
 }
 
 func (n *Network) GetMessages(username string) ([]*Message, error) {
-	resp, err := n.Get("/get/messages/", username)
+	resp, err := n.Get("/get/messages", username)
 	if err != nil {
 		return nil, err
 	}
@@ -147,9 +157,15 @@ func (n *Network) PutIPFSAddr(hash crypto.PublicKeyHash, ipfsAddr string) error 
 	)
 }
 
-func (n *Network) RegisterGroup(groupName string) error {
-	_, err := n.Get("/register/group/", groupName)
-	return err
+func (n *Network) RegisterGroup(groupName, owner string) error {
+	stateHash := sha256.Sum256([]byte(owner))
+	stateHashBase64 := base64.StdEncoding.EncodeToString(stateHash[:])
+	jsonStr := fmt.Sprintf(`{"groupname":"%s", "owner":"%s", "state":"%s"}`, groupName, owner, stateHashBase64)
+	fmt.Println(jsonStr)
+	return n.Put(
+		"/register/group",
+		"application/json",
+		[]byte(jsonStr))
 }
 
 func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) error {

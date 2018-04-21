@@ -31,11 +31,12 @@ def is_username_registered(username):
     return Response("true")
 
 
-@app.route('/get/group/signkey/<group_name>', methods=['GET'])
+@app.route('/get/group/members/<group_name>', methods=['GET'])
 def get_group_signing_key(group_name):
     if group_name not in groups:
         return Response()
-    return groups[group_name]
+    print(groups)
+    return Response(jsonify(groups[group_name]["members"]).data)
 
 
 @app.route('/get/user/publickeyhash/<user>', methods=['GET'])
@@ -108,13 +109,16 @@ def put_ipfs_addr():
     return Response()
 
 
-@app.route('/register/group/<group_name>', methods=['POST'])
-def register_group(group_name):
-    data = request.data
-    print(data.decode())
+@app.route('/register/group', methods=['POST'])
+def register_group():
+    data = request.json
+    group_name = data["groupname"]
+    owner = data["owner"]
+    state = data["state"]
     if group_name in groups:
-        Response("user already exists")
-    groups[group_name] = data.decode()
+        Response("group already exists")
+    groups[group_name] = {"members": [owner], "state": state, "last_op": None}
+    print(groups[group_name])
     return Response()
 
 

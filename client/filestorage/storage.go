@@ -47,6 +47,10 @@ func NewStorage(dataPath string) *Storage {
 	storage.tmpPath = storage.dataPath + "/userdata/tmp"
 	storage.ipfsPath = storage.dataPath + "/userdata/ipfs" // signed and encrypted files, that are added to ipfs are stored here
 
+	return &storage
+}
+
+func (storage *Storage) Init() {
 	os.Mkdir(storage.dataPath, 0770)
 	os.MkdirAll(storage.publicFilesPath, 0770)
 	os.MkdirAll(storage.publicForPath, 0770)
@@ -57,8 +61,6 @@ func NewStorage(dataPath string) *Storage {
 	os.MkdirAll(storage.sharedPath, 0770)
 	os.MkdirAll(storage.tmpPath, 0770)
 	os.MkdirAll(storage.ipfsPath, 0770)
-
-	return &storage
 }
 
 func (storage *Storage) ExistsFile(filePath string) bool {
@@ -77,76 +79,30 @@ func (storage *Storage) ExistsFile(filePath string) bool {
 // These files are JSON representation of a FilePTP that were shared by the
 // user.
 func (storage *Storage) BuildRepo(username string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) ([]*FilePTP, error) {
+	log.Println("[*] Building repo...")
 	var repo []*FilePTP
 	// read capabilities from caps and try to refresh them
 	entries, err := ioutil.ReadDir(storage.capsPath)
 	if err != nil {
-		return []*FilePTP{}, err
+		return nil, fmt.Errorf("could not read directory '%s': Storage.BuildRepo: %s", storage.capsPath, err)
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue // do not care about directories
 		}
-		cap, err := NewReadCAPFromFile(storage.capsPath + "/" + entry.Name())
+		path := storage.capsPath + "/" + entry.Name()
+		file, err := NewFile(path)
 		if err != nil {
+			log.Printf("invalid file '%s': Storage.BuildRepo: %s\n", path, err)
 			continue // do not care about trash files
 		}
-		changed, err := cap.Refresh(username, boxer, storage, network, ipfs)
-		if err != nil {
-			return nil, err
-		}
-		file, err := NewFileFromCAP(cap, storage, ipfs)
-		if changed {
-			fmt.Println("changed")
-			storage.DownloadFileFromCap(cap, ipfs)
+		if err := file.Refresh(storage, ipfs); err != nil {
+			return nil, fmt.Errorf("could not refresh file '%s': Storage.BuildRepo: %s", file.Name, err)
 		}
 		repo = append(repo, file)
 	}
-
-	// read share information
-	entries, err = ioutil.ReadDir(storage.sharedPath)
-	if err != nil {
-		return []*FilePTP{}, err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		file, err := NewFileFromShared(storage.sharedPath + "/" + entry.Name())
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		repo = append(repo, file)
-	}
+	log.Println("[*] Repo ready")
 	return repo, nil
-}
-
-// Downloads and verifies the file, described in the capability.
-func (storage *Storage) DownloadFileFromCap(cap *ReadCAP, ipfs *ipfs.IPFS) error {
-	tmpFilePath := storage.tmpPath + "/" + path.Base(cap.FileName)
-	err := ipfs.Get(tmpFilePath, cap.IPFSHash)
-	if err != nil {
-		return err
-	}
-	bytesSignedFile, err := ioutil.ReadFile(tmpFilePath)
-	if err != nil {
-		return err
-	}
-	os.Remove(tmpFilePath)
-	// make a directory to the owner
-	dirPath := storage.fileRootPath + "/" + cap.Owner
-	os.MkdirAll(dirPath, 0770)
-
-	bytesRawFile, ok := cap.VerifyKey.Open(nil, bytesSignedFile)
-	if !ok {
-		return errors.New("by downloadFileFromCap(): could not verify file")
-	}
-	filePath := dirPath + "/" + cap.FileName
-	if err := WriteFile(filePath, bytesRawFile); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (storage *Storage) CopyFileIntoPublicDir(filePath string) error {
@@ -157,45 +113,6 @@ func (storage *Storage) CopyFileIntoPublicDir(filePath string) error {
 func (storage *Storage) CopyFileIntoMyFiles(filePath string) (string, error) {
 	newFilePath := storage.myFilesPath + "/" + path.Base(filePath)
 	return newFilePath, CopyFile(filePath, newFilePath)
-}
-
-// Signs the files with the Write key and then the function adds
-// it to IPFS. The function returns with the with the IPFS hash
-// of the file
-func (storage *Storage) SignAndAddFileToIPFS(filePath string, writeKey crypto.SecretSigningKey, ipfs *ipfs.IPFS) (string, error) {
-	ipfsPath := storage.ipfsPath + "/" + path.Base(filePath)
-	bytesFile, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return "", err
-	}
-	signedFile := writeKey.Sign(nil, bytesFile)
-	if err := WriteFile(ipfsPath, signedFile); err != nil {
-		return "", err
-	}
-	merkleNode, err := ipfs.AddFile(ipfsPath)
-	if err != nil {
-		return "", err
-	}
-	return "/ipfs/" + merkleNode.Hash, nil
-}
-
-// Saves a FilePTP object (containing meta-data of a file) in json format
-// locally
-func (storage *Storage) StoreFileMetaData(f *FilePTP) error {
-	byteJson, err := json.Marshal(f)
-	if err != nil {
-		return err
-	}
-	return WriteFile(storage.sharedPath+"/"+path.Base(f.Name)+".json", byteJson)
-}
-
-func (storage *Storage) CreateFileReadCAPForUser(f *FilePTP, username, ipfsHash string, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
-	cap := ReadCAP{path.Base(f.Name), ipfsHash, f.Owner, f.VerifyKey}
-	capBytes, err := json.Marshal(cap)
-	if err != nil {
-		return err
-	}
-	return storage.createFileForUser(username, path.Base(f.Name), capBytes, boxer, network)
 }
 
 func (storage *Storage) createFileForUser(user, capName string, data []byte, boxer *crypto.BoxingKeyPair, network *nw.Network) error {

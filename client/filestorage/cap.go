@@ -2,15 +2,13 @@ package filestorage
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"strings"
-
-	"errors"
 	"fmt"
+	"io/ioutil"
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 	"os"
+	"path"
 )
 
 type GroupAccessCAP struct {
@@ -29,7 +27,7 @@ func (cap *GroupAccessCAP) Store(storage *Storage) error {
 
 type ReadCAP struct {
 	FileName  string                  `json:"name"`
-	IPFSHash  string                  `json:"ipfs_hash"`
+	IPNSPath  string                  `json:"ipns_path"`
 	Owner     string                  `json:"owner"`
 	VerifyKey crypto.PublicSigningKey `json:"verify_key"`
 }
@@ -38,10 +36,13 @@ type ReadCAP struct {
 func (cap *ReadCAP) Store(storage *Storage) error {
 	bytesJSON, err := json.Marshal(cap)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not marshal cap '%s': ReadCAP.Store: %s", cap.FileName, err)
 	}
 	capPath := storage.capsPath + "/" + cap.FileName + ".json"
-	return WriteFile(capPath, bytesJSON)
+	if err := WriteFile(capPath, bytesJSON); err != nil {
+		return fmt.Errorf("could not write file '%s': ReadCAP.Store: %s", capPath, err)
+	}
+	return nil
 }
 
 // New ReadCAP from local json file
@@ -55,31 +56,18 @@ func NewReadCAPFromFile(capPath string) (*ReadCAP, error) {
 	return &cap, err
 }
 
-// Checks if the by ReadCap represented file has changed since last time
-// or not. It is done via checking the IPFS hash of the file. If it has
-// changed, the function returns true. Otherwise it returns false.
 func (cap *ReadCAP) Refresh(username string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (bool, error) {
-	newCap, err := DownloadReadCAP(cap.Owner, username, cap.FileName+".json", boxer, storage, network, ipfs)
-	if err != nil {
-		return false, err
-	}
-	fileChanged := strings.Compare(newCap.IPFSHash, cap.IPFSHash) != 0
-	if fileChanged {
-		cap = newCap
-		cap.Store(storage)
-		return true, nil
-	}
-	return false, nil
+	return false, fmt.Errorf("not implemented: ReadCAP.Refresh")
 }
 
 func DownloadReadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
 	capBytes, err := downloadCAP(fromUser, username, capName, boxer, storage, network, ipfs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not download ReadCAP '%s': DownloadReadCAP: %s", capName, err)
 	}
 	var cap ReadCAP
 	if err := json.Unmarshal(capBytes, &cap); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not unmarsharl ReadCAP '%s': DownloadReadCAP: %s", capName, err)
 	}
 	return &cap, nil
 }
@@ -90,22 +78,22 @@ func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 	// get address and key
 	ipfsAddr, err := network.GetUserIPFSAddr(fromUser)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not get ipfs address of user '%s': downloadCAP: %s", username, err)
 	}
 	otherPK, err := network.GetUserBoxingKey(fromUser)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not get public boxing key of user '%s': downloadCAP: %s", username, err)
 	}
 	ipnsPath := "/ipns/" + ipfsAddr + "/for/" + username + "/" + capName
 	// download cap file
 	tmpFilePath := storage.tmpPath + "/" + capName
 	err = ipfs.Get(tmpFilePath, ipnsPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not ipfs get file '%s': downloadCAP: %s", ipnsPath, err)
 	}
 	bytesEnc, err := ioutil.ReadFile(tmpFilePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not read file '%s': downloadCAP: %s", tmpFilePath, err)
 	}
 	fmt.Print("group cap bytes: ")
 	fmt.Println(bytesEnc)
@@ -114,12 +102,20 @@ func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 		fmt.Println("trying decrypt cap")
 		fmt.Println(fromUser)
 		fmt.Println(ipnsPath)
-		return nil, errors.New("could not decrypt capability")
+		return nil, fmt.Errorf("could not decrypt cap '%s': downloadCAP: %s", capName, err)
 	}
 	os.Remove(tmpFilePath)
-	// TODO  ATTENTION: it does not save anything
-	//if err := WriteFile(capFilePath, bytesDecr); err != nil {
-	//	return nil, err
-	//}
 	return bytesDecr, nil
+}
+
+func CreateFileReadCAPForUser(f *FilePTP, username, ipnsAddr string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network) error {
+	cap := ReadCAP{path.Base(f.Name), ipnsAddr, f.Owner, f.VerifyKey}
+	capBytes, err := json.Marshal(cap)
+	if err != nil {
+		return fmt.Errorf("could not marshal cap '%s': CreateFileReadCAPForUser: '%s'", cap.FileName, err)
+	}
+	if err := storage.createFileForUser(username, path.Base(f.Name), capBytes, boxer, network); err != nil {
+		return fmt.Errorf("could not create file '%s' for user '%s': CreateFileReadCAPForUser: %s", cap.FileName, username, err)
+	}
+	return nil
 }
