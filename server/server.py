@@ -117,8 +117,38 @@ def register_group():
     state = data["state"]
     if group_name in groups:
         Response("group already exists")
-    groups[group_name] = {"members": [owner], "state": state, "last_op": None}
+    groups[group_name] = {"members": [owner], "state": [state], "last_op": [None]}
     print(groups[group_name])
+    return Response()
+
+
+@app.route('/get/group/state/<group_name>', methods=['GET'])
+def get_group_state(group_name):
+    if group_name not in groups:
+        print("group {} does not exist: get_group_state()".format(group_name))
+        return Response("group does not exist")
+    return Response(groups[group_name]["state"][-1])
+
+
+@app.route('/get/group/prev/state/<group_name>/<state>', methods=['GET'])
+def get_group_prev_state(group_name, state):
+    if group_name not in groups:
+        print("group {} does not exist: get_group_state()".format(group_name))
+        return Response("group does not exist")
+    if state not in groups[group_name]["state"]:
+        print("state not in group state history: get_group_prev_state()")
+    for i in range(1, len(groups[group_name]["state"])):
+        if groups[group_name]["state"][i] == state:
+            return Response(groups[group_name]["state"][i-1])
+    return Response()
+
+
+@app.route('/group/invite/<group_name>/<user>/<state>', methods=['GET'])
+def group_invite(group_name, user, state):
+    if group_name not in groups:
+        print("group {} does not exists: group_invite()".format(group_name))
+        return Response()
+    groups[group_name]["state"] += [state]
     return Response()
 
 

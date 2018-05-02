@@ -83,6 +83,40 @@ func (n *Network) GetUserIPFSAddr(username string) (string, error) {
 	return string(bytesIPFSAddr), nil
 }
 
+func (n *Network) GetGroupState(groupName string) ([]byte, error) {
+	stateBase64Bytes, err := n.Get("/get/group/state", groupName)
+	if err != nil {
+		return nil, fmt.Errorf("error while getting state of group %s: Network.GetGroupState: %s", groupName, err)
+	}
+	state, err := base64.StdEncoding.DecodeString(string(stateBase64Bytes))
+	if err != nil {
+		return nil, fmt.Errorf("error while decoding state of group %s: Network.GetGroupState: %s", groupName, err)
+	}
+	return state, nil
+}
+
+func (n *Network) GetGroupPrevState(groupName string, state []byte) ([]byte, error) {
+	stateBase64 := base64.StdEncoding.EncodeToString(state)
+	prevStateBase64Bytes, err := n.Get("/get/group/prev/state", groupName, stateBase64)
+	if err != nil {
+		return nil, fmt.Errorf("error while getting previous state %s of group %s: Network.GetGroupPrevState: %s", state, groupName, err)
+	}
+	prevState, err := base64.StdEncoding.DecodeString(string(prevStateBase64Bytes))
+	if err != nil {
+		return nil, fmt.Errorf("error while decoding state of group %s: Network.GetGroupPrevState: %s", groupName, err)
+	}
+	return prevState, nil
+}
+
+func (n *Network) GroupInvite(groupname, username string, state []byte) error {
+	stateBase64 := base64.StdEncoding.EncodeToString(state)
+	_, err := n.Get("/group/invite", groupname, username, stateBase64)
+	if err != nil {
+		return fmt.Errorf("error while inviting %s into %s: Network.GroupInvite: %s", username, groupname, err)
+	}
+	return nil
+}
+
 func (n *Network) IsGroupRegistered(groupName string) (bool, error) {
 	boolString, err := n.Get("/is/group/registered", groupName)
 	if err != nil {
