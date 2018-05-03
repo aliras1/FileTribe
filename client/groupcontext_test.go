@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"ipfs-share/client/filestorage"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
@@ -16,17 +15,13 @@ func TestGroupContext_Invite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ipfsID, err := ipfs.ID()
-	if err != nil {
-		t.Fatal(err)
-	}
 	username1 := "user1"
 	username2 := "user2"
 	uc1, err := NewUserContextFromSignUp(username1, "pw", "./t1/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc2, err := NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
+	_, err = NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +32,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	memberList = memberList.Append(username2, &network)
 
 	gc1 := GroupContext{uc1.User, group, nil, memberList, &ActiveMemberList{}, &network, ipfs, uc1.Storage}
-	gc2 := GroupContext{uc2.User, group, nil, memberList, &ActiveMemberList{}, &network, ipfs, uc2.Storage}
+	//gc2 := GroupContext{uc2.User, group, nil, memberList, &ActiveMemberList{}, &network, ipfs, uc2.Storage}
 	//synch2 := NewSynchronizer(user2.Username, &user2.Signer, &gc2)
 	//fmt.Println(synch2)
 

@@ -51,7 +51,7 @@ func TestNetwork_GetGroupPrevState(t *testing.T) {
 	fmt.Println(originalStateBase64)
 
 	newState := []byte{2}
-	network.GroupInvite(groupName, "testuser2", newState)
+	network.GroupInvite(groupName, nil)
 
 	newStateFromNetwork, err := network.GetGroupPrevState(groupName, newState)
 	newStateBase64FromNetwork := base64.StdEncoding.EncodeToString(newStateFromNetwork)

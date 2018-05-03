@@ -108,11 +108,14 @@ func (n *Network) GetGroupPrevState(groupName string, state []byte) ([]byte, err
 	return prevState, nil
 }
 
-func (n *Network) GroupInvite(groupname, username string, state []byte) error {
-	stateBase64 := base64.StdEncoding.EncodeToString(state)
-	_, err := n.Get("/group/invite", groupname, username, stateBase64)
+func (n *Network) GroupInvite(groupname string, transaction []byte) error {
+	err := n.Put(
+		"/group/invite/"+groupname,
+		"application/json",
+		transaction,
+	)
 	if err != nil {
-		return fmt.Errorf("error while inviting %s into %s: Network.GroupInvite: %s", username, groupname, err)
+		return fmt.Errorf("error while inviting into %s: Network.GroupInvite: %s", groupname, err)
 	}
 	return nil
 }

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/whyrusleeping/tar-utils"
 	"io/ioutil"
 	"log"
 	"net"
@@ -15,6 +14,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/whyrusleeping/tar-utils"
 
 	"ipfs-share/crypto"
 )
@@ -154,7 +155,10 @@ func (i *IPFS) Get(filePath, hash string) error {
 	if err != nil {
 		return err
 	}
-	extractor := &tar.Extractor{filePath}
+	extractor := &tar.Extractor{
+		Path:     filePath,
+		Progress: nil,
+	}
 	return extractor.Extract(bytes.NewReader(b))
 }
 

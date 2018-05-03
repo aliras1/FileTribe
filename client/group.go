@@ -24,7 +24,7 @@ func (g *Group) Save(storage *fs.Storage) error {
 	return storage.StoreGroupAccessCAP(g.GroupName, g.Boxer)
 }
 
-func (g *Group) Register(network *nw.Network) error {
+func (g *Group) Register(owner string, network *nw.Network) error {
 	registered, err := network.IsGroupRegistered(g.GroupName)
 	if err != nil {
 		return err
@@ -32,7 +32,7 @@ func (g *Group) Register(network *nw.Network) error {
 	if registered {
 		return errors.New("group name already exists")
 	}
-	err = network.RegisterGroup(g.GroupName)
+	err = network.RegisterGroup(g.GroupName, owner)
 	if err != nil {
 		return err
 	}

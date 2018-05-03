@@ -1,4 +1,8 @@
 from flask import Flask, abort, jsonify, request, Response
+import nacl.encoding
+import nacl.signing
+import nacl.exceptions
+import base64
 
 
 app = Flask(__name__)
@@ -143,12 +147,40 @@ def get_group_prev_state(group_name, state):
     return Response()
 
 
-@app.route('/group/invite/<group_name>/<user>/<state>', methods=['GET'])
-def group_invite(group_name, user, state):
+def verify(signed, verify_key):
+    try:
+        verify_key.verify(signed)
+    except nacl.exceptions.BadSignatureError:
+        return False
+    return True
+
+
+def verify_transaction(transaction):
+    for signed_by in transaction["signed_by"]:
+        username = signed_by["username"]
+        signature_base64 = signed_by["signature"]
+        signature = bytearray(base64.b64decode(signature_base64))
+        for b in base64.b64decode(transaction["hash"]):
+            signature.append(b)
+        signed = [b for b in signature]
+        h = users[username]
+        verify_key = nacl.signing.VerifyKey(h_to_sign_key[h], encoder=nacl.encoding.Base64Encoder) 
+
+        if not verify(signed, verify_key):
+            return False
+    return True
+
+
+
+@app.route('/group/invite/<group_name>', methods=['POST'])
+def group_invite(group_name):
     if group_name not in groups:
         print("group {} does not exists: group_invite()".format(group_name))
         return Response()
-    groups[group_name]["state"] += [state]
+    transaction = request.json
+    if not verify_transaction(transaction):
+        return Response()
+    groups[group_name]["state"] += [transaction["hash"]]
     return Response()
 
 

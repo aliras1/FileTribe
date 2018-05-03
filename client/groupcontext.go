@@ -163,6 +163,23 @@ type GroupContext struct {
 	Storage       *fs.Storage
 }
 
+func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
+	return &GroupContext{
+		User:          user,
+		Group:         group,
+		Repo:          nil,
+		Members:       nil,
+		ActiveMembers: nil,
+		Network:       network,
+		IPFS:          ipfs,
+		Storage:       storage,
+	}, nil
+}
+
+func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
+	return nil, fmt.Errorf("not implemented: NewGroupContextFromCAP")
+}
+
 // By operations (e.g. Invite()) a given number of valid approvals
 // is needed to be able to commit the current operation. This func
 // collects these approvals and upon receiving enough approvals it

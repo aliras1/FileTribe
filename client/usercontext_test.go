@@ -1,6 +1,9 @@
 package client
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -40,6 +43,16 @@ func TestUserContext_CreateGroup(t *testing.T) {
 	}
 }
 
+type Signedby struct {
+	Username  string `json:"username"`
+	Signature []byte `json:"signature"`
+}
+
+type Transaction struct {
+	Hash     []byte     `json:"hash"`
+	SignedBy []Signedby `json:"signed_by"`
+}
+
 func TestGroupInvite(t *testing.T) {
 	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
 	network := nw.Network{"http://0.0.0.0:6000"}
@@ -52,58 +65,37 @@ func TestGroupInvite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc2, err := NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
+	_, err = NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.CreateGroup("test_group"); err != nil {
+	groupname := "test_group"
+	if err := uc1.CreateGroup(groupname); err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.Groups[0].Invite(username1, username2, &uc1.User.Boxer, &uc1.User.Signer.SecretKey); err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(uc2)
-	time.Sleep(45 * time.Second)
-	if len(uc1.Groups) != len(uc2.Groups) {
-		t.Fatal("#groups does not match")
-	}
-	if uc1.Groups[0].Members.Length() != uc2.Groups[0].Members.Length() {
-		t.Fatal("#(group members) does not match")
-	}
-	for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
-		str1 := uc1.Groups[0].Members.List[i].Name
-		str2 := uc2.Groups[0].Members.List[i].Name
-		if strings.Compare(str1, str2) != 0 {
-			t.Fatal("group members do not match")
-		}
-	}
-	fmt.Println("invite 1st member succeeded")
 
-	username3 := "test_user3"
-	uc3, err := NewUserContextFromSignUp(username3, "pw", "./t3/", &network, ipfs)
+	originalState := sha256.Sum256([]byte(username1))
+	originalStateBase64 := base64.StdEncoding.EncodeToString(originalState[:])
+	fmt.Println(originalStateBase64)
+
+	hash := []byte{120}
+	signature := uc1.User.Signer.SecretKey.Sign(nil, hash)[:64]
+
+	transaction := Transaction{
+		Hash: hash,
+		SignedBy: []Signedby{
+			Signedby{username1, signature},
+		},
+	}
+	transactionBytes, err := json.Marshal(transaction)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.Groups[0].Invite(username1, username3, &uc1.User.Boxer, &uc1.User.Signer.SecretKey); err != nil {
+
+	if err := network.GroupInvite(groupname, transactionBytes); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(120 * time.Second)
-	fmt.Println(uc1.Groups[0].Members)
-	fmt.Println(uc2.Groups[0].Members)
-	fmt.Println(uc3.Groups[0].Members)
-	if len(uc1.Groups) != len(uc3.Groups) {
-		t.Fatal("#groups does not match")
-	}
-	if uc1.Groups[0].Members.Length() != uc3.Groups[0].Members.Length() {
-		t.Fatal("#(group members) does not match")
-	}
-	for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
-		str1 := uc1.Groups[0].Members.List[i].Name
-		str2 := uc3.Groups[0].Members.List[i].Name
-		if strings.Compare(str1, str2) != 0 {
-			t.Fatal("group members do not match")
-		}
-	}
+
 }
 
 func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
