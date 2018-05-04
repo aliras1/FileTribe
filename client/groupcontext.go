@@ -3,9 +3,7 @@ package client
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"strings"
 	"time"
@@ -16,6 +14,18 @@ import (
 	nw "ipfs-share/network"
 )
 
+type Signedby struct {
+	Username  string `json:"username"`
+	Signature []byte `json:"signature"`
+}
+
+type Transaction struct {
+	PrevState []byte     `json:"prev_state"`
+	State     []byte     `json:"state"`
+	Operation string     `json:"operation"`
+	SignedBy  []Signedby `json:"signed_by"`
+}
+
 type Member struct {
 	Name      string                  `json:"name"`
 	VerifyKey crypto.PublicSigningKey `json:"-"`
@@ -23,6 +33,10 @@ type Member struct {
 
 type MemberList struct {
 	List []Member
+}
+
+func NewMemberList() *MemberList {
+	return &MemberList{[]Member{}}
 }
 
 func (ml *MemberList) Length() int {
@@ -58,126 +72,43 @@ func (ml *MemberList) Get(user string) (Member, bool) {
 	return Member{}, false
 }
 
-func (ml *MemberList) Save(groupName string, boxer crypto.SymmetricKey, storage *fs.Storage, ipfs *ipfs.IPFS) error {
-	// store only in public, as on sign in groups are
-	// built up from there
-	memberBytes, err := json.Marshal(ml)
-	if err != nil {
-		return err
-	}
-	return storage.SaveGroupData(groupName, "members.json", boxer, memberBytes)
-}
-
-func NewMemberListFromFile(filePath string, key crypto.SymmetricKey, network *nw.Network) (*MemberList, error) {
-	box, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-	memberBytes, ok := key.BoxOpen(box)
-	if !ok {
-		return nil, errors.New("could not decrypt file " + filePath)
-	}
-	var memberList MemberList
-	err = json.Unmarshal(memberBytes, &memberList)
-	if err != nil {
-		return nil, err
-	}
-	for i := 0; i < memberList.Length(); i++ {
-		user := memberList.List[i].Name
-		verifyKey, err := network.GetUserSigningKey(user)
-		if err != nil {
-			return nil, err
-		}
-		memberList.List[i].VerifyKey = verifyKey
-	}
-	return &memberList, nil
-}
-
-type ActiveMember struct {
-	Member
-	Time time.Time
-}
-
-type ActiveMemberList struct {
-	List []ActiveMember
-}
-
-func (aml *ActiveMemberList) Length() int {
-	return len(aml.List)
-}
-
-func (aml *ActiveMemberList) Get(user string) (ActiveMember, bool) {
-	for i := 0; i < aml.Length(); i++ {
-		if strings.Compare(aml.List[i].Name, user) == 0 {
-			return aml.List[i], true
-		}
-	}
-	return ActiveMember{}, false
-}
-
-func (aml *ActiveMemberList) Set(member Member) {
-	for i := 0; i < aml.Length(); i++ {
-		if strings.Compare(aml.List[i].Name, member.Name) == 0 {
-			aml.List[i].Time = time.Now()
-			return
-		}
-	}
-	newActiveMember := ActiveMember{member, time.Now()}
-	aml.List = append(aml.List, newActiveMember)
-}
-
-func (aml *ActiveMemberList) ToStrList() []string {
-	var list []string
-	for _, member := range aml.List {
-		list = append(list, member.Name)
-	}
-	return list
-}
-
-// Every 2 seconds checks if an appropriate heartbeat has came
-// from members. If a member's heartbeat is too old he is
-// considered as inactive and is removed from the list
-func (aml *ActiveMemberList) Refresh() {
-	for {
-		currentTime := time.Now()
-		var newList []ActiveMember
-		for i := 0; i < aml.Length(); i++ {
-			if currentTime.Sub(aml.List[i].Time) < 2*time.Second {
-				newList = append(newList, aml.List[i])
-			}
-		}
-		aml.List = newList
-		fmt.Println(aml.List)
-		time.Sleep(2 * time.Second)
-	}
-}
-
 type GroupContext struct {
-	User          *User
-	Group         *Group
-	Repo          []*fs.FilePTP
-	Members       *MemberList
-	ActiveMembers *ActiveMemberList
-	Network       *nw.Network
-	IPFS          *ipfs.IPFS
-	Storage       *fs.Storage
+	User    *User
+	Group   *Group
+	Repo    []*fs.FilePTP
+	Members *MemberList
+	Network *nw.Network
+	IPFS    *ipfs.IPFS
+	Storage *fs.Storage
 }
 
 func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
+	members := NewMemberList()
+	memberStrings, err := network.GetGroupMembers(group.GroupName)
+	if err != nil {
+		return nil, fmt.Errorf("could not get group members of '%s': NewGroupContext: %s", group.GroupName, err)
+	}
+	for _, member := range memberStrings {
+		members = members.Append(member, network)
+	}
 	return &GroupContext{
-		User:          user,
-		Group:         group,
-		Repo:          nil,
-		Members:       nil,
-		ActiveMembers: nil,
-		Network:       network,
-		IPFS:          ipfs,
-		Storage:       storage,
+		User:    user,
+		Group:   group,
+		Repo:    nil,
+		Members: members,
+		Network: network,
+		IPFS:    ipfs,
+		Storage: storage,
 	}, nil
 }
 
 func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
 	return nil, fmt.Errorf("not implemented: NewGroupContextFromCAP")
+}
+
+func (gc *GroupContext) State() []byte {
+	state := gc.Members.Hash()
+	return state[:]
 }
 
 // By operations (e.g. Invite()) a given number of valid approvals
@@ -233,17 +164,17 @@ func (gc *GroupContext) collectApprovals(username string, proposal Proposal) {
 	}
 }
 
-func (gc *GroupContext) Invite(username, newMember string, boxer *crypto.BoxingKeyPair, signer *crypto.SecretSigningKey) error {
-	if gc.Members.Length() == 1 {
+func (gc *GroupContext) Invite(username, newMember string) error {
+	/*if gc.Members.Length() == 1 {
 		cmd := InviteCMD{username, newMember}
 		return cmd.Execute(gc)
-	}
+	}*/
 
 	prevHash := gc.Members.Hash()
 	newMembers := gc.Members.Append(newMember, gc.Network)
 	newHash := newMembers.Hash()
 
-	proposalMsg := Proposal{username, "invite", []string{newMember}, prevHash, newHash}
+	/*proposalMsg := Proposal{username, "invite", []string{newMember}, prevHash, newHash}
 	go gc.collectApprovals(username, proposalMsg)
 
 	proposalMsgBytes, err := json.Marshal(proposalMsg)
@@ -256,15 +187,39 @@ func (gc *GroupContext) Invite(username, newMember string, boxer *crypto.BoxingK
 	if err != nil {
 		return err
 	}
-	gc.sendToAll(groupMsgBytes)
+	gc.sendToAll(groupMsgBytes)*/
+	var rawTransaction []byte
+	rawTransaction = append(rawTransaction, prevHash[:]...)
+	rawTransaction = append(rawTransaction, newHash[:]...)
+	rawTransaction = append(rawTransaction, []byte(newMember)...)
+	signature := gc.User.Signer.SecretKey.Sign(nil, rawTransaction)[:64]
+
+	transaction := Transaction{
+		PrevState: prevHash[:],
+		State:     newHash[:],
+		Operation: newMember,
+		SignedBy: []Signedby{
+			Signedby{
+				Username:  username,
+				Signature: signature,
+			},
+		},
+	}
+
+	transactionBytes, err := json.Marshal(transaction)
+	if err != nil {
+		return fmt.Errorf("could not marshal transaction data: GroupContext.Invite: %s", err)
+	}
+
+	if err := gc.Network.GroupInvite(gc.Group.GroupName, transactionBytes); err != nil {
+		return fmt.Errorf("could not execute invite through th enetwork: %s", err)
+	}
+
 	return nil
 }
 
 func (gc *GroupContext) Save() error {
 	if err := gc.Group.Save(gc.Storage); err != nil {
-		return err
-	}
-	if err := gc.Members.Save(gc.Group.GroupName, gc.Group.Boxer, gc.Storage, gc.IPFS); err != nil {
 		return err
 	}
 	// should take out publish public dir from here, because it
@@ -281,36 +236,11 @@ func (gc *GroupContext) sendToAll(data []byte) error {
 
 // Pulls from others the given group meta data
 func (gc *GroupContext) PullGroupData(data string) error {
-	groupName := gc.Group.GroupName
-	ipfsHash, err := gc.Storage.GroupDataChanged(gc.Group.GroupName, data, gc.ActiveMembers.ToStrList(), gc.IPFS, gc.Network)
-	fmt.Println("== PULL members.json")
-	fmt.Println("ipfs hash: " + ipfsHash)
-	if err != nil {
-		fmt.Println("error: " + err.Error())
-		return err
-	}
-	if strings.Compare(ipfsHash, "") != 0 {
-		if err := gc.Storage.DownloadGroupData(groupName, data, ipfsHash, gc.IPFS, gc.Network); err != nil {
-			return err
-		}
-	}
-	if err := gc.LoadGroupData(data); err != nil {
-		return err
-	}
-	return nil
+	return fmt.Errorf("not implemented: GroupContext.PullGroupData")
 }
 
 // Loads the locally available group meta data (stored in the
 // data/public/for/GROUP/ directory).
 func (gc *GroupContext) LoadGroupData(data string) error {
-	memberFilePath := gc.Storage.GetGroupDataPath(gc.Group.GroupName, data)
-	if !fs.FileExists(memberFilePath) {
-		return nil
-	}
-	pml, err := NewMemberListFromFile(memberFilePath, gc.Group.Boxer, gc.Network)
-	if err != nil {
-		return err
-	}
-	gc.Members = pml
-	return nil
+	return fmt.Errorf("not implemented GroupContext.LoadGroupData")
 }

@@ -35,14 +35,6 @@ def is_username_registered(username):
     return Response("true")
 
 
-@app.route('/get/group/members/<group_name>', methods=['GET'])
-def get_group_signing_key(group_name):
-    if group_name not in groups:
-        return Response()
-    print(groups)
-    return Response(jsonify(groups[group_name]["members"]).data)
-
-
 @app.route('/get/user/publickeyhash/<user>', methods=['GET'])
 def get_user_public_key_hash(user):
     if user not in users:
@@ -121,9 +113,16 @@ def register_group():
     state = data["state"]
     if group_name in groups:
         Response("group already exists")
-    groups[group_name] = {"members": [owner], "state": [state], "last_op": [None]}
+    groups[group_name] = {"members": [owner], "state": [state], "operation": [None]}
     print(groups[group_name])
     return Response()
+
+
+@app.route('/get/group/members/<group_name>', methods=['GET'])
+def get_group_signing_key(group_name):
+    if group_name not in groups:
+        return Response()
+    return Response(jsonify(groups[group_name]["members"]).data)
 
 
 @app.route('/get/group/state/<group_name>', methods=['GET'])
@@ -155,12 +154,24 @@ def verify(signed, verify_key):
     return True
 
 
-def verify_transaction(transaction):
+def verify_transaction(group_name, transaction):
+    if transaction["prev_state"] != groups[group_name]["state"][-1]:
+        return False
+
+    digest = bytearray(base64.b64decode(transaction["prev_state"]))
+    for b in bytearray(base64.b64decode(transaction["state"])):
+        digest.append(b)
+    for b in bytearray(transaction["operation"], encoding='ascii'):
+        digest.append(b)
+    digest = [b for b in digest]
+    valid_counter = 0
     for signed_by in transaction["signed_by"]:
+        if valid_counter > len(groups[group_name]["members"]) / 2:
+            return True
         username = signed_by["username"]
         signature_base64 = signed_by["signature"]
         signature = bytearray(base64.b64decode(signature_base64))
-        for b in base64.b64decode(transaction["hash"]):
+        for b in digest:
             signature.append(b)
         signed = [b for b in signature]
         h = users[username]
@@ -168,6 +179,7 @@ def verify_transaction(transaction):
 
         if not verify(signed, verify_key):
             return False
+        valid_counter += 1
     return True
 
 
@@ -178,9 +190,14 @@ def group_invite(group_name):
         print("group {} does not exists: group_invite()".format(group_name))
         return Response()
     transaction = request.json
-    if not verify_transaction(transaction):
+    if not verify_transaction(group_name, transaction):
+        print("OK")
         return Response()
-    groups[group_name]["state"] += [transaction["hash"]]
+    groups[group_name]["state"] += [transaction["state"]]
+    groups[group_name]["operation"] += [transaction["operation"]]
+    groups[group_name]["members"] += [transaction["operation"]]
+    print("OK")
+    print(groups[group_name])
     return Response()
 
 

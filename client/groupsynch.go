@@ -84,7 +84,6 @@ func (s *Synchronizer) processHeartBeat(message GroupMessage) error {
 	if !ok {
 		return errors.New("invalid heart beat message")
 	}
-	s.groupCtx.ActiveMembers.Set(member)
 	return nil
 }
 

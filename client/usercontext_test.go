@@ -1,9 +1,6 @@
 package client
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -43,16 +40,6 @@ func TestUserContext_CreateGroup(t *testing.T) {
 	}
 }
 
-type Signedby struct {
-	Username  string `json:"username"`
-	Signature []byte `json:"signature"`
-}
-
-type Transaction struct {
-	Hash     []byte     `json:"hash"`
-	SignedBy []Signedby `json:"signed_by"`
-}
-
 func TestGroupInvite(t *testing.T) {
 	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
 	network := nw.Network{"http://0.0.0.0:6000"}
@@ -65,7 +52,7 @@ func TestGroupInvite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
+	uc2, err := NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,29 +60,9 @@ func TestGroupInvite(t *testing.T) {
 	if err := uc1.CreateGroup(groupname); err != nil {
 		t.Fatal(err)
 	}
-
-	originalState := sha256.Sum256([]byte(username1))
-	originalStateBase64 := base64.StdEncoding.EncodeToString(originalState[:])
-	fmt.Println(originalStateBase64)
-
-	hash := []byte{120}
-	signature := uc1.User.Signer.SecretKey.Sign(nil, hash)[:64]
-
-	transaction := Transaction{
-		Hash: hash,
-		SignedBy: []Signedby{
-			Signedby{username1, signature},
-		},
-	}
-	transactionBytes, err := json.Marshal(transaction)
-	if err != nil {
+	if err := uc1.Groups[0].Invite(uc1.User.Username, uc2.User.Username); err != nil {
 		t.Fatal(err)
 	}
-
-	if err := network.GroupInvite(groupname, transactionBytes); err != nil {
-		t.Fatal(err)
-	}
-
 }
 
 func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
