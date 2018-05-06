@@ -9,8 +9,8 @@ import (
 func TestGroup_RegisterAndGetGroup(t *testing.T) {
 	n := nw.Network{"http://0.0.0.0:6000"}
 	g := NewGroup("test_group")
-	n.RegisterGroup(g.GroupName, "testuser")
-	registered, err := n.IsGroupRegistered(g.GroupName)
+	n.RegisterGroup(g.Name, "testuser")
+	registered, err := n.IsGroupRegistered(g.Name)
 	if err != nil {
 		t.Fatal(err)
 	}

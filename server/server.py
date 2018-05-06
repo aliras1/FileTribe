@@ -133,6 +133,18 @@ def get_group_state(group_name):
     return Response(groups[group_name]["state"][-1])
 
 
+@app.route('/get/group/operation/<group_name>/<state>', methods=['GET'])
+def get_group_operation(group_name, state):
+    if group_name not in groups:
+        print("group {} does not exist: get_group_operation()".format(group_name))
+        return Response()
+    if state not in groups[group_name]["state"]:
+        print("state '{0}' in group '{1}' does not exist: get_group_operation()".format(state, group_name))
+        return Response()
+    i = groups[group_name]["state"].index(state)
+    return Response(jsonify(groups[group_name]["operation"][i]).data)
+
+
 @app.route('/get/group/prev/state/<group_name>/<state>', methods=['GET'])
 def get_group_prev_state(group_name, state):
     if group_name not in groups:
@@ -205,11 +217,6 @@ def group_invite(group_name):
     groups[group_name]["state"] += [transaction["state"]]
     groups[group_name]["operation"] += [transaction["operation"]]
     groups[group_name]["members"] += [new_member]
-
-    if new_member in messages:
-        messages[new_member] += [{"from": inviter, "type": "GROUP INVITE", "message": group_name + ".json"}]
-    else:
-        messages[new_member] = [{"from": inviter, "type": "GROUP INVITE", "message": group_name + ".json"}]
     
     print("OK")
     print(groups[group_name])

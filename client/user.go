@@ -3,17 +3,18 @@ package client
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"log"
+	"fmt"
 
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/scrypt"
 
-	"errors"
 	"ipfs-share/crypto"
 	nw "ipfs-share/network"
 )
 
 type User struct {
-	Username string
+	Name   string
 	crypto.PublicKeyHash
 	Signer crypto.SigningKeyPair
 	Boxer  crypto.BoxingKeyPair
@@ -29,6 +30,7 @@ func NewUser(username, password string) *User {
 		64,
 	)
 	if err != nil {
+		log.Printf("error while scrypt: NewUser: %s", err)
 		return nil
 	}
 
@@ -42,53 +44,65 @@ func NewUser(username, password string) *User {
 	publicSignKey, secretSignKey := crypto.Ed25519KeyPair(&secretSignBytes)
 
 	return &User{
-		username,
-		hash256.Sum(append(publicBoxBytes[:], publicSignKey...)),
-		crypto.SigningKeyPair{publicSignKey, secretSignKey},
-		crypto.BoxingKeyPair{publicBoxBytes, secretBoxBytes, rand.Reader},
+		Name:username,
+		PublicKeyHash:  hash256.Sum(append(publicBoxBytes[:], publicSignKey...)),
+		Signer:  crypto.SigningKeyPair{
+			 PublicKey: publicSignKey,
+			 SecretKey:  secretSignKey,
+		},
+		Boxer:  crypto.BoxingKeyPair{
+			PublicKey:   publicBoxBytes,
+			SecretKey:  secretBoxBytes,
+			RNG:  rand.Reader,
+		},
 	}
 }
 
 func SignUp(username, password, ipfsAddr string, network *nw.Network) (*User, error) {
 	exists, err := network.IsUsernameRegistered(username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not check if username '%s', is registered: SignUp: %s", username, err)
 	}
 	if exists {
-		return nil, errors.New("user already exists")
+		return nil, fmt.Errorf("username '%s' already exists: SignUp", username)
 	}
 	user := NewUser(username, password)
 	if user == nil {
-		return nil, errors.New("could not generate user")
+		return nil, fmt.Errorf("could not generate user: SignUp")
 	}
-	err = network.RegisterUsername(username, user.PublicKeyHash)
-	if err != nil {
-		return nil, err
+	if err = network.RegisterUsername(username, user.PublicKeyHash); err != nil {
+		return nil, fmt.Errorf("could not register username '%s': SignUp: %s", username, err)
 	}
-	network.PutSigningKey(user.PublicKeyHash, user.Signer.PublicKey)
-	network.PutBoxingKey(user.PublicKeyHash, user.Boxer.PublicKey)
-	network.PutIPFSAddr(user.PublicKeyHash, ipfsAddr)
+	if err := network.PutVerifyKey(user.PublicKeyHash, user.Signer.PublicKey); err != nil {
+		return nil, fmt.Errorf("could not put verify key: SignUp: %s", err)
+	}
+	if err := network.PutBoxingKey(user.PublicKeyHash, user.Boxer.PublicKey); err != nil {
+		return nil, fmt.Errorf("could not put boxing key: SignUp: %s", err)
+	}
+	if err := network.PutIPFSAddr(user.PublicKeyHash, ipfsAddr); err != nil {
+		return nil, fmt.Errorf("could not put ipfs address: SignUp: %s", err)
+	}
 	return user, nil
 }
 
 func SignIn(username, password string, network *nw.Network) (*User, error) {
 	exists, err := network.IsUsernameRegistered(username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not check if username '%s' is registered: SignIn: %s", username, err)
 	}
 	if !exists {
-		return nil, errors.New("username does not exists")
+		return nil, fmt.Errorf("username '%s' does not exists: SignIn", username)
 	}
 	user := NewUser(username, password)
 	if user == nil {
-		return nil, errors.New("could not generate user")
+		return nil, fmt.Errorf("could not generate user: SignIn")
 	}
 	publicKeyHash, err := network.GetUserPublicKeyHash(username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not get user public key hash: SignIn: %s", err)
 	}
 	if !publicKeyHash.Equals(&user.PublicKeyHash) {
-		return nil, errors.New("incorrect password")
+		return nil, fmt.Errorf("incorrect password: SignIn")
 	}
 	return user, nil
 }

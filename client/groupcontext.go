@@ -49,7 +49,7 @@ type MemberList struct {
 }
 
 func NewMemberList() *MemberList {
-	return &MemberList{[]Member{}}
+	return &MemberList{ List:[]Member{}}
 }
 
 func (ml *MemberList) Length() int {
@@ -65,24 +65,24 @@ func (ml *MemberList) Hash() [32]byte {
 }
 
 func (ml *MemberList) Append(user string, network *nw.Network) *MemberList {
-	verifyKey, err := network.GetUserSigningKey(user)
+	verifyKey, err := network.GetUserVerifyKey(user)
 	if err != nil {
-		log.Println(err)
+		log.Printf("could not get user verify key: MemberList.Append: %s", err)
 		return ml
 	}
 	newList := make([]Member, len(ml.List))
 	copy(newList, ml.List)
 	newList = append(newList, Member{user, verifyKey})
-	return &MemberList{newList}
+	return &MemberList{List: newList}
 }
 
-func (ml *MemberList) Get(user string) (Member, bool) {
+func (ml *MemberList) Get(user string) *Member {
 	for i := 0; i < ml.Length(); i++ {
 		if strings.Compare(ml.List[i].Name, user) == 0 {
-			return ml.List[i], true
+			return &ml.List[i]
 		}
 	}
-	return Member{}, false
+	return nil
 }
 
 type GroupContext struct {
@@ -98,9 +98,9 @@ type GroupContext struct {
 
 func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
 	members := NewMemberList()
-	memberStrings, err := network.GetGroupMembers(group.GroupName)
+	memberStrings, err := network.GetGroupMembers(group.Name)
 	if err != nil {
-		return nil, fmt.Errorf("could not get group members of '%s': NewGroupContext: %s", group.GroupName, err)
+		return nil, fmt.Errorf("could not get group members of '%s': NewGroupContext: %s", group.Name, err)
 	}
 	for _, member := range memberStrings {
 		members = members.Append(member, network)
@@ -121,8 +121,8 @@ func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.I
 
 func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
 	group := &Group{
-		GroupName: cap.GroupName,
-		Boxer:     cap.Boxer,
+		Name:  cap.GroupName,
+		Boxer: cap.Boxer,
 	}
 	gc, err := NewGroupContext(group, user, network, ipfs, storage)
 	if err != nil {
@@ -137,7 +137,7 @@ func (gc *GroupContext) CalculateState() []byte {
 }
 
 func (gc *GroupContext) GetState() ([]byte, error) {
-	state, err := gc.Network.GetGroupState(gc.Group.GroupName)
+	state, err := gc.Network.GetGroupState(gc.Group.Name)
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve state from network: GroupContext.GetState: %s", err)
 	}
@@ -151,23 +151,15 @@ func (gc *GroupContext) Invite(newMember string) error {
 
 	operation := Operation{
 		Type: "INVITE",
-		Data: gc.User.Username + " " + newMember,
+		Data: gc.User.Name + " " + newMember,
 	}
 
 	transaction := Transaction{
 		PrevState: prevHash[:],
 		State:     newHash[:],
 		Operation: operation,
-		SignedBy:  nil,
+		SignedBy:  []SignedBy{},
 	}
-
-	signedByProposer := SignedBy{
-		Username:  gc.User.Username,
-		Signature: gc.User.SignTransaction(&transaction),
-	}
-
-	transaction.SignedBy = []SignedBy{signedByProposer}
-
 	// fork down the collection of signatures for the operation
 	go gc.Synchronizer.CollectApprovals(&transaction)
 
@@ -179,7 +171,7 @@ func (gc *GroupContext) Invite(newMember string) error {
 	signedTransactionBytes := gc.User.Signer.SecretKey.Sign(nil, transactionBytes)
 	groupMsg := GroupMessage{
 		Type: "PROPOSAL",
-		From: gc.User.Username,
+		From: gc.User.Name,
 		Data: signedTransactionBytes,
 	}
 	groupMsgBytes, err := json.Marshal(groupMsg)
@@ -193,19 +185,16 @@ func (gc *GroupContext) Invite(newMember string) error {
 }
 
 func (gc *GroupContext) Save() error {
-	if err := gc.Group.Save(gc.Storage); err != nil {
-		return err
-	}
-	// should take out publish public dir from here, because it
-	// publishes too often by signing in
-	return gc.Storage.PublishPublicDir(gc.IPFS)
-	//return nil
+	return fmt.Errorf("not implemented: GroupContext.Save")
 }
 
 // Sends pubsub messages to all members of the group
 func (gc *GroupContext) sendToAll(data []byte) error {
 	encGroupMsg := gc.Group.Boxer.BoxSeal(data)
-	return gc.IPFS.PubsubPublish(gc.Group.GroupName, encGroupMsg)
+	if err := gc.IPFS.PubsubPublish(gc.Group.Name, encGroupMsg); err != nil {
+		return fmt.Errorf("could not pubsub publish: GroupContext.sendToAll: %s", err)
+	}
+	return nil
 }
 
 // Pulls from others the given group meta data

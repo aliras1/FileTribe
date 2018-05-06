@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +17,8 @@ type Synchronizer struct {
 	groupCtx *GroupContext
 
 	channelPubSub chan ipfs.PubsubMessage
+	channelState chan []byte
+	channelSig chan os.Signal
 }
 
 func NewSynchronizer(groupCtx *GroupContext) *Synchronizer {
@@ -25,17 +27,61 @@ func NewSynchronizer(groupCtx *GroupContext) *Synchronizer {
 	synch.groupCtx = groupCtx
 	synch.channelPubSub = make(chan ipfs.PubsubMessage)
 
-	go synch.groupCtx.IPFS.PubsubSubscribe(synch.groupCtx.Group.GroupName, synch.channelPubSub)
+	go synch.groupCtx.IPFS.PubsubSubscribe(synch.groupCtx.Group.Name, synch.channelPubSub)
 	go synch.MessageProcessor()
+	go synch.StateListener()
 	//go synch.heartBeat()
 
 	return &synch
 }
 
+func (synch *Synchronizer) StateListener() {
+	groupName := synch.groupCtx.Group.Name
+	for true {
+		select {
+		case sig := <- synch.channelSig:
+			log.Println("received signal", sig)
+			close(synch.channelSig)
+			close(synch.channelState)
+			return
+		default:
+			time.Sleep(1 * time.Second)
+			state, err := synch.groupCtx.Network.GetGroupState(groupName)
+			if err != nil {
+				log.Printf("could not get group state: Synchronizer.StateListener: %s", err)
+				continue
+			}
+			if !bytes.Equal(state, synch.groupCtx.CalculateState()) {
+				go func() {
+					operationBytes, err := synch.groupCtx.Network.GetGroupOperation(groupName, state)
+					if err != nil {
+						log.Printf("could not get operation: Synchronizer.StateListener: %s", err)
+						return
+					}
+					var operation Operation
+					if err := json.Unmarshal(operationBytes, &operation); err != nil {
+						log.Printf("could not unmarshal operation: Synchronizer.StateListener: %s", err)
+						return
+					}
+					cmd, err := NewCommand(&operation)
+					if err != nil {
+						log.Printf("could not create command from operation: Synchronizer.StateListener: %s", err)
+						return
+					}
+					if err := cmd.Execute(synch.groupCtx); err != nil {
+						log.Printf("error while executing cmd: Synchronizer.StateListener: %s", err)
+						return
+					}
+				}()
+			}
+		}
+	}
+}
+
 func (s *Synchronizer) MessageProcessor() {
-	log.Printf("[*] Synchronizer for user '%s' group '%s' is running...", s.groupCtx.User.Username, s.groupCtx.Group.GroupName)
+	log.Printf("[*] Synchronizer for user '%s' group '%s' is running...", s.groupCtx.User.Name, s.groupCtx.Group.Name)
 	for pubsubMessage := range s.channelPubSub {
-		log.Printf("--> user '%s' in group '%s' recieved a message", s.groupCtx.User.Username, s.groupCtx.Group.GroupName)
+		log.Printf("--> user '%s' in group '%s' recieved a message", s.groupCtx.User.Name, s.groupCtx.Group.Name)
 		groupMessageBytes, ok := pubsubMessage.Decrypt(s.groupCtx.Group.Boxer)
 		if !ok {
 			log.Printf("could not decrypt group message: Synchronizer: MessageProcessor")
@@ -51,7 +97,7 @@ func (s *Synchronizer) MessageProcessor() {
 		switch groupMessage.Type {
 		case "HB":
 			if err := s.processHeartBeat(groupMessage); err != nil {
-				log.Println(err)
+				log.Printf("could not process heart beat: Synchronizer.MessageProcessor: %s", err)
 				continue
 			}
 		case "PROPOSAL":
@@ -69,13 +115,13 @@ func (s *Synchronizer) processHeartBeat(message GroupMessage) error {
 	if err != nil {
 		return err
 	}
-	member, in := s.groupCtx.Members.Get(heartBeat.From)
-	if !in {
-		return errors.New("heart beat from a non member user")
+	member := s.groupCtx.Members.Get(heartBeat.From)
+	if member == nil {
+		return fmt.Errorf("heart beat from a non member user: Synchronizer.processHeartBeat")
 	}
 	_, ok := member.VerifyKey.Open(nil, heartBeat.Rand)
 	if !ok {
-		return errors.New("invalid heart beat message")
+		return fmt.Errorf("invalid heart beat: Synchronizer.processHeartBeat")
 	}
 	return nil
 }
@@ -96,31 +142,41 @@ func (s *Synchronizer) processProposal(message GroupMessage) error {
 
 func (s *Synchronizer) heartBeat() {
 	for {
+		time.Sleep(1 * time.Second)
 		var randomBytes [32]byte
 		rand.Read(randomBytes[:])
 		signedRand := s.groupCtx.User.Signer.SecretKey.Sign(nil, randomBytes[:])
-		heartBeat := HeartBeat{s.groupCtx.User.Username, signedRand}
+		heartBeat := HeartBeat{
+			From: s.groupCtx.User.Name,
+			Rand: signedRand,
+		}
 		hbBytes, err := json.Marshal(heartBeat)
 		if err != nil {
-			log.Println(err)
+			log.Printf("could not marshal heart beat: Synchronizer.heartBeat: %s", err)
 			continue
 		}
-		msg := GroupMessage{"HB", s.groupCtx.User.Username, hbBytes}
-		msgBytes, err := json.Marshal(msg)
+		groupMessage := GroupMessage{
+			 From:"HB",
+			 Type: s.groupCtx.User.Name,
+			 Data: hbBytes,
+		}
+		msgBytes, err := json.Marshal(groupMessage)
 		if err != nil {
-			log.Println(err)
+			log.Printf("could not marshal groupMessage: Synchronizer.heartBeat: %s", err)
 			continue
 		}
-		s.groupCtx.sendToAll(msgBytes)
-		time.Sleep(1 * time.Second)
+		if err := s.groupCtx.sendToAll(msgBytes); err != nil {
+			log.Printf("could not send group message: Synchronizer.heartBeat: %s", err)
+			continue
+		}
 	}
 }
 
-func (s *Synchronizer) approveTransaction(username string, transaction *Transaction) error {
-	channelName := s.groupCtx.Group.GroupName + username
+func (s *Synchronizer) approveTransaction(proposer string, transaction *Transaction) error {
+	channelName := s.groupCtx.Group.Name + proposer
 	signature := s.groupCtx.User.SignTransaction(transaction)
 	approval := Approval{
-		From:      username,
+		From:      s.groupCtx.User.Name,
 		Signature: signature,
 	}
 	approvalBytes, err := json.Marshal(&approval)
@@ -136,7 +192,7 @@ func (s *Synchronizer) approveTransaction(username string, transaction *Transact
 
 // authenticate if the proposal really comes from the given user
 func (s *Synchronizer) authenticateProposal(author string, data []byte) (*Transaction, error) {
-	verifyKey, err := s.groupCtx.Network.GetUserSigningKey(author)
+	verifyKey, err := s.groupCtx.Network.GetUserVerifyKey(author)
 	if err != nil {
 		return nil, fmt.Errorf("could not get user verify key: Synchronizer.authenticateProposal: %s", err)
 	}
@@ -155,7 +211,7 @@ func (s *Synchronizer) authenticateProposal(author string, data []byte) (*Transa
 func (s *Synchronizer) validateTransaction(transaction *Transaction) error {
 	state, err := s.groupCtx.GetState()
 	if err != nil {
-		return fmt.Errorf("could not get state of group '%s': Synchronizer.validateTransaction: %s", s.groupCtx.Group.GroupName, err)
+		return fmt.Errorf("could not get state of group '%s': Synchronizer.validateTransaction: %s", s.groupCtx.Group.Name, err)
 	}
 	if !bytes.Equal(state, transaction.PrevState) {
 		return fmt.Errorf("invlaid prev state in transaction proposal: Synchronizer.validateTransaction")
@@ -188,34 +244,18 @@ func (s *Synchronizer) validateTransaction(transaction *Transaction) error {
 // collects these approvals and upon receiving enough approvals it
 // commits the operation
 func (synch *Synchronizer) CollectApprovals(transaction *Transaction) {
-	channelName := synch.groupCtx.Group.GroupName + synch.groupCtx.User.Username
+	channelName := synch.groupCtx.Group.Name + synch.groupCtx.User.Name
 	channel := make(chan ipfs.PubsubMessage)
 	go synch.groupCtx.IPFS.PubsubSubscribe(channelName, channel)
 
 	for {
 		if len(transaction.SignedBy) > synch.groupCtx.Members.Length()/2 {
-			new_member := strings.Split(transaction.Operation.Data, " ")[1]
-			if err := synch.groupCtx.Storage.CreateGroupAccessCAPForUser(
-				new_member,
-				synch.groupCtx.Group.GroupName,
-				synch.groupCtx.Group.Boxer,
-				&synch.groupCtx.User.Boxer,
-				synch.groupCtx.Network,
-			); err != nil {
-				log.Printf("could not create ga cap for new member: Synchronizer.CollectApprovals: %s", err)
-				return
-			}
-			if err := synch.groupCtx.Storage.PublishPublicDir(synch.groupCtx.IPFS); err != nil {
-				log.Printf("could not publish public dir: Synchronizer.CollectApprovals: %s", err)
-				return
-			}
-
 			transactionBytes, err := json.Marshal(transaction)
 			if err != nil {
 				log.Printf("could not marshal transaction: Synchronizer.CollectApprovals: %s", err)
 				return
 			}
-			if err := synch.groupCtx.Network.GroupInvite(synch.groupCtx.Group.GroupName, transactionBytes); err != nil {
+			if err := synch.groupCtx.Network.GroupInvite(synch.groupCtx.Group.Name, transactionBytes); err != nil {
 				log.Printf("could not call invite transaction: Synchronizer.CollectApprovals: %s", err)
 				return
 			}

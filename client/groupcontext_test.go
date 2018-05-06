@@ -35,7 +35,7 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 	//gc2 := GroupContext{uc2.User, group, nil, memberList, &ActiveMemberList{}, &network, ipfs, uc2.Storage}
-	//synch2 := NewSynchronizer(user2.Username, &user2.Signer, &gc2)
+	//synch2 := NewSynchronizer(user2.Name, &user2.Signer, &gc2)
 	//fmt.Println(synch2)
 
 	err = gc1.Invite("goldmember")

@@ -61,7 +61,7 @@ func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, e
 	return crypto.Base64ToPublicKeyHash(string(base64PublicKeyHash))
 }
 
-func (n *Network) GetUserSigningKey(username string) (crypto.PublicSigningKey, error) {
+func (n *Network) GetUserVerifyKey(username string) (crypto.PublicSigningKey, error) {
 	base64PublicSigningKey, err := n.Get("/get/user/signkey", username)
 	if err != nil {
 		return nil, err
@@ -108,6 +108,15 @@ func (n *Network) GetGroupPrevState(groupName string, state []byte) ([]byte, err
 		return nil, fmt.Errorf("error while decoding state of group %s: Network.GetGroupPrevState: %s", groupName, err)
 	}
 	return prevState, nil
+}
+
+func (n *Network) GetGroupOperation(groupName string, state []byte) ([]byte, error) {
+	stateBase64 := base64.StdEncoding.EncodeToString(state)
+	operationBytes, err := n.Get("/get/group/operation", groupName, stateBase64)
+	if err != nil {
+		return nil, fmt.Errorf("error while getting operation of state %s of group %s: Network.GetGroupOperation: %s", state, groupName, err)
+	}
+	return operationBytes, nil
 }
 
 func (n *Network) GroupInvite(groupname string, transaction []byte) error {
@@ -169,7 +178,7 @@ func (n *Network) Put(path string, contentType string, data []byte) error {
 	return nil
 }
 
-func (n *Network) PutSigningKey(hash crypto.PublicKeyHash, key crypto.PublicSigningKey) error {
+func (n *Network) PutVerifyKey(hash crypto.PublicKeyHash, key crypto.PublicSigningKey) error {
 	jsonStr := fmt.Sprintf(`{"hash":"%s", "signkey":"%s"}`, hash.ToBase64(), key.ToBase64())
 	return n.Put(
 		"/put/signkey",

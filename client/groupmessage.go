@@ -32,7 +32,7 @@ type Approval struct {
 
 func (approval *Approval) Validate(rawTransaction []byte, groupSymKey crypto.SymmetricKey, network *nw.Network) error {
 	signed := append(approval.Signature, rawTransaction...)
-	verifyKey, err := network.GetUserSigningKey(approval.From)
+	verifyKey, err := network.GetUserVerifyKey(approval.From)
 	if err != nil {
 		return fmt.Errorf("could not get user verify key: ValidateApproval: %s", err)
 	}
@@ -41,9 +41,4 @@ func (approval *Approval) Validate(rawTransaction []byte, groupSymKey crypto.Sym
 		return fmt.Errorf("invalid approval: ValidateApproval")
 	}
 	return nil
-}
-
-type CommitMsg struct {
-	Proposal Proposal   `json:"proposal"`
-	SignedBy []SignedBy `json:"signed_by"`
 }

@@ -35,7 +35,7 @@ func TestUserContext_CreateGroup(t *testing.T) {
 		t.Fatal("no groups found")
 	}
 	for _, group := range uc.Groups {
-		fmt.Print(group.Group.GroupName + ": ")
+		fmt.Print(group.Group.Name + ": ")
 		fmt.Println(group.Members)
 	}
 }
@@ -60,12 +60,17 @@ func TestGroupInvite(t *testing.T) {
 	if err := uc1.CreateGroup(groupname); err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.Groups[0].Invite(uc2.User.Username); err != nil {
+	if err := uc1.Groups[0].Invite(uc2.User.Name); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(130 * time.Second)
 	if len(uc1.Groups) != len(uc2.Groups) {
 		t.Fatal("#groups do not match")
+	}
+	fmt.Println(uc1.Groups[0].Members.List)
+	fmt.Println(uc2.Groups[0].Members.List)
+	if len(uc1.Groups[0].Members.List) != len(uc2.Groups[0].Members.List) {
+		t.Fatal("members do not match")
 	}
 }
 
@@ -124,7 +129,7 @@ func TestGroupInviteWithMoreMembers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc3, err := NewUserContextFromSignIn(username3, "pw", "./test3/", &network, ipfs)
+	uc3, err := NewUserContextFromSignUp(username3, "pw", "./test3/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,6 +142,12 @@ func TestGroupInviteWithMoreMembers(t *testing.T) {
 	time.Sleep(130 * time.Second)
 	if len(uc1.Groups) != len(uc3.Groups) && len(uc2.Groups) != len(uc3.Groups) {
 		t.Fatal("#groups do not match")
+	}
+	if len(uc1.Groups[0].Members.List) != len(uc2.Groups[0].Members.List) {
+		t.Fatal("members do not match")
+	}
+	if len(uc1.Groups[0].Members.List) != len(uc3.Groups[0].Members.List) {
+		t.Fatal("members do not match")
 	}
 }
 
@@ -172,10 +183,10 @@ func TestSharingFromUserContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.AddAndShareFile("usercontext.go", []string{uc2.User.Username}); err != nil {
+	if err := uc1.AddAndShareFile("usercontext.go", []string{uc2.User.Name}); err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.AddAndShareFile("usercontext_test.go", []string{uc2.User.Username}); err != nil {
+	if err := uc1.AddAndShareFile("usercontext_test.go", []string{uc2.User.Name}); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(3 * time.Second)
