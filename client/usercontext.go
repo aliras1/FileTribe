@@ -127,26 +127,30 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 			fmt.Println("content of root directory: ")
 			ctx.List()
 		case "GROUP INVITE":
-			fmt.Println("group invite....")
+			log.Println("[*] Processing group invite message...")
+			log.Printf("\t--> Donwloading group access cap '%s'...", msg.Message)
 			cap, err := ctx.Storage.DownloadGroupAccessCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
 			if err != nil {
-				log.Println("====== E ======")
-				log.Println(err)
+				log.Printf("could not download ga cap: MessageProcessor: %s", err)
 				continue
 			}
 			if err := cap.Store(ctx.Storage); err != nil {
-				log.Println("====== E2 ======")
-				log.Println(err)
+				log.Printf("could not store ga cap: MessageProcessor: %s", err)
 				continue
 			}
 			cap.Boxer.RNG = rand.Reader
-			groupCtx, err := NewGroupContextFromCAP(cap, ctx.User, ctx.Network, ctx.IPFS, ctx.Storage)
+			group := &Group{
+				Boxer: cap.Boxer,
+				GroupName: cap.GroupName,
+			}
+
+			groupCtx, err := NewGroupContext(group, ctx.User, ctx.Network, ctx.IPFS, ctx.Storage)
 			if err != nil {
-				log.Println("====== A ======")
-				log.Println(err)
+				log.Printf("could not create group context from cap: MessageProcessor: %s", err)
 				continue
 			}
 			ctx.Groups = append(ctx.Groups, groupCtx)
+			fmt.Println(ctx.Groups)
 			//ctx.Storage.PublishPublicDir(ctx.IPFS)
 		}
 	}
@@ -178,7 +182,6 @@ func (uc *UserContext) CreateGroup(groupname string) error {
 		return err
 	}
 	uc.Groups = append(uc.Groups, groupCtx)
-	NewSynchronizer(uc.User.Username, &uc.User.Signer, groupCtx)
 	return nil
 }
 

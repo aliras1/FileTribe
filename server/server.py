@@ -161,7 +161,9 @@ def verify_transaction(group_name, transaction):
     digest = bytearray(base64.b64decode(transaction["prev_state"]))
     for b in bytearray(base64.b64decode(transaction["state"])):
         digest.append(b)
-    for b in bytearray(transaction["operation"], encoding='ascii'):
+    for b in bytearray(transaction["operation"]["type"], encoding='ascii'):
+        digest.append(b)
+    for b in bytearray(transaction["operation"]["data"], encoding='ascii'):
         digest.append(b)
     digest = [b for b in digest]
     valid_counter = 0
@@ -193,9 +195,22 @@ def group_invite(group_name):
     if not verify_transaction(group_name, transaction):
         print("OK")
         return Response()
+    inviter = transaction["operation"]["data"].split(" ")[0]
+    new_member = transaction["operation"]["data"].split(" ")[1]
+    print(new_member)
+    if new_member not in users:
+        print("user '{}' do not exists".format(new_member))
+        return Response()
+    
     groups[group_name]["state"] += [transaction["state"]]
     groups[group_name]["operation"] += [transaction["operation"]]
-    groups[group_name]["members"] += [transaction["operation"]]
+    groups[group_name]["members"] += [new_member]
+
+    if new_member in messages:
+        messages[new_member] += [{"from": inviter, "type": "GROUP INVITE", "message": group_name + ".json"}]
+    else:
+        messages[new_member] = [{"from": inviter, "type": "GROUP INVITE", "message": group_name + ".json"}]
+    
     print("OK")
     print(groups[group_name])
     return Response()
@@ -204,7 +219,6 @@ def group_invite(group_name):
 @app.route('/register/username/<username>', methods=['POST'])
 def signup(username):
     data = request.data
-    print(data.decode())
     if username in users:
         Response("user already exists")
     users[username] = data.decode()

@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"ipfs-share/crypto"
+	"log"
 )
 
 type Message struct {
@@ -42,13 +43,14 @@ func (n *Network) Get(path string, args ...string) ([]byte, error) {
 func (n *Network) GetGroupMembers(groupName string) ([]string, error) {
 	membersBytes, err := n.Get("/get/group/members", groupName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not get group members: Network.GetGroupMembers: %s", err)
 	}
-	fmt.Print("bytes: ")
-	fmt.Println(string(membersBytes))
 	members := []string{}
-	err = json.Unmarshal(membersBytes, &members)
-	return members, err
+	if err := json.Unmarshal(membersBytes, &members); err != nil {
+		log.Printf("memberbytes: '%s'\n", string(membersBytes))
+		return nil, fmt.Errorf("could not unmarshal group members: Network.GetGroupMembers: %s", err)
+	}
+	return members, nil
 }
 
 func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, error) {

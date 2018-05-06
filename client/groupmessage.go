@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 
@@ -11,6 +10,7 @@ import (
 )
 
 type GroupMessage struct {
+	From string `json:"from"`
 	Type string `json:"type"`
 	Data []byte `json:"data"`
 }
@@ -29,8 +29,8 @@ type Proposal struct {
 }
 
 type Approval struct {
-	From string   `json:"from"`
-	Hash [32]byte `json:"hash"`
+	From      string `json:"from"`
+	Signature []byte `json:"signature"`
 }
 
 func VerifyApproval(signedApproval []byte, network *nw.Network) (*Approval, [64]byte, error) {
@@ -51,7 +51,7 @@ func VerifyApproval(signedApproval []byte, network *nw.Network) (*Approval, [64]
 	return &approval, signature, nil
 }
 
-func ValidateApproval(psm *ipfs.PubsubMessage, hash [32]byte, groupSymKey crypto.SymmetricKey, network *nw.Network) (SignedBy, error) {
+func ValidateApproval(psm *ipfs.PubsubMessage, groupSymKey crypto.SymmetricKey, network *nw.Network) (SignedBy, error) {
 	signedBy := SignedBy{}
 	signedApproval, ok := psm.Decrypt(groupSymKey)
 	if !ok {
@@ -61,15 +61,7 @@ func ValidateApproval(psm *ipfs.PubsubMessage, hash [32]byte, groupSymKey crypto
 	if err != nil {
 		return signedBy, err
 	}
-	if !bytes.Equal(hash[:], approval.Hash[:]) {
-		return signedBy, errors.New("invalid approval hash")
-	}
-	return SignedBy{approval.From, signature}, nil
-}
-
-type SignedBy struct {
-	User      string   `json:"user"`
-	Signature [64]byte `json:"signature"`
+	return SignedBy{approval.From, signature[:]}, nil
 }
 
 type CommitMsg struct {

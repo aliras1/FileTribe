@@ -38,7 +38,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	//synch2 := NewSynchronizer(user2.Username, &user2.Signer, &gc2)
 	//fmt.Println(synch2)
 
-	err = gc1.Invite(uc1.User.Username, "goldmember")
+	err = gc1.Invite("goldmember")
 	if err != nil {
 		t.Fatal(err.Error())
 	}
