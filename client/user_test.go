@@ -64,7 +64,7 @@ func TestUserDataOnServer(t *testing.T) {
 		t.Fatal("the public key hashes do not match")
 	}
 	// Public signing key
-	publicSigningKey, err := network.GetUserSigningKey(username)
+	publicSigningKey, err := network.GetUserVerifyKey(username)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/whyrusleeping/tar-utils"
 	"io/ioutil"
 	"log"
 	"net"
@@ -15,6 +14,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/whyrusleeping/tar-utils"
 
 	"ipfs-share/crypto"
 )
@@ -50,12 +51,12 @@ func (psm *PubsubMessage) Decode() ([]byte, error) {
 }
 
 func (psm *PubsubMessage) Decrypt(key crypto.SymmetricKey) ([]byte, bool) {
-	signedGroupMsg, err := psm.Decode()
+	messageBytes, err := psm.Decode()
 	if err != nil {
 		log.Println(err)
 		return nil, false
 	}
-	return key.BoxOpen(signedGroupMsg)
+	return key.BoxOpen(messageBytes)
 }
 
 type IPFSNameResolvedHash struct {
@@ -154,7 +155,10 @@ func (i *IPFS) Get(filePath, hash string) error {
 	if err != nil {
 		return err
 	}
-	extractor := &tar.Extractor{filePath}
+	extractor := &tar.Extractor{
+		Path:     filePath,
+		Progress: nil,
+	}
 	return extractor.Extract(bytes.NewReader(b))
 }
 

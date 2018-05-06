@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"ipfs-share/crypto"
+	"log"
 )
 
 type Message struct {
@@ -42,13 +43,14 @@ func (n *Network) Get(path string, args ...string) ([]byte, error) {
 func (n *Network) GetGroupMembers(groupName string) ([]string, error) {
 	membersBytes, err := n.Get("/get/group/members", groupName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not get group members: Network.GetGroupMembers: %s", err)
 	}
-	fmt.Print("bytes: ")
-	fmt.Println(string(membersBytes))
 	members := []string{}
-	err = json.Unmarshal(membersBytes, &members)
-	return members, err
+	if err := json.Unmarshal(membersBytes, &members); err != nil {
+		log.Printf("memberbytes: '%s'\n", string(membersBytes))
+		return nil, fmt.Errorf("could not unmarshal group members: Network.GetGroupMembers: %s", err)
+	}
+	return members, nil
 }
 
 func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, error) {
@@ -59,7 +61,7 @@ func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, e
 	return crypto.Base64ToPublicKeyHash(string(base64PublicKeyHash))
 }
 
-func (n *Network) GetUserSigningKey(username string) (crypto.PublicSigningKey, error) {
+func (n *Network) GetUserVerifyKey(username string) (crypto.PublicSigningKey, error) {
 	base64PublicSigningKey, err := n.Get("/get/user/signkey", username)
 	if err != nil {
 		return nil, err
@@ -81,6 +83,52 @@ func (n *Network) GetUserIPFSAddr(username string) (string, error) {
 		return "", err
 	}
 	return string(bytesIPFSAddr), nil
+}
+
+func (n *Network) GetGroupState(groupName string) ([]byte, error) {
+	stateBase64Bytes, err := n.Get("/get/group/state", groupName)
+	if err != nil {
+		return nil, fmt.Errorf("error while getting state of group %s: Network.GetGroupState: %s", groupName, err)
+	}
+	state, err := base64.StdEncoding.DecodeString(string(stateBase64Bytes))
+	if err != nil {
+		return nil, fmt.Errorf("error while decoding state of group %s: Network.GetGroupState: %s", groupName, err)
+	}
+	return state, nil
+}
+
+func (n *Network) GetGroupPrevState(groupName string, state []byte) ([]byte, error) {
+	stateBase64 := base64.StdEncoding.EncodeToString(state)
+	prevStateBase64Bytes, err := n.Get("/get/group/prev/state", groupName, stateBase64)
+	if err != nil {
+		return nil, fmt.Errorf("error while getting previous state %s of group %s: Network.GetGroupPrevState: %s", state, groupName, err)
+	}
+	prevState, err := base64.StdEncoding.DecodeString(string(prevStateBase64Bytes))
+	if err != nil {
+		return nil, fmt.Errorf("error while decoding state of group %s: Network.GetGroupPrevState: %s", groupName, err)
+	}
+	return prevState, nil
+}
+
+func (n *Network) GetGroupOperation(groupName string, state []byte) ([]byte, error) {
+	stateBase64 := base64.StdEncoding.EncodeToString(state)
+	operationBytes, err := n.Get("/get/group/operation", groupName, stateBase64)
+	if err != nil {
+		return nil, fmt.Errorf("error while getting operation of state %s of group %s: Network.GetGroupOperation: %s", state, groupName, err)
+	}
+	return operationBytes, nil
+}
+
+func (n *Network) GroupInvite(groupname string, transaction []byte) error {
+	err := n.Put(
+		"/group/invite/"+groupname,
+		"application/json",
+		transaction,
+	)
+	if err != nil {
+		return fmt.Errorf("error while inviting into %s: Network.GroupInvite: %s", groupname, err)
+	}
+	return nil
 }
 
 func (n *Network) IsGroupRegistered(groupName string) (bool, error) {
@@ -130,7 +178,7 @@ func (n *Network) Put(path string, contentType string, data []byte) error {
 	return nil
 }
 
-func (n *Network) PutSigningKey(hash crypto.PublicKeyHash, key crypto.PublicSigningKey) error {
+func (n *Network) PutVerifyKey(hash crypto.PublicKeyHash, key crypto.PublicSigningKey) error {
 	jsonStr := fmt.Sprintf(`{"hash":"%s", "signkey":"%s"}`, hash.ToBase64(), key.ToBase64())
 	return n.Put(
 		"/put/signkey",

@@ -1,4 +1,8 @@
 from flask import Flask, abort, jsonify, request, Response
+import nacl.encoding
+import nacl.signing
+import nacl.exceptions
+import base64
 
 
 app = Flask(__name__)
@@ -29,14 +33,6 @@ def is_username_registered(username):
     if username not in users:
         return Response("false")
     return Response("true")
-
-
-@app.route('/get/group/members/<group_name>', methods=['GET'])
-def get_group_signing_key(group_name):
-    if group_name not in groups:
-        return Response()
-    print(groups)
-    return Response(jsonify(groups[group_name]["members"]).data)
 
 
 @app.route('/get/user/publickeyhash/<user>', methods=['GET'])
@@ -117,7 +113,112 @@ def register_group():
     state = data["state"]
     if group_name in groups:
         Response("group already exists")
-    groups[group_name] = {"members": [owner], "state": state, "last_op": None}
+    groups[group_name] = {"members": [owner], "state": [state], "operation": [None]}
+    print(groups[group_name])
+    return Response()
+
+
+@app.route('/get/group/members/<group_name>', methods=['GET'])
+def get_group_signing_key(group_name):
+    if group_name not in groups:
+        return Response()
+    return Response(jsonify(groups[group_name]["members"]).data)
+
+
+@app.route('/get/group/state/<group_name>', methods=['GET'])
+def get_group_state(group_name):
+    if group_name not in groups:
+        print("group {} does not exist: get_group_state()".format(group_name))
+        return Response("group does not exist")
+    return Response(groups[group_name]["state"][-1])
+
+
+@app.route('/get/group/operation/<group_name>/<state>', methods=['GET'])
+def get_group_operation(group_name, state):
+    if group_name not in groups:
+        print("group {} does not exist: get_group_operation()".format(group_name))
+        return Response()
+    if state not in groups[group_name]["state"]:
+        print("state '{0}' in group '{1}' does not exist: get_group_operation()".format(state, group_name))
+        return Response()
+    i = groups[group_name]["state"].index(state)
+    return Response(jsonify(groups[group_name]["operation"][i]).data)
+
+
+@app.route('/get/group/prev/state/<group_name>/<state>', methods=['GET'])
+def get_group_prev_state(group_name, state):
+    if group_name not in groups:
+        print("group {} does not exist: get_group_state()".format(group_name))
+        return Response("group does not exist")
+    if state not in groups[group_name]["state"]:
+        print("state not in group state history: get_group_prev_state()")
+    for i in range(1, len(groups[group_name]["state"])):
+        if groups[group_name]["state"][i] == state:
+            return Response(groups[group_name]["state"][i-1])
+    return Response()
+
+
+def verify(signed, verify_key):
+    try:
+        verify_key.verify(signed)
+    except nacl.exceptions.BadSignatureError:
+        return False
+    return True
+
+
+def verify_transaction(group_name, transaction):
+    if transaction["prev_state"] != groups[group_name]["state"][-1]:
+        return False
+
+    digest = bytearray(base64.b64decode(transaction["prev_state"]))
+    for b in bytearray(base64.b64decode(transaction["state"])):
+        digest.append(b)
+    for b in bytearray(transaction["operation"]["type"], encoding='ascii'):
+        digest.append(b)
+    for b in bytearray(transaction["operation"]["data"], encoding='ascii'):
+        digest.append(b)
+    digest = [b for b in digest]
+    valid_counter = 0
+    for signed_by in transaction["signed_by"]:
+        if valid_counter > len(groups[group_name]["members"]) / 2:
+            return True
+        username = signed_by["username"]
+        signature_base64 = signed_by["signature"]
+        signature = bytearray(base64.b64decode(signature_base64))
+        for b in digest:
+            signature.append(b)
+        signed = [b for b in signature]
+        h = users[username]
+        verify_key = nacl.signing.VerifyKey(h_to_sign_key[h], encoder=nacl.encoding.Base64Encoder) 
+
+        if not verify(signed, verify_key):
+            return False
+        valid_counter += 1
+    return True
+
+
+
+@app.route('/group/invite/<group_name>', methods=['POST'])
+def group_invite(group_name):
+    if group_name not in groups:
+        print("group {} does not exists: group_invite()".format(group_name))
+        return Response()
+    transaction = request.json
+    if not verify_transaction(group_name, transaction):
+        print("OK")
+        return Response()
+    inviter = transaction["operation"]["data"].split(" ")[0]
+    new_member = transaction["operation"]["data"].split(" ")[1]
+    print(new_member)
+    if new_member not in users:
+        print("user '{}' do not exists".format(new_member))
+        return Response()
+    
+    groups[group_name]["state"] += [transaction["state"]]
+    groups[group_name]["operation"] += [transaction["operation"]]
+    groups[group_name]["members"] += [new_member]
+    
+    print("OK")
     print(groups[group_name])
     return Response()
 
@@ -125,7 +226,6 @@ def register_group():
 @app.route('/register/username/<username>', methods=['POST'])
 def signup(username):
     data = request.data
-    print(data.decode())
     if username in users:
         Response("user already exists")
     users[username] = data.decode()

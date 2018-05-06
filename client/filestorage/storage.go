@@ -119,14 +119,17 @@ func (storage *Storage) createFileForUser(user, capName string, data []byte, box
 	forUserPath := storage.publicForPath + "/" + user
 	err := os.MkdirAll(forUserPath, 0770)
 	if err != nil {
-		fmt.Println(err) /* TODO check for permission errors */
+		log.Printf("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
 	}
 	otherPK, err := network.GetUserBoxingKey(path.Base(forUserPath))
 	if err != nil {
-		return err
+		return fmt.Errorf("could not get public boxing key: Storage.createFileForUser: %s", err)
 	}
 	encData := boxer.BoxSeal(data, &otherPK)
-	return ioutil.WriteFile(forUserPath+"/"+capName+".json", encData, 0644)
+	if err := ioutil.WriteFile(forUserPath+"/"+capName+".json", encData, 0644); err != nil {
+		return fmt.Errorf("could not write file: Storage.createFileForUser: %s", err)
+	}
+	return nil
 }
 
 // +------------------------------+
@@ -254,9 +257,12 @@ func (storage *Storage) CreateGroupAccessCAPForUser(user, group string, key cryp
 	cap := GroupAccessCAP{group, key}
 	capBytes, err := json.Marshal(cap)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not marshal group access capability: Storage.CreateGroupAccessCAPForUser: %s", err)
 	}
-	return storage.createFileForUser(user, group, capBytes, boxer, network)
+	if err := storage.createFileForUser(user, group, capBytes, boxer, network); err != nil {
+		return fmt.Errorf("could not create cap for user: Storage.CreateGroupAccessCAPForUser: %s", err)
+	}
+	return nil
 }
 
 // Stores the given group meta data in data/public/for/group/
@@ -279,11 +285,11 @@ func (storage *Storage) StoreGroupAccessCAP(group string, key crypto.SymmetricKe
 func (storage *Storage) DownloadGroupAccessCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) (*GroupAccessCAP, error) {
 	capBytes, err := downloadCAP(fromUser, username, capName, boxer, storage, network, ipfs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not download group cap: Storage.DownloadGroupAccessCAP: %s", err)
 	}
 	var cap GroupAccessCAP
 	if err := json.Unmarshal(capBytes, &cap); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not unmarshal ga cap: Storage.StoreGroupAccessCAP: %s", err)
 	}
 	return &cap, nil
 }
@@ -293,22 +299,21 @@ func (storage *Storage) DownloadGroupAccessCAP(fromUser, username, capName strin
 // +------------------------------+
 
 func (storage *Storage) PublishPublicDir(ipfs *ipfs.IPFS) error {
-	fmt.Println("[*] Publishing...")
+	log.Println("[*] Publishing...")
 	publicDir := storage.dataPath + "/public"
 	merkleNodes, err := ipfs.AddDir(publicDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not ipfs add dir: Storage.PublishPublicDir: %s", err)
 	}
 	for _, mn := range merkleNodes {
 		if strings.Compare(mn.Name, "public") == 0 {
-			err = ipfs.NamePublish(mn.Hash)
-			if err != nil {
-				return err
+			if err := ipfs.NamePublish(mn.Hash); err != nil {
+				return fmt.Errorf("could not ipfs name publish: Storage.PublishPublicDir: %s", err)
 			}
 			break
 		}
 	}
-	fmt.Println("[*] Publishing ended")
+	log.Println("[*] Publishing ended")
 	return nil
 }
 

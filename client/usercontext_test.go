@@ -35,7 +35,7 @@ func TestUserContext_CreateGroup(t *testing.T) {
 		t.Fatal("no groups found")
 	}
 	for _, group := range uc.Groups {
-		fmt.Print(group.Group.GroupName + ": ")
+		fmt.Print(group.Group.Name + ": ")
 		fmt.Println(group.Members)
 	}
 }
@@ -48,61 +48,29 @@ func TestGroupInvite(t *testing.T) {
 	}
 	username1 := "test_user"
 	username2 := "test_user2"
-	uc1, err := NewUserContextFromSignUp(username1, "pw", "./t1/", &network, ipfs)
+	uc1, err := NewUserContextFromSignUp(username1, "pw", "./test1/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc2, err := NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
+	uc2, err := NewUserContextFromSignUp(username2, "pw", "./test2/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.CreateGroup("test_group"); err != nil {
+	groupname := "test_group"
+	if err := uc1.CreateGroup(groupname); err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.Groups[0].Invite(username1, username2, &uc1.User.Boxer, &uc1.User.Signer.SecretKey); err != nil {
+	if err := uc1.Groups[0].Invite(uc2.User.Name); err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(uc2)
-	time.Sleep(45 * time.Second)
+	time.Sleep(130 * time.Second)
 	if len(uc1.Groups) != len(uc2.Groups) {
-		t.Fatal("#groups does not match")
+		t.Fatal("#groups do not match")
 	}
-	if uc1.Groups[0].Members.Length() != uc2.Groups[0].Members.Length() {
-		t.Fatal("#(group members) does not match")
-	}
-	for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
-		str1 := uc1.Groups[0].Members.List[i].Name
-		str2 := uc2.Groups[0].Members.List[i].Name
-		if strings.Compare(str1, str2) != 0 {
-			t.Fatal("group members do not match")
-		}
-	}
-	fmt.Println("invite 1st member succeeded")
-
-	username3 := "test_user3"
-	uc3, err := NewUserContextFromSignUp(username3, "pw", "./t3/", &network, ipfs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := uc1.Groups[0].Invite(username1, username3, &uc1.User.Boxer, &uc1.User.Signer.SecretKey); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(120 * time.Second)
-	fmt.Println(uc1.Groups[0].Members)
-	fmt.Println(uc2.Groups[0].Members)
-	fmt.Println(uc3.Groups[0].Members)
-	if len(uc1.Groups) != len(uc3.Groups) {
-		t.Fatal("#groups does not match")
-	}
-	if uc1.Groups[0].Members.Length() != uc3.Groups[0].Members.Length() {
-		t.Fatal("#(group members) does not match")
-	}
-	for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
-		str1 := uc1.Groups[0].Members.List[i].Name
-		str2 := uc3.Groups[0].Members.List[i].Name
-		if strings.Compare(str1, str2) != 0 {
-			t.Fatal("group members do not match")
-		}
+	fmt.Println(uc1.Groups[0].Members.List)
+	fmt.Println(uc2.Groups[0].Members.List)
+	if len(uc1.Groups[0].Members.List) != len(uc2.Groups[0].Members.List) {
+		t.Fatal("members do not match")
 	}
 }
 
@@ -114,11 +82,11 @@ func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
 	}
 	username1 := "test_user"
 	username2 := "test_user2"
-	uc1, err := NewUserContextFromSignIn(username1, "pw", "./t1/", &network, ipfs)
+	uc1, err := NewUserContextFromSignIn(username1, "pw", "./test1/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc2, err := NewUserContextFromSignIn(username2, "pw", "./t2/", &network, ipfs)
+	uc2, err := NewUserContextFromSignIn(username2, "pw", "./test2/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +109,45 @@ func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
 		if strings.Compare(str1, str2) != 0 {
 			t.Fatal("group members do not match")
 		}
+	}
+}
+
+func TestGroupInviteWithMoreMembers(t *testing.T) {
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
+	network := nw.Network{"http://0.0.0.0:6000"}
+	if err != nil {
+		t.Fatal("could not connect to ipfs daemon")
+	}
+	username1 := "test_user"
+	username2 := "test_user2"
+	username3 := "test_user3"
+	uc1, err := NewUserContextFromSignIn(username1, "pw", "./test1/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc2, err := NewUserContextFromSignIn(username2, "pw", "./test2/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc3, err := NewUserContextFromSignUp(username3, "pw", "./test3/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(uc1.Groups)
+	fmt.Println(uc2.Groups)
+	fmt.Println(uc3.Groups)
+	if err := uc1.Groups[0].Invite(username3); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(130 * time.Second)
+	if len(uc1.Groups) != len(uc3.Groups) && len(uc2.Groups) != len(uc3.Groups) {
+		t.Fatal("#groups do not match")
+	}
+	if len(uc1.Groups[0].Members.List) != len(uc2.Groups[0].Members.List) {
+		t.Fatal("members do not match")
+	}
+	if len(uc1.Groups[0].Members.List) != len(uc3.Groups[0].Members.List) {
+		t.Fatal("members do not match")
 	}
 }
 
@@ -168,18 +175,18 @@ func TestSharingFromUserContext(t *testing.T) {
 	if err != nil {
 		t.Fatal("could not connect to ipfs daemon")
 	}
-	uc1, err := NewUserContextFromSignIn("test_user", "pw", "./t1/", &network, ipfs)
+	uc1, err := NewUserContextFromSignUp("test_user", "pw", "./t1/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc2, err := NewUserContextFromSignIn("test_user2", "pw", "./t2/", &network, ipfs)
+	uc2, err := NewUserContextFromSignUp("test_user2", "pw", "./t2/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.AddAndShareFile("usercontext.go", []string{uc2.User.Username}); err != nil {
+	if err := uc1.AddAndShareFile("usercontext.go", []string{uc2.User.Name}); err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.AddAndShareFile("usercontext_test.go", []string{uc2.User.Username}); err != nil {
+	if err := uc1.AddAndShareFile("usercontext_test.go", []string{uc2.User.Name}); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(3 * time.Second)

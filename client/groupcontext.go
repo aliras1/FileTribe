@@ -3,18 +3,41 @@ package client
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"strings"
-	"time"
 
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
+
+type SignedBy struct {
+	Username  string `json:"username"`
+	Signature []byte `json:"signature"`
+}
+
+type Operation struct {
+	Type string `json:"type"`
+	Data string `json:"data"`
+}
+
+type Transaction struct {
+	PrevState []byte     `json:"prev_state"`
+	State     []byte     `json:"state"`
+	Operation Operation  `json:"operation"`
+	SignedBy  []SignedBy `json:"signed_by"`
+}
+
+func (t *Transaction) Bytes() []byte {
+	var transactionBytes []byte
+	transactionBytes = append(transactionBytes, t.PrevState...)
+	transactionBytes = append(transactionBytes, t.State...)
+	transactionBytes = append(transactionBytes, []byte(t.Operation.Type)...)
+	transactionBytes = append(transactionBytes, []byte(t.Operation.Data)...)
+	return transactionBytes
+}
 
 type Member struct {
 	Name      string                  `json:"name"`
@@ -23,6 +46,10 @@ type Member struct {
 
 type MemberList struct {
 	List []Member
+}
+
+func NewMemberList() *MemberList {
+	return &MemberList{ List:[]Member{}}
 }
 
 func (ml *MemberList) Length() int {
@@ -38,262 +65,145 @@ func (ml *MemberList) Hash() [32]byte {
 }
 
 func (ml *MemberList) Append(user string, network *nw.Network) *MemberList {
-	verifyKey, err := network.GetUserSigningKey(user)
+	verifyKey, err := network.GetUserVerifyKey(user)
 	if err != nil {
-		log.Println(err)
+		log.Printf("could not get user verify key: MemberList.Append: %s", err)
 		return ml
 	}
 	newList := make([]Member, len(ml.List))
 	copy(newList, ml.List)
 	newList = append(newList, Member{user, verifyKey})
-	return &MemberList{newList}
+	return &MemberList{List: newList}
 }
 
-func (ml *MemberList) Get(user string) (Member, bool) {
+func (ml *MemberList) Get(user string) *Member {
 	for i := 0; i < ml.Length(); i++ {
 		if strings.Compare(ml.List[i].Name, user) == 0 {
-			return ml.List[i], true
+			return &ml.List[i]
 		}
 	}
-	return Member{}, false
-}
-
-func (ml *MemberList) Save(groupName string, boxer crypto.SymmetricKey, storage *fs.Storage, ipfs *ipfs.IPFS) error {
-	// store only in public, as on sign in groups are
-	// built up from there
-	memberBytes, err := json.Marshal(ml)
-	if err != nil {
-		return err
-	}
-	return storage.SaveGroupData(groupName, "members.json", boxer, memberBytes)
-}
-
-func NewMemberListFromFile(filePath string, key crypto.SymmetricKey, network *nw.Network) (*MemberList, error) {
-	box, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-	memberBytes, ok := key.BoxOpen(box)
-	if !ok {
-		return nil, errors.New("could not decrypt file " + filePath)
-	}
-	var memberList MemberList
-	err = json.Unmarshal(memberBytes, &memberList)
-	if err != nil {
-		return nil, err
-	}
-	for i := 0; i < memberList.Length(); i++ {
-		user := memberList.List[i].Name
-		verifyKey, err := network.GetUserSigningKey(user)
-		if err != nil {
-			return nil, err
-		}
-		memberList.List[i].VerifyKey = verifyKey
-	}
-	return &memberList, nil
-}
-
-type ActiveMember struct {
-	Member
-	Time time.Time
-}
-
-type ActiveMemberList struct {
-	List []ActiveMember
-}
-
-func (aml *ActiveMemberList) Length() int {
-	return len(aml.List)
-}
-
-func (aml *ActiveMemberList) Get(user string) (ActiveMember, bool) {
-	for i := 0; i < aml.Length(); i++ {
-		if strings.Compare(aml.List[i].Name, user) == 0 {
-			return aml.List[i], true
-		}
-	}
-	return ActiveMember{}, false
-}
-
-func (aml *ActiveMemberList) Set(member Member) {
-	for i := 0; i < aml.Length(); i++ {
-		if strings.Compare(aml.List[i].Name, member.Name) == 0 {
-			aml.List[i].Time = time.Now()
-			return
-		}
-	}
-	newActiveMember := ActiveMember{member, time.Now()}
-	aml.List = append(aml.List, newActiveMember)
-}
-
-func (aml *ActiveMemberList) ToStrList() []string {
-	var list []string
-	for _, member := range aml.List {
-		list = append(list, member.Name)
-	}
-	return list
-}
-
-// Every 2 seconds checks if an appropriate heartbeat has came
-// from members. If a member's heartbeat is too old he is
-// considered as inactive and is removed from the list
-func (aml *ActiveMemberList) Refresh() {
-	for {
-		currentTime := time.Now()
-		var newList []ActiveMember
-		for i := 0; i < aml.Length(); i++ {
-			if currentTime.Sub(aml.List[i].Time) < 2*time.Second {
-				newList = append(newList, aml.List[i])
-			}
-		}
-		aml.List = newList
-		fmt.Println(aml.List)
-		time.Sleep(2 * time.Second)
-	}
+	return nil
 }
 
 type GroupContext struct {
-	User          *User
-	Group         *Group
-	Repo          []*fs.FilePTP
-	Members       *MemberList
-	ActiveMembers *ActiveMemberList
-	Network       *nw.Network
-	IPFS          *ipfs.IPFS
-	Storage       *fs.Storage
+	User         *User
+	Group        *Group
+	Repo         []*fs.FilePTP
+	Members      *MemberList
+	Synchronizer *Synchronizer
+	Network      *nw.Network
+	IPFS         *ipfs.IPFS
+	Storage      *fs.Storage
 }
 
-// By operations (e.g. Invite()) a given number of valid approvals
-// is needed to be able to commit the current operation. This func
-// collects these approvals and upon receiving enough approvals it
-// commits the operation
-func (gc *GroupContext) collectApprovals(username string, proposal Proposal) {
-	channelName := gc.Group.GroupName + username
-	channel := make(chan ipfs.PubsubMessage)
-	go gc.IPFS.PubsubSubscribe(channelName, channel)
-
-	commitMsg := CommitMsg{proposal, []SignedBy{}}
-	proposalMsgBytes, err := json.Marshal(proposal)
+func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
+	members := NewMemberList()
+	memberStrings, err := network.GetGroupMembers(group.Name)
 	if err != nil {
-		log.Println(err)
-		return
+		return nil, fmt.Errorf("could not get group members of '%s': NewGroupContext: %s", group.Name, err)
 	}
-	hash := sha256.Sum256(proposalMsgBytes)
-	for {
-		select {
-		case psm := <-channel:
-			signedBy, err := ValidateApproval(&psm, hash, gc.Group.Boxer, gc.Network)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-			commitMsg.SignedBy = append(commitMsg.SignedBy, signedBy)
-			if len(commitMsg.SignedBy) >= gc.Members.Length()/2 {
-				commitMsgBytes, err := json.Marshal(commitMsg)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-				groupMsg := GroupMessage{"commit", commitMsgBytes}
-				groupMsgBytes, err := json.Marshal(groupMsg)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-				if err := gc.sendToAll(groupMsgBytes); err != nil {
-					log.Println(err)
-					return
-				}
-				// current user also gets the commit message
-				// which will be executed in the Synchronizer
-				return
-			}
-
-		case <-time.After(5 * time.Second):
-			fmt.Println("timeout")
-			return
-		}
+	for _, member := range memberStrings {
+		members = members.Append(member, network)
 	}
+	groupContext := &GroupContext{
+		User:         user,
+		Group:        group,
+		Repo:         nil,
+		Members:      members,
+		Synchronizer: nil,
+		Network:      network,
+		IPFS:         ipfs,
+		Storage:      storage,
+	}
+	groupContext.Synchronizer = NewSynchronizer(groupContext)
+	return groupContext, nil
 }
 
-func (gc *GroupContext) Invite(username, newMember string, boxer *crypto.BoxingKeyPair, signer *crypto.SecretSigningKey) error {
-	if gc.Members.Length() == 1 {
-		cmd := InviteCMD{username, newMember}
-		return cmd.Execute(gc)
+func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
+	group := &Group{
+		Name:  cap.GroupName,
+		Boxer: cap.Boxer,
 	}
+	gc, err := NewGroupContext(group, user, network, ipfs, storage)
+	if err != nil {
+		return nil, fmt.Errorf("could not create group context: NewGroupContextFromCAP: %s", err)
+	}
+	return gc, nil
+}
 
+func (gc *GroupContext) CalculateState() []byte {
+	state := gc.Members.Hash()
+	return state[:]
+}
+
+func (gc *GroupContext) GetState() ([]byte, error) {
+	state, err := gc.Network.GetGroupState(gc.Group.Name)
+	if err != nil {
+		return nil, fmt.Errorf("could not retrieve state from network: GroupContext.GetState: %s", err)
+	}
+	return state, nil
+}
+
+func (gc *GroupContext) Invite(newMember string) error {
 	prevHash := gc.Members.Hash()
 	newMembers := gc.Members.Append(newMember, gc.Network)
 	newHash := newMembers.Hash()
 
-	proposalMsg := Proposal{username, "invite", []string{newMember}, prevHash, newHash}
-	go gc.collectApprovals(username, proposalMsg)
-
-	proposalMsgBytes, err := json.Marshal(proposalMsg)
-	if err != nil {
-		return err
+	operation := Operation{
+		Type: "INVITE",
+		Data: gc.User.Name + " " + newMember,
 	}
-	signedProposalMsg := signer.Sign(nil, proposalMsgBytes)
-	groupMsg := GroupMessage{"proposal", signedProposalMsg}
+
+	transaction := Transaction{
+		PrevState: prevHash[:],
+		State:     newHash[:],
+		Operation: operation,
+		SignedBy:  []SignedBy{},
+	}
+	// fork down the collection of signatures for the operation
+	go gc.Synchronizer.CollectApprovals(&transaction)
+
+	// send out the proposed transaction to be signed
+	transactionBytes, err := json.Marshal(transaction)
+	if err != nil {
+		return fmt.Errorf("could not marshal transaction: GroupContext.Invite: %s", err)
+	}
+	signedTransactionBytes := gc.User.Signer.SecretKey.Sign(nil, transactionBytes)
+	groupMsg := GroupMessage{
+		Type: "PROPOSAL",
+		From: gc.User.Name,
+		Data: signedTransactionBytes,
+	}
 	groupMsgBytes, err := json.Marshal(groupMsg)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not marshal group message: GroupContext.Invite: %s", err)
 	}
-	gc.sendToAll(groupMsgBytes)
+	if err := gc.sendToAll(groupMsgBytes); err != nil {
+		return fmt.Errorf("could not send group message: GroupContext.Invite: %s", err)
+	}
 	return nil
 }
 
 func (gc *GroupContext) Save() error {
-	if err := gc.Group.Save(gc.Storage); err != nil {
-		return err
-	}
-	if err := gc.Members.Save(gc.Group.GroupName, gc.Group.Boxer, gc.Storage, gc.IPFS); err != nil {
-		return err
-	}
-	// should take out publish public dir from here, because it
-	// publishes too often by signing in
-	return gc.Storage.PublishPublicDir(gc.IPFS)
-	//return nil
+	return fmt.Errorf("not implemented: GroupContext.Save")
 }
 
 // Sends pubsub messages to all members of the group
 func (gc *GroupContext) sendToAll(data []byte) error {
 	encGroupMsg := gc.Group.Boxer.BoxSeal(data)
-	return gc.IPFS.PubsubPublish(gc.Group.GroupName, encGroupMsg)
+	if err := gc.IPFS.PubsubPublish(gc.Group.Name, encGroupMsg); err != nil {
+		return fmt.Errorf("could not pubsub publish: GroupContext.sendToAll: %s", err)
+	}
+	return nil
 }
 
 // Pulls from others the given group meta data
 func (gc *GroupContext) PullGroupData(data string) error {
-	groupName := gc.Group.GroupName
-	ipfsHash, err := gc.Storage.GroupDataChanged(gc.Group.GroupName, data, gc.ActiveMembers.ToStrList(), gc.IPFS, gc.Network)
-	fmt.Println("== PULL members.json")
-	fmt.Println("ipfs hash: " + ipfsHash)
-	if err != nil {
-		fmt.Println("error: " + err.Error())
-		return err
-	}
-	if strings.Compare(ipfsHash, "") != 0 {
-		if err := gc.Storage.DownloadGroupData(groupName, data, ipfsHash, gc.IPFS, gc.Network); err != nil {
-			return err
-		}
-	}
-	if err := gc.LoadGroupData(data); err != nil {
-		return err
-	}
-	return nil
+	return fmt.Errorf("not implemented: GroupContext.PullGroupData")
 }
 
 // Loads the locally available group meta data (stored in the
 // data/public/for/GROUP/ directory).
 func (gc *GroupContext) LoadGroupData(data string) error {
-	memberFilePath := gc.Storage.GetGroupDataPath(gc.Group.GroupName, data)
-	if !fs.FileExists(memberFilePath) {
-		return nil
-	}
-	pml, err := NewMemberListFromFile(memberFilePath, gc.Group.Boxer, gc.Network)
-	if err != nil {
-		return err
-	}
-	gc.Members = pml
-	return nil
+	return fmt.Errorf("not implemented GroupContext.LoadGroupData")
 }

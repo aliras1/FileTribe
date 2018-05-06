@@ -19,10 +19,13 @@ type GroupAccessCAP struct {
 func (cap *GroupAccessCAP) Store(storage *Storage) error {
 	bytesJSON, err := json.Marshal(cap)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not marshal group access capability: GroupAccessCAP.Store: %s", err)
 	}
 	capPath := storage.capsGAPath + "/" + cap.GroupName + ".json"
-	return WriteFile(capPath, bytesJSON)
+	if err := WriteFile(capPath, bytesJSON); err != nil {
+		return fmt.Errorf("could not write group cap file: GroupAccessCapability.Store: %s", err)
+	}
+	return nil
 }
 
 type ReadCAP struct {
