@@ -48,11 +48,11 @@ func TestGroupInvite(t *testing.T) {
 	}
 	username1 := "test_user"
 	username2 := "test_user2"
-	uc1, err := NewUserContextFromSignUp(username1, "pw", "./t1/", &network, ipfs)
+	uc1, err := NewUserContextFromSignUp(username1, "pw", "./test1/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc2, err := NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
+	uc2, err := NewUserContextFromSignUp(username2, "pw", "./test2/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestGroupInvite(t *testing.T) {
 	if err := uc1.Groups[0].Invite(uc2.User.Username); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(120 * time.Second)
+	time.Sleep(130 * time.Second)
 	if len(uc1.Groups) != len(uc2.Groups) {
 		t.Fatal("#groups do not match")
 	}
@@ -77,11 +77,11 @@ func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
 	}
 	username1 := "test_user"
 	username2 := "test_user2"
-	uc1, err := NewUserContextFromSignUp(username1, "pw", "./t1/", &network, ipfs)
+	uc1, err := NewUserContextFromSignIn(username1, "pw", "./test1/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc2, err := NewUserContextFromSignUp(username2, "pw", "./t2/", &network, ipfs)
+	uc2, err := NewUserContextFromSignIn(username2, "pw", "./test2/", &network, ipfs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,6 +104,39 @@ func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
 		if strings.Compare(str1, str2) != 0 {
 			t.Fatal("group members do not match")
 		}
+	}
+}
+
+func TestGroupInviteWithMoreMembers(t *testing.T) {
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
+	network := nw.Network{"http://0.0.0.0:6000"}
+	if err != nil {
+		t.Fatal("could not connect to ipfs daemon")
+	}
+	username1 := "test_user"
+	username2 := "test_user2"
+	username3 := "test_user3"
+	uc1, err := NewUserContextFromSignIn(username1, "pw", "./test1/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc2, err := NewUserContextFromSignIn(username2, "pw", "./test2/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc3, err := NewUserContextFromSignIn(username3, "pw", "./test3/", &network, ipfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(uc1.Groups)
+	fmt.Println(uc2.Groups)
+	fmt.Println(uc3.Groups)
+	if err := uc1.Groups[0].Invite(username3); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(130 * time.Second)
+	if len(uc1.Groups) != len(uc3.Groups) && len(uc2.Groups) != len(uc3.Groups) {
+		t.Fatal("#groups do not match")
 	}
 }
 

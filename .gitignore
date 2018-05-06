@@ -2,3 +2,5 @@
 *.iml
 client/data
 .vscode
+venv
+test*

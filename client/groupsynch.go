@@ -20,20 +20,22 @@ type Synchronizer struct {
 }
 
 func NewSynchronizer(groupCtx *GroupContext) *Synchronizer {
+	log.Printf("[*] Creating synchronizer...")
 	var synch Synchronizer
 	synch.groupCtx = groupCtx
 	synch.channelPubSub = make(chan ipfs.PubsubMessage)
 
 	go synch.groupCtx.IPFS.PubsubSubscribe(synch.groupCtx.Group.GroupName, synch.channelPubSub)
 	go synch.MessageProcessor()
-	go synch.heartBeat()
+	//go synch.heartBeat()
 
 	return &synch
 }
 
 func (s *Synchronizer) MessageProcessor() {
-	fmt.Println("synch forking...")
+	log.Printf("[*] Synchronizer for user '%s' group '%s' is running...", s.groupCtx.User.Username, s.groupCtx.Group.GroupName)
 	for pubsubMessage := range s.channelPubSub {
+		log.Printf("--> user '%s' in group '%s' recieved a message", s.groupCtx.User.Username, s.groupCtx.Group.GroupName)
 		groupMessageBytes, ok := pubsubMessage.Decrypt(s.groupCtx.Group.Boxer)
 		if !ok {
 			log.Printf("could not decrypt group message: Synchronizer: MessageProcessor")
@@ -222,10 +224,23 @@ func (synch *Synchronizer) CollectApprovals(transaction *Transaction) {
 
 		select {
 		case pubsubMessage := <-channel:
-			signedBy, err := ValidateApproval(&pubsubMessage, synch.groupCtx.Group.Boxer, synch.groupCtx.Network)
-			if err != nil {
+			approvalBytes, ok := pubsubMessage.Decrypt(synch.groupCtx.Group.Boxer)
+			if !ok {
+				log.Printf("invalid group pubsub msg: Synchronizer.CollectApprovals")
+				continue
+			}
+			var approval Approval
+			if err := json.Unmarshal(approvalBytes, &approval); err != nil {
+				log.Printf("could not unmarshal approval: Synchronizer.CollectApprovals: %s", err)
+				continue
+			}
+			if err := approval.Validate(transaction.Bytes(), synch.groupCtx.Group.Boxer, synch.groupCtx.Network); err != nil {
 				log.Printf("could not validate approval: Synchronizer.CollectApprovals: %s", err)
 				continue
+			}
+			signedBy := SignedBy{
+				Username: approval.From,
+				Signature: approval.Signature,
 			}
 			transaction.SignedBy = append(transaction.SignedBy, signedBy)
 		case <-time.After(5 * time.Second):

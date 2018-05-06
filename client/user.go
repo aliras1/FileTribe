@@ -94,10 +94,5 @@ func SignIn(username, password string, network *nw.Network) (*User, error) {
 }
 
 func (u *User) SignTransaction(transaction *Transaction) []byte {
-	var rawTransaction []byte
-	rawTransaction = append(rawTransaction, transaction.PrevState...)
-	rawTransaction = append(rawTransaction, transaction.State...)
-	rawTransaction = append(rawTransaction, []byte(transaction.Operation.Type)...)
-	rawTransaction = append(rawTransaction, []byte(transaction.Operation.Data)...)
-	return u.Signer.SecretKey.Sign(nil, rawTransaction)[:64]
+	return u.Signer.SecretKey.Sign(nil, transaction.Bytes())[:64]
 }

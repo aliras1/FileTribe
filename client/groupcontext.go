@@ -30,6 +30,15 @@ type Transaction struct {
 	SignedBy  []SignedBy `json:"signed_by"`
 }
 
+func (t *Transaction) Bytes() []byte {
+	var transactionBytes []byte
+	transactionBytes = append(transactionBytes, t.PrevState...)
+	transactionBytes = append(transactionBytes, t.State...)
+	transactionBytes = append(transactionBytes, []byte(t.Operation.Type)...)
+	transactionBytes = append(transactionBytes, []byte(t.Operation.Data)...)
+	return transactionBytes
+}
+
 type Member struct {
 	Name      string                  `json:"name"`
 	VerifyKey crypto.PublicSigningKey `json:"-"`
@@ -111,7 +120,15 @@ func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.I
 }
 
 func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
-	return nil, fmt.Errorf("not implemented: NewGroupContextFromCAP")
+	group := &Group{
+		GroupName: cap.GroupName,
+		Boxer:     cap.Boxer,
+	}
+	gc, err := NewGroupContext(group, user, network, ipfs, storage)
+	if err != nil {
+		return nil, fmt.Errorf("could not create group context: NewGroupContextFromCAP: %s", err)
+	}
+	return gc, nil
 }
 
 func (gc *GroupContext) CalculateState() []byte {

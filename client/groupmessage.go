@@ -1,12 +1,9 @@
 package client
 
 import (
-	"encoding/json"
-	"errors"
-
 	"ipfs-share/crypto"
-	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
+	"fmt"
 )
 
 type GroupMessage struct {
@@ -33,35 +30,17 @@ type Approval struct {
 	Signature []byte `json:"signature"`
 }
 
-func VerifyApproval(signedApproval []byte, network *nw.Network) (*Approval, [64]byte, error) {
-	var signature [64]byte
-	var approval Approval
-	if err := json.Unmarshal(signedApproval[64:], &approval); err != nil {
-		return nil, signature, errors.New("unmarshal: " + err.Error())
-	}
+func (approval *Approval) Validate(rawTransaction []byte, groupSymKey crypto.SymmetricKey, network *nw.Network) error {
+	signed := append(approval.Signature, rawTransaction...)
 	verifyKey, err := network.GetUserSigningKey(approval.From)
 	if err != nil {
-		return nil, signature, errors.New("could not get verify key: " + err.Error())
+		return fmt.Errorf("could not get user verify key: ValidateApproval: %s", err)
 	}
-	_, ok := verifyKey.Open(nil, signedApproval)
+	_, ok := verifyKey.Open(nil, signed)
 	if !ok {
-		return nil, signature, errors.New("invalid approval")
+		return fmt.Errorf("invalid approval: ValidateApproval")
 	}
-	copy(signature[:], signedApproval[:64])
-	return &approval, signature, nil
-}
-
-func ValidateApproval(psm *ipfs.PubsubMessage, groupSymKey crypto.SymmetricKey, network *nw.Network) (SignedBy, error) {
-	signedBy := SignedBy{}
-	signedApproval, ok := psm.Decrypt(groupSymKey)
-	if !ok {
-		return signedBy, errors.New("invalid group pubsub msg")
-	}
-	approval, signature, err := VerifyApproval(signedApproval, network)
-	if err != nil {
-		return signedBy, err
-	}
-	return SignedBy{approval.From, signature[:]}, nil
+	return nil
 }
 
 type CommitMsg struct {

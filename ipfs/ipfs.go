@@ -51,12 +51,12 @@ func (psm *PubsubMessage) Decode() ([]byte, error) {
 }
 
 func (psm *PubsubMessage) Decrypt(key crypto.SymmetricKey) ([]byte, bool) {
-	signedGroupMsg, err := psm.Decode()
+	messageBytes, err := psm.Decode()
 	if err != nil {
 		log.Println(err)
 		return nil, false
 	}
-	return key.BoxOpen(signedGroupMsg)
+	return key.BoxOpen(messageBytes)
 }
 
 type IPFSNameResolvedHash struct {

@@ -30,24 +30,32 @@ type UserContext struct {
 func NewUserContextFromSignUp(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
 	ipfsID, err := ipfs.ID()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not get ipfs id: NewUserContextFromSignUp: %s", err)
 	}
 	user, err := SignUp(username, password, ipfsID.ID, network)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not sign up: NewUserContextFromSignUp: %s", err)
 	}
-	return NewUserContext(dataPath, user, network, ipfs), nil
+	uc, err := NewUserContext(dataPath, user, network, ipfs)
+	if err != nil {
+		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignUp: %s", err)
+	}
+	return uc, nil
 }
 
 func NewUserContextFromSignIn(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
 	user, err := SignIn(username, password, network)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not sign in: NewUserContextFromSignIn: %s", err)
 	}
-	return NewUserContext(dataPath, user, network, ipfs), nil
+	uc, err := NewUserContext(dataPath, user, network, ipfs)
+	if err != nil {
+		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignIn: %s", err)
+	}
+	return uc, nil
 }
 
-func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs.IPFS) *UserContext {
+func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
 	var err error
 	var uc UserContext
 	uc.User = user
@@ -58,11 +66,11 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	uc.Groups = []*GroupContext{}
 	uc.Repo, err = uc.Storage.BuildRepo(user.Username, &user.Boxer, network, ipfs)
 	if err != nil {
-		log.Println(err)
+		return nil, fmt.Errorf("could not build file repo: NewUserContext: %s", err)
 	}
 	ipfsID, err := ipfs.ID()
 	if err != nil {
-		log.Printf("could not get ipfs id: NewUserContect: %s", err)
+		return nil, fmt.Errorf("could not get ipfs id: NewUserContect: %s", err)
 	}
 	uc.IPNSAddr = ipfsID.ID
 
@@ -72,10 +80,12 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	go MessageProcessor(uc.channelMsg, uc.User.Username, &uc)
 
 	if err := uc.BuildGroups(); err != nil {
-		log.Println(err)
+		return nil, fmt.Errorf("could not build groups: NewUserContext: %s", err)
 	}
-	uc.Storage.PublishPublicDir(uc.IPFS)
-	return &uc
+	if err := uc.Storage.PublishPublicDir(uc.IPFS); err != nil {
+		return nil, fmt.Errorf("could not publish public dir: NewUserContext: %s", err)
+	}
+	return &uc, nil
 }
 
 func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Message, channelSig chan os.Signal) {
@@ -139,12 +149,7 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 				continue
 			}
 			cap.Boxer.RNG = rand.Reader
-			group := &Group{
-				Boxer: cap.Boxer,
-				GroupName: cap.GroupName,
-			}
-
-			groupCtx, err := NewGroupContext(group, ctx.User, ctx.Network, ctx.IPFS, ctx.Storage)
+			groupCtx, err := NewGroupContextFromCAP(cap, ctx.User, ctx.Network, ctx.IPFS, ctx.Storage)
 			if err != nil {
 				log.Printf("could not create group context from cap: MessageProcessor: %s", err)
 				continue
@@ -157,17 +162,19 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 }
 
 func (uc *UserContext) BuildGroups() error {
+	log.Printf("[*] Building groups for user '%s'...", uc.User.Username)
 	caps, err := uc.Storage.GetGroupCAPs()
 	if err != nil {
-		return err
+		return fmt.Errorf("could not get group caps: UserContext.BuildGroups: %s", err)
 	}
 	for _, cap := range caps {
 		groupCtx, err := NewGroupContextFromCAP(&cap, uc.User, uc.Network, uc.IPFS, uc.Storage)
 		if err != nil {
-			return err
+			return fmt.Errorf("could not create new group context: UserContext.BuildGroups: %s", err)
 		}
 		uc.Groups = append(uc.Groups, groupCtx)
 	}
+	log.Printf("<-- Building groups ended")
 	return nil
 }
 
