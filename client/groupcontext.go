@@ -13,31 +13,6 @@ import (
 	nw "ipfs-share/network"
 )
 
-type SignedBy struct {
-	Username  string `json:"username"`
-	Signature []byte `json:"signature"`
-}
-
-type Operation struct {
-	Type string `json:"type"`
-	Data string `json:"data"`
-}
-
-type Transaction struct {
-	PrevState []byte     `json:"prev_state"`
-	State     []byte     `json:"state"`
-	Operation Operation  `json:"operation"`
-	SignedBy  []SignedBy `json:"signed_by"`
-}
-
-func (t *Transaction) Bytes() []byte {
-	var transactionBytes []byte
-	transactionBytes = append(transactionBytes, t.PrevState...)
-	transactionBytes = append(transactionBytes, t.State...)
-	transactionBytes = append(transactionBytes, []byte(t.Operation.Type)...)
-	transactionBytes = append(transactionBytes, []byte(t.Operation.Data)...)
-	return transactionBytes
-}
 
 type Member struct {
 	Name      string                  `json:"name"`
@@ -149,15 +124,12 @@ func (gc *GroupContext) Invite(newMember string) error {
 	newMembers := gc.Members.Append(newMember, gc.Network)
 	newHash := newMembers.Hash()
 
-	operation := Operation{
-		Type: "INVITE",
-		Data: gc.User.Name + " " + newMember,
-	}
 
+	operation := NewInviteOperation(gc.User.Name, newMember)
 	transaction := Transaction{
 		PrevState: prevHash[:],
 		State:     newHash[:],
-		Operation: operation,
+		Operation: operation.RawOperation(),
 		SignedBy:  []SignedBy{},
 	}
 	// fork down the collection of signatures for the operation

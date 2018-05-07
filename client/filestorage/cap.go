@@ -102,10 +102,7 @@ func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 	fmt.Println(bytesEnc)
 	bytesDecr, success := boxer.BoxOpen(bytesEnc, &otherPK)
 	if !success {
-		fmt.Println("trying decrypt cap")
-		fmt.Println(fromUser)
-		fmt.Println(ipnsPath)
-		return nil, fmt.Errorf("could not decrypt cap '%s': downloadCAP: %s", capName, err)
+		return nil, fmt.Errorf("could not decrypt cap '%s' from user '%s' with path '%s': downloadCAP", capName, fromUser, ipnsPath)
 	}
 	os.Remove(tmpFilePath)
 	return bytesDecr, nil
