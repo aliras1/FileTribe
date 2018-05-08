@@ -77,6 +77,21 @@ func (cmd *CMDGroupInvite) Execute(ctx *UserContext, network *nw.Network, ipfs *
 	return ctx, fmt.Errorf("no group '%s' found in group repo: CMDGroupIOnvite.Execute", cmd.GroupName)
 }
 
+type CMDPTPAddAndShareFile struct {
+	FilePath string
+	ShareWith string
+}
+
+func (cmd *CMDPTPAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("no active user context CMDPTPAddAndShareFile.Execute")
+	}
+	if err := ctx.AddAndShareFile(cmd.FilePath, []string{cmd.ShareWith}); err != nil {
+		return ctx, fmt.Errorf("could not add and share file '%s' with user '%s': CMDPTPAddAndShareFile.Execute: %s", cmd.FilePath, cmd.ShareWith, err)
+	}
+	return ctx, nil
+}
+
 func NewCommand(raw string) (ICommand, error) {
 	args := strings.Split(raw, " ")
 	if len(args) < 1 {
@@ -116,6 +131,15 @@ func NewCommand(raw string) (ICommand, error) {
 		cmd := CMDGroupInvite{
 			GroupName: args[1],
 			NewMember: args[2],
+		}
+		return &cmd, nil
+	case "ptpshare":
+		if len(args) < 3 {
+			return nil, fmt.Errorf("invalid # args in 'ptpshare' command")
+		}
+		cmd := CMDPTPAddAndShareFile{
+			FilePath: args[1],
+			ShareWith: args[2],
 		}
 		return &cmd, nil
 	default:
