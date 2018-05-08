@@ -103,6 +103,7 @@ func (i *InviteOperation) Execute(groupCtx *GroupContext) error {
 	}
 	// the proposer invites the new member
 	if strings.Compare(i.From, groupCtx.User.Name) == 0 {
+		log.Printf("\t--> Invite proposer sending chain message...")
 		if err := groupCtx.Network.SendMessage(
 			i.From,
 			i.NewMember,

@@ -3,7 +3,7 @@ import nacl.encoding
 import nacl.signing
 import nacl.exceptions
 import base64
-
+import socket
 
 app = Flask(__name__)
 users = {
@@ -255,5 +255,12 @@ def get_messages(username):
 
 if __name__ == "__main__":
     import os
+    import logging
+
     os.environ['NLS_LANG'] = '.UTF8'
-    app.run(debug=True, host="0.0.0.0", port=6000)
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    host = socket.gethostbyname(socket.gethostname())
+    print(host)
+    #host = socket.getfqdn(socket.gethostname())
+    app.run(debug=True, host=host, port=6000)

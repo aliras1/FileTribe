@@ -151,15 +151,18 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 }
 
 func (i *IPFS) Get(filePath, hash string) error {
-	b, err := i.getRequest("get?arg=" + hash)
+	b, err := i.getRequest("get?arg=" + hash + "&archive=true")
 	if err != nil {
-		return err
+		return fmt.Errorf("error while ipfs api request: IPFS.Get: %s", err)
 	}
 	extractor := &tar.Extractor{
 		Path:     filePath,
 		Progress: nil,
 	}
-	return extractor.Extract(bytes.NewReader(b))
+	if err := extractor.Extract(bytes.NewReader(b)); err != nil {
+		return fmt.Errorf("error while extracting: IPFS.Get: %s", err)
+	}
+	return nil
 }
 
 func (i *IPFS) ID() (*IPFSID, error) {
@@ -204,36 +207,36 @@ func (i *IPFS) NameResolve(ipnsPath string) (string, error) {
 }
 
 func (i *IPFS) PubsubPublish(channel string, message []byte) error {
-	_, err := i.getRequest("pubsub/pub?arg=" + channel + "&arg=" + base64.URLEncoding.EncodeToString(message))
-	return err
+	if _, err := i.getRequest("pubsub/pub?arg=" + channel + "&arg=" + base64.URLEncoding.EncodeToString(message)); err != nil {
+		return fmt.Errorf("could not make get request: IPFS.PubsubPublish: %s", err)
+	}
+	return nil
 }
 
-func (i *IPFS) PubsubSubscribe(channel string, dst chan PubsubMessage) error {
+func (i *IPFS) PubsubSubscribe(channel string, dst chan PubsubMessage) {
 	conn, err := net.Dial("tcp", "127.0.0.1:5001")
 	if err != nil {
-		return err
+		log.Printf("could not reach ipfs daemon: IPFS.PubsubSubscribe: %s", err)
 	}
 	req := "GET /api/v0/pubsub/sub?arg=" + channel + " HTTP/1.1\nHost: localhost:5001\n\n"
 	conn.Write([]byte(req))
-	_, err = bufio.NewReader(conn).ReadString('\n') // HTTP 200 response
-	if err != nil {
-		return err
+	if _, err := bufio.NewReader(conn).ReadString('\n'); err != nil { // HTTP 200 response
+		log.Printf("could not read 'HTTP 200' response from ipfs daemon: IPFS.PubsubSubscribe: %s", err)
 	}
 	// pubsub messages
 	for {
 		rawStr, err := bufio.NewReader(conn).ReadString('}')
 		if err != nil {
-			return err
+			log.Printf("could not read response from ipfs daemon: IPFS.PubsubSubscribe: %s", err)
 		}
 		split := strings.Split(rawStr, "\n")
 		if len(split) < 2 {
-			log.Println("invalid pubsub message")
+			log.Println("invalid pubsub message: IPFS.PubsubSubscribe")
 			continue
 		}
 		var msg PubsubMessage
-		err = json.Unmarshal([]byte((split)[1]), &msg)
-		if err != nil {
-			log.Println(err)
+		if err := json.Unmarshal([]byte((split)[1]), &msg); err != nil {
+			log.Printf("could not unmarshal pubsub message: IPFS.PubsubSubscribe: %s", err)
 			continue
 		}
 		dst <- msg
@@ -267,9 +270,12 @@ func (i *IPFS) Version() (string, error) {
 func (i *IPFS) getRequest(path string) ([]byte, error) {
 	resp, err := http.Get(i.host + ":" + i.port + "/" + i.version + path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error while http.get: IPFS.getRequest: %s", err)
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error while reading http response body: IPFS.getRequest: %s", err)
+	}
 	return body, nil
 }

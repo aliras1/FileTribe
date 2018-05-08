@@ -51,6 +51,7 @@ func (synch *Synchronizer) StateListener() {
 				continue
 			}
 			if !bytes.Equal(state, synch.groupCtx.CalculateState()) {
+				log.Printf("[*] Group state changed")
 				go func() {
 					operationBytes, err := synch.groupCtx.Network.GetGroupOperation(groupName, state)
 					if err != nil {
