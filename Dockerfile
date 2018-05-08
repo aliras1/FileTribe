@@ -1,6 +1,6 @@
 FROM ubuntu:latest
 
-ENV GOVERSION 1.9
+ENV GOVERSION 1.10
 ENV GOPATH /root/go
 
 RUN export PATH=${PATH}:${GOPATH}/bin
