@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"ipfs-share/ipfs"
@@ -52,18 +51,19 @@ func (synch *Synchronizer) StateListener() {
 				continue
 			}
 			if !bytes.Equal(state, synch.groupCtx.CalculateState()) {
+				log.Printf("[*] Group state changed")
 				go func() {
 					operationBytes, err := synch.groupCtx.Network.GetGroupOperation(groupName, state)
 					if err != nil {
 						log.Printf("could not get operation: Synchronizer.StateListener: %s", err)
 						return
 					}
-					var operation Operation
+					var operation RawOperation
 					if err := json.Unmarshal(operationBytes, &operation); err != nil {
 						log.Printf("could not unmarshal operation: Synchronizer.StateListener: %s", err)
 						return
 					}
-					cmd, err := NewCommand(&operation)
+					cmd, err := NewOperation(&operation)
 					if err != nil {
 						log.Printf("could not create command from operation: Synchronizer.StateListener: %s", err)
 						return
@@ -217,26 +217,14 @@ func (s *Synchronizer) validateTransaction(transaction *Transaction) error {
 		return fmt.Errorf("invlaid prev state in transaction proposal: Synchronizer.validateTransaction")
 	}
 
-	args := strings.Split(transaction.Operation.Data, " ")
-
-	switch transaction.Operation.Type {
-	case "INVITE":
-		if len(args) < 2 {
-			return fmt.Errorf("invalid #Args in invite transaction: Synchronizer.validateTransaction")
-		}
-		// inviter is args[0]. it should be checked, if he has rights to invite
-		newMember := args[1]
-
-		newMembers := s.groupCtx.Members.Append(newMember, s.groupCtx.Network)
-		newState := newMembers.Hash()
-		if !bytes.Equal(newState[:], transaction.State) {
-			return fmt.Errorf("invalid new state in transaction proposal: Synchronizer.validateTransaction")
-		}
-		return nil
-
-	default:
-		return fmt.Errorf("invalid operation type: Synchronizer.vlaidateTransaction")
+	operation, err := NewOperation(&transaction.Operation)
+	if err != nil {
+		return fmt.Errorf("could not unmarshal operation: Synchronizer.validateTransaction: %s", err)
 	}
+	if err := operation.Validate(transaction.State, s.groupCtx); err != nil {
+		return fmt.Errorf("error while validating transaction: Synchronizer.validateTransaction: %s", err)
+	}
+	return nil
 }
 
 // By operations (e.g. Invite()) a given number of valid approvals

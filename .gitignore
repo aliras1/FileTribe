@@ -4,3 +4,4 @@ client/data
 .vscode
 venv
 test*
+.scannerwork
