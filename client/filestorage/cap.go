@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"path"
+	"log"
+
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
-	"os"
-	"path"
 )
 
 type GroupAccessCAP struct {
@@ -48,17 +50,6 @@ func (cap *ReadCAP) Store(storage *Storage) error {
 	return nil
 }
 
-// New ReadCAP from local json file
-func NewReadCAPFromFile(capPath string) (*ReadCAP, error) {
-	bytesFile, err := ioutil.ReadFile(capPath)
-	if err != nil {
-		return nil, err
-	}
-	var cap ReadCAP
-	err = json.Unmarshal(bytesFile, &cap)
-	return &cap, err
-}
-
 func (cap *ReadCAP) Refresh(username string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (bool, error) {
 	return false, fmt.Errorf("not implemented: ReadCAP.Refresh")
 }
@@ -78,6 +69,7 @@ func DownloadReadCAP(fromUser, username, capName string, boxer *crypto.BoxingKey
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
 func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
+	log.Printf("\t--> Downloading CAP...")
 	// get address and key
 	ipfsAddr, err := network.GetUserIPFSAddr(fromUser)
 	if err != nil {
@@ -105,6 +97,7 @@ func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 		return nil, fmt.Errorf("could not decrypt cap '%s' from user '%s' with path '%s': downloadCAP", capName, fromUser, ipnsPath)
 	}
 	os.Remove(tmpFilePath)
+	log.Printf("\t--> CAP Downloaded")
 	return bytesDecr, nil
 }
 

@@ -31,12 +31,12 @@ func (ml *MemberList) Length() int {
 	return len(ml.List)
 }
 
-func (ml *MemberList) Hash() [32]byte {
+func (ml *MemberList) Bytes() []byte {
 	var data []byte
 	for _, member := range ml.List {
 		data = append(data, []byte(member.Name)...)
 	}
-	return sha256.Sum256(data)
+	return data
 }
 
 func (ml *MemberList) Append(user string, network *nw.Network) *MemberList {
@@ -63,7 +63,7 @@ func (ml *MemberList) Get(user string) *Member {
 type GroupContext struct {
 	User         *User
 	Group        *Group
-	Repo         []*fs.FilePTP
+	Repo         *fs.GroupRepo
 	Members      *MemberList
 	Synchronizer *Synchronizer
 	Network      *nw.Network
@@ -80,10 +80,13 @@ func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.I
 	for _, member := range memberStrings {
 		members = members.Append(member, network)
 	}
+	repo := &fs.GroupRepo{
+		Files: []*fs.FileGroup{},
+	}
 	groupContext := &GroupContext{
 		User:         user,
 		Group:        group,
-		Repo:         nil,
+		Repo:         repo,
 		Members:      members,
 		Synchronizer: nil,
 		Network:      network,
@@ -106,9 +109,10 @@ func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Netw
 	return gc, nil
 }
 
-func (gc *GroupContext) CalculateState() []byte {
-	state := gc.Members.Hash()
-	return state[:]
+func (gc *GroupContext) CalculateState(members *MemberList, repo *fs.GroupRepo) []byte {
+	digest := append(members.Bytes(), repo.Bytes()...)
+	hash := sha256.Sum256(digest)
+	return hash[:]
 }
 
 func (gc *GroupContext) GetState() ([]byte, error) {
@@ -119,11 +123,44 @@ func (gc *GroupContext) GetState() ([]byte, error) {
 	return state, nil
 }
 
-func (gc *GroupContext) Invite(newMember string) error {
-	prevHash := gc.Members.Hash()
-	newMembers := gc.Members.Append(newMember, gc.Network)
-	newHash := newMembers.Hash()
+func (gc *GroupContext) AddAndShareFile(filePath string) error {
+	file, err := fs.NewSharedFileGroup(filePath, gc.Group.Name, gc.Group.Boxer, gc.Storage, gc.IPFS)
+	if err != nil {
+		return fmt.Errorf("could not create new shared file group: GroupContext.AddAndShareFile: %s", err)
+	}
 
+	newRepo := &fs.GroupRepo{
+		Files: append(gc.Repo.Files, file),
+	}
+	newState := gc.CalculateState(gc.Members, newRepo)
+	operation := NewShareFileOperation(gc.User.Name, file.Name, file.IPFSHash)
+	transaction := &Transaction{
+		PrevState: gc.CalculateState(gc.Members, gc.Repo),
+		State: newState,
+		Operation: operation.RawOperation(),
+		SignedBy: []SignedBy{},
+	}
+	signature := gc.User.SignTransaction(transaction)
+	transaction.SignedBy = []SignedBy{
+		{
+			Username:  gc.User.Name,
+			Signature: signature,
+		},
+	}
+	transactionJSON, err := json.Marshal(transaction)
+	if err != nil {
+		return fmt.Errorf("could not marshal transaction: GroupContext.AddAndShareFile: %s", err)
+	}
+	if err := gc.Network.GroupShare(gc.Group.Name, transactionJSON); err != nil {
+		return fmt.Errorf("error while network call: GroupContext.AddANdShareFile: %s", err)
+	}
+	return nil
+}
+
+func (gc *GroupContext) Invite(newMember string) error {
+	prevHash := gc.CalculateState(gc.Members, gc.Repo)
+	newMembers := gc.Members.Append(newMember, gc.Network)
+	newHash := gc.CalculateState(newMembers, gc.Repo)
 
 	operation := NewInviteOperation(gc.User.Name, newMember)
 	transaction := Transaction{

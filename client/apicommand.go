@@ -1,14 +1,92 @@
 package client
 
 import (
-	nw "ipfs-share/network"
 	"strings"
 	"fmt"
+	"io/ioutil"
+	"log"
+
 	"ipfs-share/ipfs"
+	nw "ipfs-share/network"
 )
 
 type ICommand interface {
 	Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error)
+}
+
+func NewCommand(raw string) (ICommand, error) {
+	args := strings.Split(raw, " ")
+	if len(args) < 1 {
+		return nil, fmt.Errorf("empty command")
+	}
+	switch args[0] {
+	case "signup":
+		if len(args) < 3 {
+			return nil, fmt.Errorf("invalid # args in 'signup' command")
+		}
+		cmd := CMDSignUp{
+			Username: args[1],
+			Password: args[2],
+		}
+		return &cmd, nil
+	case "signin":
+		if len(args) < 3 {
+			return nil, fmt.Errorf("invalid # args in 'signin' command")
+		}
+		cmd := CMDSignIn{
+			Username: args[1],
+			Password: args[2],
+		}
+		return &cmd, nil
+	case "cgroup":
+		if len(args) < 2 {
+			return nil, fmt.Errorf("invalid # args in 'cgroup' command")
+		}
+		cmd := CMDCreateGroup{
+			GroupName: args[1],
+		}
+		return &cmd, nil
+	case "igroup":
+		if len(args) < 3 {
+			return nil, fmt.Errorf("invalid # args in 'igroup' command")
+		}
+		cmd := CMDGroupInvite{
+			GroupName: args[1],
+			NewMember: args[2],
+		}
+		return &cmd, nil
+	case "ptpshare":
+		if len(args) < 3 {
+			return nil, fmt.Errorf("invalid # args in 'ptpshare' command")
+		}
+		cmd := CMDPTPAddAndShareFile{
+			FilePath: args[1],
+			ShareWith: args[2],
+		}
+		return &cmd, nil
+	case "gshare":
+		if len(args) < 2 {
+			return nil, fmt.Errorf("invalid # args in 'gshare' command")
+		}
+		cmd := CMDGroupAddAndShareFile{
+			GroupName: args[1],
+			Path: args[2],
+		}
+		return &cmd, nil
+	case "ls":
+		cmd := CMDList{}
+		return &cmd, nil
+	case "cat":
+		if len(args) < 2 {
+			return nil, fmt.Errorf("invalid # args in 'cat' command")
+		}
+		cmd := CMDCat{
+			Path: args[1],
+		}
+		return &cmd, nil
+	default:
+		return nil, fmt.Errorf("invalid command")
+	}
 }
 
 type CMDSignUp struct {
@@ -92,57 +170,51 @@ func (cmd *CMDPTPAddAndShareFile) Execute(ctx *UserContext, network *nw.Network,
 	return ctx, nil
 }
 
-func NewCommand(raw string) (ICommand, error) {
-	args := strings.Split(raw, " ")
-	if len(args) < 1 {
-		return nil, fmt.Errorf("empty command")
+type CMDGroupAddAndShareFile struct {
+	GroupName string
+	Path string
+}
+
+func (cmd *CMDGroupAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("no active user context CMDPTPAddAndShareFile.Execute")
 	}
-	switch args[0] {
-	case "signup":
-		if len(args) < 3 {
-			return nil, fmt.Errorf("invalid # args in 'signup' command")
+	for _, groupCtx := range ctx.Groups {
+		if strings.Compare(cmd.GroupName, groupCtx.Group.Name) == 0 {
+			if err := groupCtx.AddAndShareFile(cmd.Path); err != nil {
+				return ctx, fmt.Errorf("could not group add and share file: CMDGroupAddAndShareFile: %s", err)
+			}
+			return ctx, nil
 		}
-		cmd := CMDSignUp{
-			Username: args[1],
-			Password: args[2],
-		}
-		return &cmd, nil
-	case "signin":
-		if len(args) < 3 {
-			return nil, fmt.Errorf("invalid # args in 'signin' command")
-		}
-		cmd := CMDSignIn{
-			Username: args[1],
-			Password: args[2],
-		}
-		return &cmd, nil
-	case "cgroup":
-		if len(args) < 2 {
-			return nil, fmt.Errorf("invalid # args in 'cgroup' command")
-		}
-		cmd := CMDCreateGroup{
-			GroupName: args[1],
-		}
-		return &cmd, nil
-	case "igroup":
-		if len(args) < 3 {
-			return nil, fmt.Errorf("invalid # args in 'igroup' command")
-		}
-		cmd := CMDGroupInvite{
-			GroupName: args[1],
-			NewMember: args[2],
-		}
-		return &cmd, nil
-	case "ptpshare":
-		if len(args) < 3 {
-			return nil, fmt.Errorf("invalid # args in 'ptpshare' command")
-		}
-		cmd := CMDPTPAddAndShareFile{
-			FilePath: args[1],
-			ShareWith: args[2],
-		}
-		return &cmd, nil
-	default:
-		return nil, fmt.Errorf("invalid command")
 	}
+	return ctx, fmt.Errorf("no group named '%s', exists: CMDGroupAddAndShareFile", cmd.GroupName)
+}
+
+type CMDList struct {
+
+}
+
+func (cmd *CMDList) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("no active user context CMDList.Execute")
+	}
+	ctx.List()
+	return ctx, nil
+}
+
+type CMDCat struct {
+	Path string
+}
+
+func (cmd *CMDCat) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("no active user context CMDList.Execute")
+	}
+	filePath := ctx.Storage.GetUserFilesPath() + "/" + cmd.Path
+	fileBytes, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return ctx, fmt.Errorf("could not read file '%s': CMDCat.Execute", filePath)
+	}
+	log.Printf(string(fileBytes))
+	return ctx, nil
 }

@@ -1,9 +1,10 @@
 package client
 
 import (
+	"fmt"
+
 	"ipfs-share/crypto"
 	nw "ipfs-share/network"
-	"fmt"
 )
 
 type GroupMessage struct {

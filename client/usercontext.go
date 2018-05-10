@@ -196,7 +196,7 @@ func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) erro
 	if uc.isFileInRepo("/ipns/" + uc.IPNSAddr + "/files/" + path.Base(filePath)) {
 		return fmt.Errorf("file is already added to the repo: UserContext.AddAndShareFile")
 	}
-	file, err := fs.NewSharedFile(filePath, uc.User.Name, uc.Storage, uc.IPFS)
+	file, err := fs.NewSharedFilePTP(filePath, uc.User.Name, uc.Storage, uc.IPFS)
 	if err != nil {
 		return fmt.Errorf("could not create new shared file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
 	}
@@ -230,9 +230,12 @@ func (uc *UserContext) getFileFromRepo(name string) *fs.FilePTP {
 }
 
 func (uc *UserContext) List() {
-	fmt.Println(uc.User.Name)
-	for _, f := range uc.Repo {
-		fmt.Print("\t--> ")
-		fmt.Println(*f)
+	log.Println("MyFiles")
+	for _, file := range uc.Repo {
+		log.Println("\t--> " + file.Name)
+	}
+	for _, groupCtx := range uc.Groups {
+		log.Println(groupCtx.Group.Name)
+		groupCtx.Repo.List()
 	}
 }

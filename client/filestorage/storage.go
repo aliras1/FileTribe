@@ -1,20 +1,19 @@
 package filestorage
 
 import (
+	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"strings"
 
-	"crypto/rand"
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
-	"log"
 )
 
 type Storage struct {
@@ -29,7 +28,7 @@ type Storage struct {
 	sharedPath      string
 	tmpPath         string
 	myFilesPath     string
-	ipfsPath        string
+	ipfsFilesPath   string
 }
 
 func NewStorage(dataPath string) *Storage {
@@ -45,7 +44,7 @@ func NewStorage(dataPath string) *Storage {
 	storage.myFilesPath = storage.dataPath + "/userdata/root/MyFiles"
 	storage.sharedPath = storage.dataPath + "/userdata/shared"
 	storage.tmpPath = storage.dataPath + "/userdata/tmp"
-	storage.ipfsPath = storage.dataPath + "/userdata/ipfs" // signed and encrypted files, that are added to ipfs are stored here
+	storage.ipfsFilesPath = storage.dataPath + "/userdata/ipfs" // signed and encrypted files, that are added to ipfs are stored here
 
 	return &storage
 }
@@ -60,7 +59,7 @@ func (storage *Storage) Init() {
 	os.MkdirAll(storage.myFilesPath, 0770)
 	os.MkdirAll(storage.sharedPath, 0770)
 	os.MkdirAll(storage.tmpPath, 0770)
-	os.MkdirAll(storage.ipfsPath, 0770)
+	os.MkdirAll(storage.ipfsFilesPath, 0770)
 }
 
 func (storage *Storage) ExistsFile(filePath string) bool {
@@ -68,6 +67,10 @@ func (storage *Storage) ExistsFile(filePath string) bool {
 		return true
 	}
 	return false
+}
+
+func (storage *Storage) GetUserFilesPath() string {
+	return storage.fileRootPath
 }
 
 // It builds up the file repo based on saved data. One part of files
@@ -112,6 +115,13 @@ func (storage *Storage) CopyFileIntoPublicDir(filePath string) error {
 
 func (storage *Storage) CopyFileIntoMyFiles(filePath string) (string, error) {
 	newFilePath := storage.myFilesPath + "/" + path.Base(filePath)
+	return newFilePath, CopyFile(filePath, newFilePath)
+}
+
+func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) (string, error) {
+	groupFilesPath := storage.fileRootPath + "/" + groupName
+	os.Mkdir(groupFilesPath, 0770)
+	newFilePath := groupFilesPath + "/" + path.Base(filePath)
 	return newFilePath, CopyFile(filePath, newFilePath)
 }
 
@@ -171,80 +181,33 @@ func (storage *Storage) CreateGroupStorage(groupName string) {
 	os.MkdirAll(storage.fileRootPath+"/"+groupName, 0770)
 }
 
-// Gets the ipfs hash of the given group meta data stored locally
-// like members, ACL, etc... If it is not present, it returns with
-// a null string
-func (storage *Storage) GetLocalGroupDataHash(groupname, data string, ipfs *ipfs.IPFS) (string, error) {
-	filePath := storage.publicForPath + "/" + groupname + "/" + data
-	if !FileExists(filePath) {
-		fmt.Println("do not exist")
-		return "", nil
-	}
-	mn, err := ipfs.AddFile(filePath)
+func (storage *Storage) DownloadGroupFile(fileGroup *FileGroup, groupname string, boxer *crypto.SymmetricKey, ipfs *ipfs.IPFS) error {
+	// TODO: choice: download to ipfsFiles and host it
+	tmpFilePath, err := storage.downloadToTmp(fileGroup.IPFSHash, ipfs)
 	if err != nil {
-		return "", err
+		return fmt.Errorf("could not donwload to tmp: storage.DownloadGroupFile: %s", err)
 	}
-	return mn.Hash, nil
+	encFileBytes, err := ioutil.ReadFile(tmpFilePath)
+	if err != nil {
+		return fmt.Errorf("could not read tmp file '%s': storage.DownloadGroupFile: %s", tmpFilePath, err)
+	}
+	fileBytes, ok := boxer.BoxOpen(encFileBytes)
+	if !ok {
+		return fmt.Errorf("could not decrypt file: storage.DownloadGroupFile")
+	}
+	groupPath := storage.fileRootPath + "/" + groupname
+	os.Mkdir(groupPath, 0770)
+	filePath := groupPath + "/" + fileGroup.Name
+
+	if err := WriteFile(filePath, fileBytes); err != nil {
+		return fmt.Errorf("could not file '%s': Storage.DownloadGroupFile: %s", filePath, err)
+	}
+	return nil
 }
 
 // Returns the path of the wanted group meta data
 func (storage *Storage) GetGroupDataPath(groupname, data string) string {
 	return storage.publicForPath + "/" + groupname + "/" + data
-}
-
-// Checks if the given meta data is present and if so, whether it
-// changed (accorting to other members) since last time or not. If
-// changes are detected, it returns with the new ipfs hash of the
-// meta data
-func (storage *Storage) GroupDataChanged(groupname, data string, activeMembers []string, ipfs *ipfs.IPFS, network *nw.Network) (string, error) {
-	memberHash, err := storage.GetLocalGroupDataHash(groupname, "members.json", ipfs)
-	if err != nil {
-		return "", err
-	}
-	fmt.Print("active members: ")
-	fmt.Println(activeMembers)
-	// only active member is current user
-	if len(activeMembers) == 1 {
-		fmt.Println("only active member")
-		return "", nil
-	}
-	fmt.Print("active members: ")
-	fmt.Println(activeMembers)
-	commonHashes := make(map[string]int)
-	for _, member := range activeMembers {
-		ipns, err := network.GetUserIPFSAddr(member)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		ipnsPath := "/ipns/" + ipns + "/for/" + groupname + "/" + data
-		ipfsHash, err := ipfs.Resolve(ipnsPath)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		_, in := commonHashes[ipfsHash]
-		if !in {
-			commonHashes[ipfsHash] = 1
-		} else {
-			commonHashes[ipfsHash] += 1
-		}
-	}
-	mostCommonHash := ""
-	membersAgreeOnData := 0
-	for k, v := range commonHashes {
-		if v >= membersAgreeOnData {
-			membersAgreeOnData = v
-			mostCommonHash = k
-		}
-	}
-	if membersAgreeOnData < len(activeMembers)/2 {
-		return "", errors.New("members do not agree on data: " + data)
-	}
-	if strings.Compare(memberHash, mostCommonHash) == 0 {
-		return "", nil
-	}
-	return mostCommonHash, nil
 }
 
 // Downloads the given group meta data
@@ -272,10 +235,6 @@ func (storage *Storage) SaveGroupData(groupName, fileName string, boxer crypto.S
 	encData := boxer.BoxSeal(data)
 	return WriteFile(filePath, encData)
 }
-
-// +------------------------------+
-// |     Capability functions     |
-// +------------------------------+
 
 func (storage *Storage) StoreGroupAccessCAP(group string, key crypto.SymmetricKey) error {
 	cap := GroupAccessCAP{group, key}
@@ -317,6 +276,14 @@ func (storage *Storage) PublishPublicDir(ipfs *ipfs.IPFS) error {
 	return nil
 }
 
+func (storage *Storage) downloadToTmp(ipfsHash string, ipfs *ipfs.IPFS) (string, error) {
+	filePath := storage.tmpPath + "/" + path.Base(ipfsHash)
+	if err := ipfs.Get(filePath, ipfsHash); err != nil {
+		return "", fmt.Errorf("could not ipfs get into tmp path '%s': Storage.downloadToTmp: %s", filePath, err)
+	}
+	return filePath, nil
+}
+
 func CopyFile(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
@@ -340,14 +307,12 @@ func CopyFile(src, dst string) error {
 func WriteFile(filePath string, data []byte) error {
 	f, err := os.Create(filePath)
 	if err != nil {
-		// TODO
-		//return err
-		fmt.Println(err)
+		log.Printf("file '%s' already exists: WriteFile", filePath)
 	}
 	defer f.Close()
 	_, err = f.Write(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not write file '%s': WriteFile: %s", filePath, err)
 	}
 	f.Sync()
 	return nil

@@ -122,22 +122,22 @@ func (f *FilePTP) save(storage *Storage) error {
 }
 
 // Create a new shared file object from a local file
-func NewSharedFile(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
+func NewSharedFilePTP(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
 	newFilePath, err := storage.CopyFileIntoMyFiles(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("could not copy file to user storage: NewSharedFile: %s", err)
+		return nil, fmt.Errorf("could not copy file to user storage: NewSharedFilePTP: %s", err)
 	}
 
 	vk, wk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("could not generate signing key pair: NewSharedFile: %s", err)
+		return nil, fmt.Errorf("could not generate signing key pair: NewSharedFilePTP: %s", err)
 	}
 	verifyKey := crypto.PublicSigningKey(vk)
 	writeKey := crypto.SecretSigningKey(wk)
 
 	ipfsID, err := ipfs.ID()
 	if err != nil {
-		return nil, fmt.Errorf("could not get ipfs id: NewSharedFile: %s", err)
+		return nil, fmt.Errorf("could not get ipfs id: NewSharedFilePTP: %s", err)
 	}
 	fileName := path.Base(filePath)
 	file := &FilePTP{
@@ -153,10 +153,10 @@ func NewSharedFile(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*
 		Own:  true,
 	}
 	if err := file.signAndAddToIPFS(storage, ipfs); err != nil {
-		return nil, fmt.Errorf("could not sign and add file '%s' to ipfs: NewSharedFile: %s", fileName, err)
+		return nil, fmt.Errorf("could not sign and add file '%s' to ipfs: NewSharedFilePTP: %s", fileName, err)
 	}
 	if err := file.save(storage); err != nil {
-		return nil, fmt.Errorf("could not save file '%s': NewSharedFile: %s", file.Name, err)
+		return nil, fmt.Errorf("could not save file '%s': NewSharedFilePTP: %s", file.Name, err)
 	}
 	return file, nil
 }
@@ -166,14 +166,14 @@ func NewSharedFile(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*
 // of the file
 func (f *FilePTP) signAndAddToIPFS(storage *Storage, ipfs *ipfs.IPFS) error {
 	publicFilePath := storage.publicFilesPath + "/" + f.Name
-	bytesFile, err := ioutil.ReadFile(f.Path)
+	fileBytes, err := ioutil.ReadFile(f.Path)
 	if err != nil {
 		return fmt.Errorf("could not read file '%s': FilePTP.signAndAddToIPFS: %s", f.Name, err)
 	}
 	if f.WriteKey == nil {
 		return fmt.Errorf("no write key found in file '%s': FilePTP.signAndAddToIPFS", f.Name)
 	}
-	signedFile := f.WriteKey.Sign(nil, bytesFile)
+	signedFile := f.WriteKey.Sign(nil, fileBytes)
 	if err := WriteFile(publicFilePath, signedFile); err != nil {
 		return fmt.Errorf("could not write signed file '%s': FilePTP.signAndAddToIPFS: %s", f.Name, err)
 	}

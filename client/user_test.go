@@ -1,10 +1,10 @@
 package client
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
-	"bytes"
 	nw "ipfs-share/network"
 )
 
