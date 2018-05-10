@@ -133,14 +133,19 @@ def get_group_state(group_name):
     return Response(groups[group_name]["state"][-1])
 
 
-@app.route('/get/group/operation/<group_name>/<state>', methods=['GET'])
-def get_group_operation(group_name, state):
+@app.route('/get/group/operation/<group_name>', methods=['POST'])
+def get_group_operation(group_name):
+    log = logging.getLogger('werkzeug')
+
     if group_name not in groups:
+        log.error("group {} does not exist: get_group_operation()".format(group_name))
         print("group {} does not exist: get_group_operation()".format(group_name))
-        return Response()
+        abort(404)
+    state = request.data.decode('ascii')
     if state not in groups[group_name]["state"]:
+        log.error("state '{0}' in group '{1}' does not exist: get_group_operation()".format(state, group_name))
         print("state '{0}' in group '{1}' does not exist: get_group_operation()".format(state, group_name))
-        return Response()
+        abort(404)
     i = groups[group_name]["state"].index(state)
     return Response(jsonify(groups[group_name]["operation"][i]).data)
 
@@ -149,13 +154,14 @@ def get_group_operation(group_name, state):
 def get_group_prev_state(group_name, state):
     if group_name not in groups:
         print("group {} does not exist: get_group_state()".format(group_name))
-        return Response("group does not exist")
+        abort(404)
+        #return Response("group does not exist")
     if state not in groups[group_name]["state"]:
         print("state not in group state history: get_group_prev_state()")
     for i in range(1, len(groups[group_name]["state"])):
         if groups[group_name]["state"][i] == state:
             return Response(groups[group_name]["state"][i-1])
-    return Response()
+    abort(404)
 
 
 def verify(signed, verify_key):
@@ -166,10 +172,11 @@ def verify(signed, verify_key):
     return True
 
 
-def verify_transaction(group_name, transaction):
+def verify_transaction(group_name, transaction, min_num_agreement=-1):
     if transaction["prev_state"] != groups[group_name]["state"][-1]:
         return False
-
+    if min_num_agreement == -1:
+        min_num_agreement = len(groups[group_name]["members"]) / 2
     digest = bytearray(base64.b64decode(transaction["prev_state"]))
     for b in bytearray(base64.b64decode(transaction["state"])):
         digest.append(b)
@@ -178,10 +185,8 @@ def verify_transaction(group_name, transaction):
     for b in bytearray(transaction["operation"]["data"], encoding='ascii'):
         digest.append(b)
     digest = [b for b in digest]
-    valid_counter = 0
+    validators = []
     for signed_by in transaction["signed_by"]:
-        if valid_counter > len(groups[group_name]["members"]) / 2:
-            return True
         username = signed_by["username"]
         signature_base64 = signed_by["signature"]
         signature = bytearray(base64.b64decode(signature_base64))
@@ -193,13 +198,40 @@ def verify_transaction(group_name, transaction):
 
         if not verify(signed, verify_key):
             return False
-        valid_counter += 1
-    return True
+        if username not in validators:
+            validators += [username]
+    if len(validators) >= min_num_agreement:
+        return True
+    return False
+
+
+@app.route('/group/share/<group_name>', methods=['POST'])
+def group_share(group_name):
+    log = logging.getLogger('werkzeug')
+    if group_name not in groups:
+        log.error("group {} does not exists: group_share()".format(group_name))
+        print("group {} does not exists: group_share()".format(group_name))
+        return Response()
+    transaction = request.json
+    if not verify_transaction(group_name, transaction, 1):
+        log.error("invalid group share transaction")
+        print("invalid group share transaction")
+        return Response()
+    operation = transaction["operation"]["data"].split(" ")
+    if len(operation) < 3:
+        log.error("invlaid #args in group share transaction")
+        print("invlaid #args in group share transaction")
+        return Response()
+    groups[group_name]["state"] += [transaction["state"]]
+    groups[group_name]["operation"] += [transaction["operation"]]
+    log.error(groups[group_name])
+    return Response()
 
 
 
 @app.route('/group/invite/<group_name>', methods=['POST'])
 def group_invite(group_name):
+    log = logging.getLogger('werkzeug')
     if group_name not in groups:
         print("group {} does not exists: group_invite()".format(group_name))
         return Response()
@@ -220,6 +252,7 @@ def group_invite(group_name):
     
     print("OK")
     print(groups[group_name])
+    log.error(groups[group_name])
     return Response()
 
 

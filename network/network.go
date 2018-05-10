@@ -2,17 +2,16 @@ package network
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strconv"
 
-	"crypto/sha256"
-	"encoding/base64"
 	"ipfs-share/crypto"
-	"log"
 )
 
 type Message struct {
@@ -33,10 +32,16 @@ func (n *Network) Get(path string, args ...string) ([]byte, error) {
 	}
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error while http get request '%s': Network.Get: %s", url, err)
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read response body: Network.Get: %s", err)
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("http get request '%s' returned with status code '%d'", url, resp.StatusCode)
+	}
 	return body, nil
 }
 
@@ -112,7 +117,11 @@ func (n *Network) GetGroupPrevState(groupName string, state []byte) ([]byte, err
 
 func (n *Network) GetGroupOperation(groupName string, state []byte) ([]byte, error) {
 	stateBase64 := base64.StdEncoding.EncodeToString(state)
-	operationBytes, err := n.Get("/get/group/operation", groupName, stateBase64)
+	operationBytes, err := n.Post(
+		"/get/group/operation/" + groupName,
+		"application/octet-stream",
+		[]byte(stateBase64),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting operation of state %s of group %s: Network.GetGroupOperation: %s", state, groupName, err)
 	}
@@ -120,13 +129,23 @@ func (n *Network) GetGroupOperation(groupName string, state []byte) ([]byte, err
 }
 
 func (n *Network) GroupInvite(groupname string, transaction []byte) error {
-	err := n.Put(
+	if _, err := n.Post(
 		"/group/invite/"+groupname,
 		"application/json",
 		transaction,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("error while inviting into %s: Network.GroupInvite: %s", groupname, err)
+	}
+	return nil
+}
+
+func (n *Network) GroupShare(groupname string, transaction []byte) error {
+	if _, err := n.Post(
+		"/group/share/" + groupname,
+		"application/json",
+		transaction,
+	); err != nil {
+		return fmt.Errorf("error while sharing file with group '%s', Network.GroupShare: %s", groupname, err)
 	}
 	return nil
 }
@@ -160,49 +179,65 @@ func (n *Network) GetMessages(username string) ([]*Message, error) {
 	return messages, nil
 }
 
-func (n *Network) Put(path string, contentType string, data []byte) error {
+func (n *Network) Post(path string, contentType string, data []byte) ([]byte, error) {
+	url := n.Address+path
 	resp, err := http.Post(
-		fmt.Sprintf(n.Address+path),
+		url,
 		contentType,
 		bytes.NewReader(data),
 	)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("error while http post request '%s': Network.Post: %s", url, err)
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	if len(body) != 0 {
-		return errors.New(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("could not read response body: Network.Post: %s", err)
 	}
-	return nil
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("request '%s' returned with status code '%d': Network.Post", url, resp.StatusCode)
+	}
+	return body, nil
 }
 
 func (n *Network) PutVerifyKey(hash crypto.PublicKeyHash, key crypto.PublicSigningKey) error {
 	jsonStr := fmt.Sprintf(`{"hash":"%s", "signkey":"%s"}`, hash.ToBase64(), key.ToBase64())
-	return n.Put(
+	_, err := n.Post(
 		"/put/signkey",
 		"application/json",
 		[]byte(jsonStr),
 	)
+	if err != nil {
+		return fmt.Errorf("error while post: Network.PutVerifyKey: %s", err)
+	}
+	return nil
 }
 
 func (n *Network) PutBoxingKey(hash crypto.PublicKeyHash, key crypto.PublicBoxingKey) error {
 	jsonStr := fmt.Sprintf(`{"hash":"%s", "boxkey":"%s"}`, hash.ToBase64(), key.ToBase64())
-	return n.Put(
+	_, err := n.Post(
 		"/put/boxkey",
 		"application/json",
 		[]byte(jsonStr),
 	)
+	if err != nil {
+		return fmt.Errorf("error while post: Network.PutBoxingKey: %s", err)
+	}
+	return nil
 }
 
 func (n *Network) PutIPFSAddr(hash crypto.PublicKeyHash, ipfsAddr string) error {
 	jsonStr := fmt.Sprintf(`{"hash":"%s", "ipfsaddr":"%s"}`, hash.ToBase64(), ipfsAddr)
-	return n.Put(
+	_, err := n.Post(
 		"/put/ipfsaddr",
 		"application/json",
 		[]byte(jsonStr),
 	)
+	if err != nil {
+		return fmt.Errorf("error while post: Network.PutIPFSAddr: %s", err)
+	}
+	return nil
 }
 
 func (n *Network) RegisterGroup(groupName, owner string) error {
@@ -210,26 +245,39 @@ func (n *Network) RegisterGroup(groupName, owner string) error {
 	stateHashBase64 := base64.StdEncoding.EncodeToString(stateHash[:])
 	jsonStr := fmt.Sprintf(`{"groupname":"%s", "owner":"%s", "state":"%s"}`, groupName, owner, stateHashBase64)
 	fmt.Println(jsonStr)
-	return n.Put(
+	_, err := n.Post(
 		"/register/group",
 		"application/json",
-		[]byte(jsonStr))
+		[]byte(jsonStr),
+	)
+	if err != nil {
+		return fmt.Errorf("error while post: Network.PutBoxingKey: %s", err)
+	}
+	return nil
 }
 
 func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) error {
-	return n.Put(
+	_, err := n.Post(
 		fmt.Sprintf("/register/username/%s", username),
 		"application/octet-stream",
 		[]byte(hash.ToBase64()),
 	)
+	if err != nil {
+		return fmt.Errorf("error while post: Network.PutBoxingKey: %s", err)
+	}
+	return nil
 }
 
 func (n *Network) SendMessage(from, to, msgType, msgData string) error {
 	m := Message{from, to, msgType, msgData}
 	fmt.Println(m)
-	byteJson, err := json.Marshal(m)
+	byteJSON, err := json.Marshal(m)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not marshal message")
 	}
-	return n.Put("/send/message", "application/json", byteJson)
+	_, err = n.Post("/send/message", "application/json", byteJSON)
+	if err != nil {
+		return fmt.Errorf("error while post: Network.PutBoxingKey: %s", err)
+	}
+	return nil
 }

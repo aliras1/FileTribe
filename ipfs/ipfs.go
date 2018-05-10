@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -86,7 +85,7 @@ func NewIPFS(host string, port int) (*IPFS, error) {
 	ipfs := IPFS{host, p, "/api/v0/"}
 	_, err := ipfs.Version()
 	if err != nil {
-		return nil, errors.New("could not connect to ipfs daemon: " + err.Error())
+		return nil, fmt.Errorf("could not connect to ipfs daemon: " + err.Error())
 	}
 	return &ipfs, nil
 }
@@ -103,7 +102,7 @@ func (i *IPFS) AddFile(filePath string) (*MerkleNode, error) {
 	var returnMerkleNode MerkleNode
 	err = json.Unmarshal(resp, &returnMerkleNode)
 	if err != nil {
-		err = errors.New("could not unmarshal response: " + err.Error())
+		err = fmt.Errorf("could not unmarshal response: " + err.Error())
 		return nil, err
 	}
 	return &returnMerkleNode, nil
@@ -143,7 +142,7 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 		err = json.Unmarshal([]byte(j), &mn)
 		merkleNodes = append(merkleNodes, &mn)
 		if err != nil {
-			err = errors.New("could not unmarshal response: " + err.Error())
+			err = fmt.Errorf("could not unmarshal response: " + err.Error())
 			return nil, err
 		}
 	}
