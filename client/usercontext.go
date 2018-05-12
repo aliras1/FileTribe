@@ -3,8 +3,6 @@ package client
 import (
 	"crypto/rand"
 	"fmt"
-	"log"
-	"os"
 	"path"
 	"strings"
 	"time"
@@ -12,6 +10,7 @@ import (
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
+	"github.com/golang/glog"
 )
 
 type UserContext struct {
@@ -23,8 +22,8 @@ type UserContext struct {
 	IPFS     *ipfs.IPFS
 	Storage  *fs.Storage // TODO lock
 
-	channelMsg chan nw.Message
-	channelSig chan os.Signal
+	channelMsg  chan nw.Message
+	channelStop chan int
 }
 
 func NewUserContextFromSignUp(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
@@ -75,8 +74,8 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	uc.IPNSAddr = ipfsID.ID
 
 	uc.channelMsg = make(chan nw.Message)
-	uc.channelSig = make(chan os.Signal)
-	go MessageGetter(uc.User.Name, network, uc.channelMsg, uc.channelSig)
+	uc.channelStop = make(chan int)
+	go MessageGetter(uc.User.Name, network, uc.channelMsg, uc.channelStop)
 	go MessageProcessor(uc.channelMsg, uc.User.Name, &uc)
 
 	if err := uc.BuildGroups(); err != nil {
@@ -88,18 +87,26 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	return &uc, nil
 }
 
-func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Message, channelSig chan os.Signal) {
+func (uc *UserContext) SignOut() {
+	fmt.Println("[*] User '%s' signing out...", uc.User.Name)
+	for _, groupCtx := range uc.Groups {
+		groupCtx.Stop()
+	}
+	uc.channelStop <- 1
+}
+
+func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Message, channelStop chan int) {
 	for true {
 		select {
-		case sig := <-channelSig:
-			log.Println("received signal: MessageGetter", sig)
+		case <-channelStop:
+			glog.Infof("User '%s' received 'STOP' signal: MessageGetter", username)
 			close(channelMsg)
-			close(channelSig)
+			close(channelStop)
 			return
 		default:
 			msgs, err := network.GetMessages(username)
 			if err != nil {
-				log.Printf("could not get messages: MessageGetter: %s", err)
+				glog.Errorf("could not get messages: MessageGetter: %s", err)
 				break
 			}
 			for _, msg := range msgs {
@@ -111,23 +118,23 @@ func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Mess
 }
 
 func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserContext) {
-	log.Printf("[*] user '%s' is processing messages...", username)
+	fmt.Printf("[*] User '%s' is processing messages...\n", username)
 	for msg := range channelMsg {
-		log.Printf("--> user '%s' got message", username)
+		glog.Infof("--> user '%s' got message", username)
 		switch msg.Type {
 		case "PTP READ CAP":
 			cap, err := fs.DownloadReadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
 			if err != nil {
-				log.Printf("could not download read cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", msg.Message, err)
+				glog.Errorf("could not download read cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", msg.Message, err)
 				continue
 			}
 			if ctx.isFileInRepo(cap.IPNSPath) {
-				log.Printf("file '%s' is already in the repo", cap.IPNSPath)
+				glog.Errorf("file '%s' is already in the repo", cap.IPNSPath)
 				continue
 			}
 			file, err := fs.NewFileFromCAP(cap, ctx.Storage, ctx.IPFS)
 			if err != nil {
-				log.Printf("could not instantiate a new file from cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", cap.FileName, err)
+				glog.Errorf("could not instantiate a new file from cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", cap.FileName, err)
 				continue
 			}
 			ctx.addFileToRepo(file)
@@ -135,35 +142,35 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 			fmt.Println("content of root directory: ")
 			ctx.List()
 		case "GROUP INVITE":
-			log.Println("[*] Processing group invite message...")
-			log.Printf("\t--> Donwloading group access cap '%s'...", msg.Message)
+			fmt.Printf("[*] Joining group '%s'...\n", strings.Split(msg.Message, ".")[0])
+			glog.Infof("\t--> Donwloading group access cap '%s'...", msg.Message)
 			cap, err := ctx.Storage.DownloadGroupAccessCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
 			if err != nil {
-				log.Printf("could not download ga cap: MessageProcessor: %s", err)
+				glog.Errorf("could not download ga cap: MessageProcessor: %s", err)
 				continue
 			}
-			log.Printf("\t<-- Donwloaded")
+			glog.Infof("\t<-- Donwloaded")
 			if err := cap.Store(ctx.Storage); err != nil {
-				log.Printf("could not store ga cap: MessageProcessor: %s", err)
+				glog.Errorf("could not store ga cap: MessageProcessor: %s", err)
 				continue
 			}
 			cap.Boxer.RNG = rand.Reader
 			groupCtx, err := NewGroupContextFromCAP(cap, ctx.User, ctx.Network, ctx.IPFS, ctx.Storage)
 			if err != nil {
-				log.Printf("could not create group context from cap: MessageProcessor: %s", err)
+				glog.Errorf("could not create group context from cap: MessageProcessor: %s", err)
 				continue
 			}
 			ctx.Groups = append(ctx.Groups, groupCtx)
-			log.Printf("[*] Joined group '%s'", groupCtx.Group.Name)
+			fmt.Printf("[*] Joined group '%s'\n", groupCtx.Group.Name)
 		}
 	}
 }
 
 func (uc *UserContext) BuildGroups() error {
-	log.Printf("[*] Building groups for user '%s'...", uc.User.Name)
+	glog.Infof("Building groups for user '%s'...", uc.User.Name)
 	caps, err := uc.Storage.GetGroupCAPs()
 	if err != nil {
-		return fmt.Errorf("could not get group caps: UserContext.BuildGroups: %s", err)
+		return fmt.Errorf("[ERROR]: could not get group caps: UserContext.BuildGroups: %s", err)
 	}
 	for _, cap := range caps {
 		groupCtx, err := NewGroupContextFromCAP(&cap, uc.User, uc.Network, uc.IPFS, uc.Storage)
@@ -172,7 +179,7 @@ func (uc *UserContext) BuildGroups() error {
 		}
 		uc.Groups = append(uc.Groups, groupCtx)
 	}
-	log.Printf("<-- Building groups ended")
+	glog.Infof("Building groups ended")
 	return nil
 }
 
@@ -230,12 +237,12 @@ func (uc *UserContext) getFileFromRepo(name string) *fs.FilePTP {
 }
 
 func (uc *UserContext) List() {
-	log.Println("MyFiles")
+	fmt.Println("MyFiles")
 	for _, file := range uc.Repo {
-		log.Println("\t--> " + file.Name)
+		fmt.Println("\t--> " + file.Name)
 	}
 	for _, groupCtx := range uc.Groups {
-		log.Println(groupCtx.Group.Name)
+		fmt.Println(groupCtx.Group.Name)
 		groupCtx.Repo.List()
 	}
 }

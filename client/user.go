@@ -3,11 +3,11 @@ package client
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"log"
 	"fmt"
 
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/scrypt"
+	"github.com/golang/glog"
 
 	"ipfs-share/crypto"
 	nw "ipfs-share/network"
@@ -30,7 +30,7 @@ func NewUser(username, password string) *User {
 		64,
 	)
 	if err != nil {
-		log.Printf("error while scrypt: NewUser: %s", err)
+		glog.Error("error while scrypt: NewUser: %s", err)
 		return nil
 	}
 

@@ -4,8 +4,6 @@ import (
 	"strings"
 	"fmt"
 	"io/ioutil"
-	"log"
-
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
 )
@@ -215,6 +213,6 @@ func (cmd *CMDCat) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPF
 	if err != nil {
 		return ctx, fmt.Errorf("could not read file '%s': CMDCat.Execute", filePath)
 	}
-	log.Printf(string(fileBytes))
+	fmt.Printf(string(fileBytes) + "\n")
 	return ctx, nil
 }

@@ -7,16 +7,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"path"
 	"strconv"
 	"strings"
-
+	"github.com/golang/glog"
 	"github.com/whyrusleeping/tar-utils"
 
 	"ipfs-share/crypto"
+	"sync"
 )
 
 type IPFSID struct {
@@ -52,7 +52,7 @@ func (psm *PubsubMessage) Decode() ([]byte, error) {
 func (psm *PubsubMessage) Decrypt(key crypto.SymmetricKey) ([]byte, bool) {
 	messageBytes, err := psm.Decode()
 	if err != nil {
-		log.Println(err)
+		glog.Errorf("could not decode pubsub message: PubsubMessage.Decrypt: %s", err)
 		return nil, false
 	}
 	return key.BoxOpen(messageBytes)
@@ -74,15 +74,29 @@ type ListObjects struct {
 	} `json:"Objects"`
 }
 
+type PubSubSubscription struct {
+	conn net.Conn
+	channel chan PubsubMessage
+}
+
 type IPFS struct {
 	host    string
 	port    string
 	version string
+
+	pubSubSubscriptions map[string]PubSubSubscription
+	mux sync.Mutex
 }
 
 func NewIPFS(host string, port int) (*IPFS, error) {
 	p := strconv.FormatInt(int64(port), 10)
-	ipfs := IPFS{host, p, "/api/v0/"}
+	pubSubSubscriptions := make(map[string]PubSubSubscription)
+	ipfs := IPFS{
+		host:  host,
+		port:  p,
+		version:  "/api/v0/",
+		pubSubSubscriptions: pubSubSubscriptions,
+	}
 	_, err := ipfs.Version()
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to ipfs daemon: " + err.Error())
@@ -116,7 +130,7 @@ func (i *IPFS) AddDir(dirPath string) ([]*MerkleNode, error) {
 	// list dir
 	files, err := ioutil.ReadDir(dirPath)
 	if err != nil {
-		log.Println(err)
+		glog.Errorf("could not read dir '%s': IPFS.AddDir: %s", dirPath, err)
 		return nil, err
 	}
 
@@ -205,56 +219,100 @@ func (i *IPFS) NameResolve(ipnsPath string) (string, error) {
 	return hash.Path, err
 }
 
+func (i *IPFS) KillAll() {
+	glog.Info("Killing all ipfs subs....")
+	i.mux.Lock()
+	for key, subscription := range i.pubSubSubscriptions {
+		glog.Info("killing channel '%s': IPFS.KillAll", key)
+		subscription.conn.Close()
+		close(subscription.channel)
+	}
+	i.mux.Unlock()
+}
+
+func (i *IPFS) Kill(channelName string) {
+	glog.Infof("Killing channel '%s': IPFS.Kill", channelName)
+	i.mux.Lock()
+	subscription, ok := i.pubSubSubscriptions[channelName]
+	if !ok {
+		glog.Warningf("subscription '%s' not found: IPFS.Kill", channelName)
+		i.mux.Unlock()
+		return
+	}
+	subscription.conn.Close()
+	close(subscription.channel)
+	delete(i.pubSubSubscriptions, channelName)
+	i.mux.Unlock()
+	fmt.Println(i.pubSubSubscriptions)
+}
+
 func (i *IPFS) PubsubPublish(channel string, message []byte) error {
+	glog.Infof("sending pubsub message on channel '%s'...", channel)
 	if _, err := i.getRequest("pubsub/pub?arg=" + channel + "&arg=" + base64.URLEncoding.EncodeToString(message)); err != nil {
 		return fmt.Errorf("could not make get request: IPFS.PubsubPublish: %s", err)
 	}
 	return nil
 }
 
-func (i *IPFS) PubsubSubscribe(channel string, dst chan PubsubMessage) {
+func (i *IPFS) PubsubSubscribe(username, channel string, dst chan PubsubMessage) {
 	conn, err := net.Dial("tcp", "127.0.0.1:5001")
 	if err != nil {
-		log.Printf("could not reach ipfs daemon: IPFS.PubsubSubscribe: %s", err)
+		glog.Errorf("could not reach ipfs daemon: IPFS.PubsubSubscribe: %s", err)
+		return
 	}
+	if _, ok := i.pubSubSubscriptions[channel]; ok {
+		glog.Warningf("user '%s' already subscribed on topic '%s': IPFS.PubsubSubscribe", username, channel)
+		return
+	}
+	i.pubSubSubscriptions[channel] = PubSubSubscription{
+		channel: dst,
+		conn: conn,
+	}
+	fmt.Println(i.pubSubSubscriptions)
 	req := "GET /api/v0/pubsub/sub?arg=" + channel + " HTTP/1.1\nHost: localhost:5001\n\n"
 	conn.Write([]byte(req))
 	if _, err := bufio.NewReader(conn).ReadString('\n'); err != nil { // HTTP 200 response
-		log.Printf("could not read 'HTTP 200' response from ipfs daemon: IPFS.PubsubSubscribe: %s", err)
+		glog.Errorf("could not read 'HTTP 200' response from ipfs daemon: IPFS.PubsubSubscribe: %s", err)
+		return
 	}
+	glog.Infof("user '%s' on topic '%s' runs...", username, channel)
 	// pubsub messages
 	for {
 		rawStr, err := bufio.NewReader(conn).ReadString('}')
 		if err != nil {
-			log.Printf("could not read response from ipfs daemon: IPFS.PubsubSubscribe: %s", err)
+			glog.Errorf("could not read response from ipfs daemon: IPFS.PubsubSubscribe: %s", err)
+			return
 		}
 		split := strings.Split(rawStr, "\n")
 		if len(split) < 2 {
-			log.Println("invalid pubsub message: IPFS.PubsubSubscribe")
+			glog.Warningf("invalid pubsub message: IPFS.PubsubSubscribe")
 			continue
 		}
 		var msg PubsubMessage
 		if err := json.Unmarshal([]byte((split)[1]), &msg); err != nil {
-			log.Printf("could not unmarshal pubsub message: IPFS.PubsubSubscribe: %s", err)
+			glog.Warningf("could not unmarshal pubsub message: IPFS.PubsubSubscribe: %s", err)
 			continue
 		}
-		dst <- msg
+
+		i.mux.Lock()
+		if _, ok := i.pubSubSubscriptions[channel]; ok {
+			dst <- msg
+		}
+		i.mux.Unlock()
 	}
 }
 
 func (i *IPFS) Resolve(anyPath string) (string, error) {
-	fmt.Println("resolving...: " + anyPath)
+	glog.Info("IPFS resolving...: " + anyPath)
 	resp, err := i.getRequest("resolve?arg=" + anyPath + "&recursive=true")
 	if err != nil {
-		fmt.Println(err)
 		return "", err
 	}
-	fmt.Println(string(resp))
 	var hash IPFSNameResolvedHash
 	if err := json.Unmarshal(resp, &hash); err != nil {
 		return "", fmt.Errorf("could not unmarshal IPFSNameResolvedHash '%s': IPFS.Resolve: %s", anyPath, err)
 	}
-	fmt.Println("resolved")
+	glog.Info("Resolved")
 	if strings.Compare(hash.Path, "") == 0 {
 		return "", fmt.Errorf("could not resolve path '%s': IPFS.Resolve", anyPath)
 	}

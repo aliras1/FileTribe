@@ -4,8 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
+
+	"github.com/golang/glog"
 
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
@@ -42,7 +43,7 @@ func (ml *MemberList) Bytes() []byte {
 func (ml *MemberList) Append(user string, network *nw.Network) *MemberList {
 	verifyKey, err := network.GetUserVerifyKey(user)
 	if err != nil {
-		log.Printf("could not get user verify key: MemberList.Append: %s", err)
+		glog.Errorf("could not get user verify key: MemberList.Append: %s", err)
 		return ml
 	}
 	newList := make([]Member, len(ml.List))
@@ -107,6 +108,10 @@ func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Netw
 		return nil, fmt.Errorf("could not create group context: NewGroupContextFromCAP: %s", err)
 	}
 	return gc, nil
+}
+
+func (gc *GroupContext) Stop() {
+	gc.Synchronizer.Kill()
 }
 
 func (gc *GroupContext) CalculateState(members *MemberList, repo *fs.GroupRepo) []byte {

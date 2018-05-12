@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -50,9 +49,8 @@ func (n *Network) GetGroupMembers(groupName string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not get group members: Network.GetGroupMembers: %s", err)
 	}
-	members := []string{}
+	var members []string
 	if err := json.Unmarshal(membersBytes, &members); err != nil {
-		log.Printf("memberbytes: '%s'\n", string(membersBytes))
 		return nil, fmt.Errorf("could not unmarshal group members: Network.GetGroupMembers: %s", err)
 	}
 	return members, nil

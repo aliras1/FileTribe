@@ -1,7 +1,7 @@
 package filestorage
 
 import (
-	"log"
+	"fmt"
 )
 
 type GroupRepo struct {
@@ -22,6 +22,6 @@ func (repo *GroupRepo) Append(file *FileGroup) {
 
 func (repo *GroupRepo) List() {
 	for _, file := range repo.Files {
-		log.Println("\t--> " + file.Name)
+		fmt.Println("\t--> " + file.Name)
 	}
 }
