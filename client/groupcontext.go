@@ -159,10 +159,15 @@ func (gc *GroupContext) AddAndShareFile(filePath string) error {
 	if err := gc.Network.GroupShare(gc.Group.Name, transactionJSON); err != nil {
 		return fmt.Errorf("error while network call: GroupContext.AddANdShareFile: %s", err)
 	}
+
+	fmt.Printf("[*] file '%s' shared with group '%s'\n", filePath, gc.Group.Name)
+
 	return nil
 }
 
 func (gc *GroupContext) Invite(newMember string) error {
+	fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, gc.Group.Name)
+
 	prevHash := gc.CalculateState(gc.Members, gc.Repo)
 	newMembers := gc.Members.Append(newMember, gc.Network)
 	newHash := gc.CalculateState(newMembers, gc.Repo)

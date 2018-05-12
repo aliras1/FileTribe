@@ -70,7 +70,7 @@ func DownloadReadCAP(fromUser, username, capName string, boxer *crypto.BoxingKey
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
 func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
-	glog.Info("\t--> Downloading CAP...")
+	glog.Info("Downloading CAP...")
 	// get address and key
 	ipfsAddr, err := network.GetUserIPFSAddr(fromUser)
 	if err != nil {
@@ -96,7 +96,7 @@ func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 		return nil, fmt.Errorf("could not decrypt cap '%s' from user '%s' with path '%s': downloadCAP", capName, fromUser, ipnsPath)
 	}
 	os.Remove(tmpFilePath)
-	glog.Info("\t--> CAP Downloaded")
+	glog.Info("\t<-- CAP Downloaded")
 	return bytesDecr, nil
 }
 

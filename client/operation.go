@@ -101,7 +101,8 @@ func (i *InviteOperation) RawOperation() RawOperation {
 }
 
 func (i *InviteOperation) Execute(groupCtx *GroupContext) error {
-	fmt.Printf("[*] User '%s' executing invite cmd...\n", groupCtx.User.Name)
+	glog.Infof("User '%s' executing invite cmd...\n", groupCtx.User.Name)
+
 	groupCtx.Members = groupCtx.Members.Append(i.NewMember, groupCtx.Network)
 	if err := groupCtx.Storage.CreateGroupAccessCAPForUser(
 		i.NewMember,
@@ -124,7 +125,7 @@ func (i *InviteOperation) Execute(groupCtx *GroupContext) error {
 			"GROUP INVITE",
 			groupCtx.Group.Name+".json",
 		); err != nil {
-			return fmt.Errorf("user '%s'could not send message to user '%s': InviteOperation.Execute: %s", i.From, i.NewMember, err)
+			return fmt.Errorf("user '%s' could not send message to user '%s': InviteOperation.Execute: %s", i.From, i.NewMember, err)
 		}
 	}
 	return nil

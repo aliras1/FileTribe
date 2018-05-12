@@ -232,7 +232,9 @@ func (i *IPFS) KillAll() {
 
 func (i *IPFS) Kill(channelName string) {
 	glog.Infof("Killing channel '%s': IPFS.Kill", channelName)
+
 	i.mux.Lock()
+
 	subscription, ok := i.pubSubSubscriptions[channelName]
 	if !ok {
 		glog.Warningf("subscription '%s' not found: IPFS.Kill", channelName)
@@ -242,8 +244,8 @@ func (i *IPFS) Kill(channelName string) {
 	subscription.conn.Close()
 	close(subscription.channel)
 	delete(i.pubSubSubscriptions, channelName)
+
 	i.mux.Unlock()
-	fmt.Println(i.pubSubSubscriptions)
 }
 
 func (i *IPFS) PubsubPublish(channel string, message []byte) error {
@@ -268,7 +270,7 @@ func (i *IPFS) PubsubSubscribe(username, channel string, dst chan PubsubMessage)
 		channel: dst,
 		conn: conn,
 	}
-	fmt.Println(i.pubSubSubscriptions)
+
 	req := "GET /api/v0/pubsub/sub?arg=" + channel + " HTTP/1.1\nHost: localhost:5001\n\n"
 	conn.Write([]byte(req))
 	if _, err := bufio.NewReader(conn).ReadString('\n'); err != nil { // HTTP 200 response
@@ -295,9 +297,11 @@ func (i *IPFS) PubsubSubscribe(username, channel string, dst chan PubsubMessage)
 		}
 
 		i.mux.Lock()
+
 		if _, ok := i.pubSubSubscriptions[channel]; ok {
 			dst <- msg
 		}
+
 		i.mux.Unlock()
 	}
 }

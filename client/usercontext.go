@@ -27,6 +27,8 @@ type UserContext struct {
 }
 
 func NewUserContextFromSignUp(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+	fmt.Printf("[*] User '%s' signing up...\n", username)
+
 	ipfsID, err := ipfs.ID()
 	if err != nil {
 		return nil, fmt.Errorf("could not get ipfs id: NewUserContextFromSignUp: %s", err)
@@ -39,10 +41,15 @@ func NewUserContextFromSignUp(username, password, dataPath string, network *nw.N
 	if err != nil {
 		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignUp: %s", err)
 	}
+
+	fmt.Printf("[*] Signed in\n")
+
 	return uc, nil
 }
 
 func NewUserContextFromSignIn(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+	fmt.Printf("[*] User '%s' signing in.../n", username)
+
 	user, err := SignIn(username, password, network)
 	if err != nil {
 		return nil, fmt.Errorf("could not sign in: NewUserContextFromSignIn: %s", err)
@@ -51,6 +58,9 @@ func NewUserContextFromSignIn(username, password, dataPath string, network *nw.N
 	if err != nil {
 		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignIn: %s", err)
 	}
+
+	fmt.Printf("[*] Signed in\n")
+
 	return uc, nil
 }
 
@@ -88,7 +98,7 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 }
 
 func (uc *UserContext) SignOut() {
-	fmt.Println("[*] User '%s' signing out...", uc.User.Name)
+	fmt.Printf("[*] User '%s' signing out...", uc.User.Name)
 	for _, groupCtx := range uc.Groups {
 		groupCtx.Stop()
 	}
@@ -118,9 +128,11 @@ func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Mess
 }
 
 func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserContext) {
-	fmt.Printf("[*] User '%s' is processing messages...\n", username)
+	glog.Infof("User '%s' is processing messages...\n", username)
+
 	for msg := range channelMsg {
 		glog.Infof("--> user '%s' got message", username)
+
 		switch msg.Type {
 		case "PTP READ CAP":
 			cap, err := fs.DownloadReadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
@@ -144,6 +156,7 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 		case "GROUP INVITE":
 			fmt.Printf("[*] Joining group '%s'...\n", strings.Split(msg.Message, ".")[0])
 			glog.Infof("\t--> Donwloading group access cap '%s'...", msg.Message)
+
 			cap, err := ctx.Storage.DownloadGroupAccessCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
 			if err != nil {
 				glog.Errorf("could not download ga cap: MessageProcessor: %s", err)
@@ -196,10 +209,15 @@ func (uc *UserContext) CreateGroup(groupname string) error {
 		return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
 	}
 	uc.Groups = append(uc.Groups, groupCtx)
+
+	fmt.Printf("[*] Group '%s' created!\n", groupname)
+
 	return nil
 }
 
 func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {
+	fmt.Printf("[*] PTP sharing file '%s' with user '%s'...", filePath, shareWith[0])
+
 	if uc.isFileInRepo("/ipns/" + uc.IPNSAddr + "/files/" + path.Base(filePath)) {
 		return fmt.Errorf("file is already added to the repo: UserContext.AddAndShareFile")
 	}
@@ -211,6 +229,9 @@ func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) erro
 		return fmt.Errorf("could not share file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
 	}
 	uc.addFileToRepo(file)
+
+	fmt.Printf("[*] PTP sharing ended")
+
 	return nil
 }
 
@@ -236,13 +257,14 @@ func (uc *UserContext) getFileFromRepo(name string) *fs.FilePTP {
 	return nil
 }
 
-func (uc *UserContext) List() {
-	fmt.Println("MyFiles")
+func (uc *UserContext) List() string {
+	str := "MyFilen"
 	for _, file := range uc.Repo {
-		fmt.Println("\t--> " + file.Name)
+		str += "\t--> " + file.Name + "\n"
 	}
 	for _, groupCtx := range uc.Groups {
-		fmt.Println(groupCtx.Group.Name)
-		groupCtx.Repo.List()
+		str += groupCtx.Group.Name
+		str += groupCtx.Repo.List()
 	}
+	return str
 }

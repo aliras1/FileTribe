@@ -21,7 +21,7 @@ type Synchronizer struct {
 }
 
 func NewSynchronizer(groupCtx *GroupContext) *Synchronizer {
-	fmt.Printf("[*] Creating synchronizer...\n")
+	glog.Infof("Creating synchronizer...")
 	var synch Synchronizer
 	synch.groupCtx = groupCtx
 	synch.channelStop = make(chan int)
@@ -79,7 +79,7 @@ func (synch *Synchronizer) StateListener() {
 }
 
 func (s *Synchronizer) MessageProcessor() {
-	fmt.Printf("[*] Synchronizer for user '%s' group '%s' is running...\n", s.groupCtx.User.Name, s.groupCtx.Group.Name)
+	glog.Infof("Synchronizer for user '%s' group '%s' is running...\n", s.groupCtx.User.Name, s.groupCtx.Group.Name)
 	for pubsubMessage := range s.channelPubSub {
 		glog.Infof("--> user '%s' in group '%s' recieved a message", s.groupCtx.User.Name, s.groupCtx.Group.Name)
 		groupMessageBytes, ok := pubsubMessage.Decrypt(s.groupCtx.Group.Boxer)

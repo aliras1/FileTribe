@@ -9,7 +9,7 @@ import (
 )
 
 type ICommand interface {
-	Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error)
+	Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error)
 }
 
 func NewCommand(raw string) (ICommand, error) {
@@ -92,15 +92,15 @@ type CMDSignUp struct {
 	Password string
 }
 
-func (cmd *CMDSignUp) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func (cmd *CMDSignUp) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx != nil {
-		return nil, fmt.Errorf("an active user context already running: CMDSignup.Execute")
+		return nil, "", fmt.Errorf("an active user context already running: CMDSignup.Execute")
 	}
 	uc, err := NewUserContextFromSignUp(cmd.Username, cmd.Password, cmd.Username, network, ipfs)
 	if err != nil {
-		return nil, fmt.Errorf("could not sign up: CMDSignUp.Execute: %s", err)
+		return nil, "", fmt.Errorf("could not sign up: CMDSignUp.Execute: %s", err)
 	}
-	return uc, nil
+	return uc, "", nil
 }
 
 type CMDSignIn struct {
@@ -108,29 +108,29 @@ type CMDSignIn struct {
 	Password string
 }
 
-func (cmd *CMDSignIn) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func (cmd *CMDSignIn) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx != nil {
-		return nil, fmt.Errorf("an active user context already running: CMDSignIn.Execute")
+		return nil, "", fmt.Errorf("an active user context already running: CMDSignIn.Execute")
 	}
 	uc, err := NewUserContextFromSignIn(cmd.Username, cmd.Password, cmd.Username, network, ipfs)
 	if err != nil {
-		return nil, fmt.Errorf("could not sign up: CMDSignIn.Execute: %s", err)
+		return nil, "", fmt.Errorf("could not sign up: CMDSignIn.Execute: %s", err)
 	}
-	return uc, nil
+	return uc, "", nil
 }
 
 type CMDCreateGroup struct {
 	GroupName string
 }
 
-func (cmd *CMDCreateGroup) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func (cmd *CMDCreateGroup) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("no active user context CMDCreateGroup.Execute")
+		return nil, "", fmt.Errorf("no active user context CMDCreateGroup.Execute")
 	}
 	if err := ctx.CreateGroup(cmd.GroupName); err != nil {
-		return ctx, fmt.Errorf("could not create group: CmdCreateGroup.Execute: %s", err)
+		return ctx, "", fmt.Errorf("could not create group: CmdCreateGroup.Execute: %s", err)
 	}
-	return ctx, nil
+	return ctx, "", nil
 }
 
 type CMDGroupInvite struct {
@@ -138,19 +138,19 @@ type CMDGroupInvite struct {
 	NewMember string
 }
 
-func (cmd *CMDGroupInvite) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func (cmd *CMDGroupInvite) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("no active user context CMDGroupInvite.Execute")
+		return nil, "", fmt.Errorf("no active user context CMDGroupInvite.Execute")
 	}
 	for _, group := range ctx.Groups {
 		if strings.Compare(group.Group.Name, cmd.GroupName) == 0 {
 			if err := group.Invite(cmd.NewMember); err != nil {
-				return ctx, fmt.Errorf("could not invite user '%s' into group '%s': CMDGroupInvite.Execute: %s", cmd.NewMember, cmd.GroupName, err)
+				return ctx, "", fmt.Errorf("could not invite user '%s' into group '%s': CMDGroupInvite.Execute: %s", cmd.NewMember, cmd.GroupName, err)
 			}
-			return ctx, nil
+			return ctx, "", nil
 		}
 	}
-	return ctx, fmt.Errorf("no group '%s' found in group repo: CMDGroupIOnvite.Execute", cmd.GroupName)
+	return ctx, "", fmt.Errorf("no group '%s' found in group repo: CMDGroupIOnvite.Execute", cmd.GroupName)
 }
 
 type CMDPTPAddAndShareFile struct {
@@ -158,14 +158,14 @@ type CMDPTPAddAndShareFile struct {
 	ShareWith string
 }
 
-func (cmd *CMDPTPAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func (cmd *CMDPTPAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("no active user context CMDPTPAddAndShareFile.Execute")
+		return nil, "", fmt.Errorf("no active user context CMDPTPAddAndShareFile.Execute")
 	}
 	if err := ctx.AddAndShareFile(cmd.FilePath, []string{cmd.ShareWith}); err != nil {
-		return ctx, fmt.Errorf("could not add and share file '%s' with user '%s': CMDPTPAddAndShareFile.Execute: %s", cmd.FilePath, cmd.ShareWith, err)
+		return ctx, "", fmt.Errorf("could not add and share file '%s' with user '%s': CMDPTPAddAndShareFile.Execute: %s", cmd.FilePath, cmd.ShareWith, err)
 	}
-	return ctx, nil
+	return ctx, "", nil
 }
 
 type CMDGroupAddAndShareFile struct {
@@ -173,46 +173,45 @@ type CMDGroupAddAndShareFile struct {
 	Path string
 }
 
-func (cmd *CMDGroupAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func (cmd *CMDGroupAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("no active user context CMDPTPAddAndShareFile.Execute")
+		return nil, "", fmt.Errorf("no active user context CMDPTPAddAndShareFile.Execute")
 	}
 	for _, groupCtx := range ctx.Groups {
 		if strings.Compare(cmd.GroupName, groupCtx.Group.Name) == 0 {
 			if err := groupCtx.AddAndShareFile(cmd.Path); err != nil {
-				return ctx, fmt.Errorf("could not group add and share file: CMDGroupAddAndShareFile: %s", err)
+				return ctx, "", fmt.Errorf("could not group add and share file: CMDGroupAddAndShareFile: %s", err)
 			}
-			return ctx, nil
+			return ctx, "", nil
 		}
 	}
-	return ctx, fmt.Errorf("no group named '%s', exists: CMDGroupAddAndShareFile", cmd.GroupName)
+	return ctx, "", fmt.Errorf("no group named '%s', exists: CMDGroupAddAndShareFile", cmd.GroupName)
 }
 
 type CMDList struct {
 
 }
 
-func (cmd *CMDList) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func (cmd *CMDList) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("no active user context CMDList.Execute")
+		return nil, "", fmt.Errorf("no active user context CMDList.Execute")
 	}
-	ctx.List()
-	return ctx, nil
+	return ctx, ctx.List(), nil
 }
 
 type CMDCat struct {
 	Path string
 }
 
-func (cmd *CMDCat) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func (cmd *CMDCat) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("no active user context CMDList.Execute")
+		return nil, "", fmt.Errorf("no active user context CMDList.Execute")
 	}
 	filePath := ctx.Storage.GetUserFilesPath() + "/" + cmd.Path
 	fileBytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		return ctx, fmt.Errorf("could not read file '%s': CMDCat.Execute", filePath)
+		return ctx, "", fmt.Errorf("could not read file '%s': CMDCat.Execute", filePath)
 	}
 	fmt.Printf(string(fileBytes) + "\n")
-	return ctx, nil
+	return ctx, "", nil
 }

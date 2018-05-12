@@ -97,7 +97,7 @@ func (storage *Storage) BuildRepo(username string, boxer *crypto.BoxingKeyPair, 
 		path := storage.capsPath + "/" + entry.Name()
 		file, err := NewFile(path)
 		if err != nil {
-			glog.Warning("invalid file '%s': Storage.BuildRepo: %s\n", path, err)
+			glog.Warningf("invalid file '%s': Storage.BuildRepo: %s\n", path, err)
 			continue // do not care about trash files
 		}
 		if err := file.Refresh(storage, ipfs); err != nil {
@@ -130,7 +130,7 @@ func (storage *Storage) createFileForUser(user, capName string, data []byte, box
 	forUserPath := storage.publicForPath + "/" + user
 	err := os.MkdirAll(forUserPath, 0770)
 	if err != nil {
-		glog.Warning("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
+		glog.Warningf("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
 	}
 	otherPK, err := network.GetUserBoxingKey(path.Base(forUserPath))
 	if err != nil {
@@ -309,7 +309,7 @@ func CopyFile(src, dst string) error {
 func WriteFile(filePath string, data []byte) error {
 	f, err := os.Create(filePath)
 	if err != nil {
-		glog.Warning("file '%s' already exists: WriteFile", filePath)
+		glog.Warningf("file '%s' already exists: WriteFile", filePath)
 	}
 	defer f.Close()
 	_, err = f.Write(data)

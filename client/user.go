@@ -82,6 +82,7 @@ func SignUp(username, password, ipfsAddr string, network *nw.Network) (*User, er
 	if err := network.PutIPFSAddr(user.PublicKeyHash, ipfsAddr); err != nil {
 		return nil, fmt.Errorf("could not put ipfs address: SignUp: %s", err)
 	}
+
 	return user, nil
 }
 
@@ -104,6 +105,7 @@ func SignIn(username, password string, network *nw.Network) (*User, error) {
 	if !publicKeyHash.Equals(&user.PublicKeyHash) {
 		return nil, fmt.Errorf("incorrect password: SignIn")
 	}
+
 	return user, nil
 }
 

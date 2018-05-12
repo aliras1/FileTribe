@@ -242,7 +242,7 @@ func (n *Network) RegisterGroup(groupName, owner string) error {
 	stateHash := sha256.Sum256([]byte(owner))
 	stateHashBase64 := base64.StdEncoding.EncodeToString(stateHash[:])
 	jsonStr := fmt.Sprintf(`{"groupname":"%s", "owner":"%s", "state":"%s"}`, groupName, owner, stateHashBase64)
-	fmt.Println(jsonStr)
+
 	_, err := n.Post(
 		"/register/group",
 		"application/json",
@@ -268,7 +268,7 @@ func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) e
 
 func (n *Network) SendMessage(from, to, msgType, msgData string) error {
 	m := Message{from, to, msgType, msgData}
-	fmt.Println(m)
+
 	byteJSON, err := json.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("could not marshal message")

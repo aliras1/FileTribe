@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"log"
-
 	"ipfs-share/client"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/network"
+	"flag"
+	"github.com/golang/glog"
 )
 
 const (
@@ -18,9 +18,11 @@ const (
 )
 
 func main() {
+	flag.Parse()
+
 	ipfs, err := ipfs.NewIPFS("http://127.0.0.1", 5001)
 	if err != nil {
-		log.Printf("could not connect to ipfs daemon: %s", err)
+		glog.Fatalf("could not connect to ipfs daemon: %s", err)
 	}
 	network := &nw.Network{"http://172.18.0.2:6000"}
 	var userContext *client.UserContext
@@ -36,7 +38,6 @@ func main() {
 	defer l.Close()
 	fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
 	for {
-		fmt.Println("uzi elott")
 		// Listen for an incoming connection.
 		conn, err := l.Accept()
 		if err != nil {
@@ -50,7 +51,6 @@ func main() {
 
 // Handles incoming requests.
 func handleRequest(ctx **client.UserContext, netwrok *nw.Network, ipfs *ipfs.IPFS, conn net.Conn) {
-	fmt.Println("handling uzi...")
 	// Make a buffer to hold incoming data.
 	buf := make([]byte, 1024)
 	// Read the incoming connection into the buffer.
@@ -67,17 +67,17 @@ func handleRequest(ctx **client.UserContext, netwrok *nw.Network, ipfs *ipfs.IPF
 		conn.Close()
 		return
 	}
-	log.Println("[*] Executing api command...")
-	uc, err := cmd.Execute(*ctx, netwrok, ipfs)
-	log.Println("[*] Api command executed")
+	glog.Info("[*] Executing api command...")
+	uc, message, err := cmd.Execute(*ctx, netwrok, ipfs)
+	glog.Info("[*] Api command executed")
 	if err != nil {
-		log.Printf("asdasd")
-		log.Printf("could not execute command: handleRequest: %s", err)
+		fmt.Printf("[ERROR]: could not execute command: handleRequest: %s\n", err)
 		conn.Write([]byte("could not execute command"))
 		conn.Close()
 		return
 	}
 	*ctx = uc
-	// Close the connection when you're done with it.
+
+	conn.Write([]byte(message))
 	conn.Close()
 }

@@ -8,4 +8,5 @@ ipfs init -b $i
 ipfs daemon --enable-pubsub-experiment </dev/null &>/dev/null &
 sleep 15
 cd /root/go/src/ipfs-share/main
-./main
+mkdir log
+./main -stderrthreshold=FATAL -log_dir=./log
