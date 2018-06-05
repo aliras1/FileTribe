@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/golang/glog"
 
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
@@ -82,7 +83,7 @@ func (storage *Storage) GetUserFilesPath() string {
 // These files are JSON representation of a FilePTP that were shared by the
 // user.
 func (storage *Storage) BuildRepo(username string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) ([]*FilePTP, error) {
-	log.Println("[*] Building repo...")
+	glog.Info("Building repo...")
 	var repo []*FilePTP
 	// read capabilities from caps and try to refresh them
 	entries, err := ioutil.ReadDir(storage.capsPath)
@@ -96,7 +97,7 @@ func (storage *Storage) BuildRepo(username string, boxer *crypto.BoxingKeyPair, 
 		path := storage.capsPath + "/" + entry.Name()
 		file, err := NewFile(path)
 		if err != nil {
-			log.Printf("invalid file '%s': Storage.BuildRepo: %s\n", path, err)
+			glog.Warningf("invalid file '%s': Storage.BuildRepo: %s\n", path, err)
 			continue // do not care about trash files
 		}
 		if err := file.Refresh(storage, ipfs); err != nil {
@@ -104,7 +105,7 @@ func (storage *Storage) BuildRepo(username string, boxer *crypto.BoxingKeyPair, 
 		}
 		repo = append(repo, file)
 	}
-	log.Println("[*] Repo ready")
+	glog.Info("Repo ready")
 	return repo, nil
 }
 
@@ -129,7 +130,7 @@ func (storage *Storage) createFileForUser(user, capName string, data []byte, box
 	forUserPath := storage.publicForPath + "/" + user
 	err := os.MkdirAll(forUserPath, 0770)
 	if err != nil {
-		log.Printf("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
+		glog.Warningf("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
 	}
 	otherPK, err := network.GetUserBoxingKey(path.Base(forUserPath))
 	if err != nil {
@@ -159,14 +160,15 @@ func (storage *Storage) GetGroupCAPs() ([]GroupAccessCAP, error) {
 		if entry.IsDir() {
 			continue // do not care about directories
 		}
-		capBytes, err := ioutil.ReadFile(storage.capsGAPath + "/" + entry.Name())
+		filePath := storage.capsGAPath + "/" + entry.Name()
+		capBytes, err := ioutil.ReadFile(filePath)
 		if err != nil {
-			log.Println(err)
+			glog.Warning("could not read file '%s': Storage.GetGroupCAPs: %s", filePath, err)
 			continue
 		}
 		var cap GroupAccessCAP
 		if err := json.Unmarshal(capBytes, &cap); err != nil {
-			log.Println(err)
+			glog.Warning("could not unmarshal group cap: Storage.GetGroupCAPs: %s", err)
 			continue
 		}
 		cap.Boxer.RNG = rand.Reader
@@ -258,7 +260,7 @@ func (storage *Storage) DownloadGroupAccessCAP(fromUser, username, capName strin
 // +------------------------------+
 
 func (storage *Storage) PublishPublicDir(ipfs *ipfs.IPFS) error {
-	log.Println("[*] Publishing...")
+	glog.Info("Publishing...")
 	publicDir := storage.dataPath + "/public"
 	merkleNodes, err := ipfs.AddDir(publicDir)
 	if err != nil {
@@ -272,7 +274,7 @@ func (storage *Storage) PublishPublicDir(ipfs *ipfs.IPFS) error {
 			break
 		}
 	}
-	log.Println("[*] Publishing ended")
+	glog.Info("Publishing ended")
 	return nil
 }
 
@@ -307,7 +309,7 @@ func CopyFile(src, dst string) error {
 func WriteFile(filePath string, data []byte) error {
 	f, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("file '%s' already exists: WriteFile", filePath)
+		glog.Warningf("file '%s' already exists: WriteFile", filePath)
 	}
 	defer f.Close()
 	_, err = f.Write(data)

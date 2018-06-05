@@ -6,7 +6,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"log"
+
+	"github.com/golang/glog"
 
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
@@ -69,7 +70,7 @@ func DownloadReadCAP(fromUser, username, capName string, boxer *crypto.BoxingKey
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
 func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
-	log.Printf("\t--> Downloading CAP...")
+	glog.Info("Downloading CAP...")
 	// get address and key
 	ipfsAddr, err := network.GetUserIPFSAddr(fromUser)
 	if err != nil {
@@ -90,14 +91,12 @@ func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 	if err != nil {
 		return nil, fmt.Errorf("could not read file '%s': downloadCAP: %s", tmpFilePath, err)
 	}
-	fmt.Print("group cap bytes: ")
-	fmt.Println(bytesEnc)
 	bytesDecr, success := boxer.BoxOpen(bytesEnc, &otherPK)
 	if !success {
 		return nil, fmt.Errorf("could not decrypt cap '%s' from user '%s' with path '%s': downloadCAP", capName, fromUser, ipnsPath)
 	}
 	os.Remove(tmpFilePath)
-	log.Printf("\t--> CAP Downloaded")
+	glog.Info("\t<-- CAP Downloaded")
 	return bytesDecr, nil
 }
 

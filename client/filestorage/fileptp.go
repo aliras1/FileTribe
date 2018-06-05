@@ -59,7 +59,7 @@ func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, 
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve ipns address: NewFileFromCAP: %s", err)
 	}
-	fmt.Println(ipfsHash)
+
 	file := FilePTP{
 		Name: cap.FileName,
 		Owner: cap.Owner,
@@ -72,7 +72,7 @@ func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, 
 		WriteKey:  crypto.SecretSigningKey{},
 		Own:  false,
 	}
-	fmt.Println(file)
+
 	if err := file.download(storage, ipfs); err != nil {
 		return nil, fmt.Errorf("could not download file '%s': NewFileFromCAP: %s", cap.FileName, err)
 	}

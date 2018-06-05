@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -50,9 +49,8 @@ func (n *Network) GetGroupMembers(groupName string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not get group members: Network.GetGroupMembers: %s", err)
 	}
-	members := []string{}
+	var members []string
 	if err := json.Unmarshal(membersBytes, &members); err != nil {
-		log.Printf("memberbytes: '%s'\n", string(membersBytes))
 		return nil, fmt.Errorf("could not unmarshal group members: Network.GetGroupMembers: %s", err)
 	}
 	return members, nil
@@ -244,7 +242,7 @@ func (n *Network) RegisterGroup(groupName, owner string) error {
 	stateHash := sha256.Sum256([]byte(owner))
 	stateHashBase64 := base64.StdEncoding.EncodeToString(stateHash[:])
 	jsonStr := fmt.Sprintf(`{"groupname":"%s", "owner":"%s", "state":"%s"}`, groupName, owner, stateHashBase64)
-	fmt.Println(jsonStr)
+
 	_, err := n.Post(
 		"/register/group",
 		"application/json",
@@ -270,7 +268,7 @@ func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) e
 
 func (n *Network) SendMessage(from, to, msgType, msgData string) error {
 	m := Message{from, to, msgType, msgData}
-	fmt.Println(m)
+
 	byteJSON, err := json.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("could not marshal message")

@@ -2,76 +2,241 @@ package client
 
 import (
 	"fmt"
+	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	ipfsapi "ipfs-share/ipfs"
 	nw "ipfs-share/network"
+	"flag"
 )
 
-func TestUserContext_CreateGroup(t *testing.T) {
-	network := &nw.Network{"http://0.0.0.0:6000"}
+
+func Alice(signup bool, network *nw.Network) (*UserContext, error) {
 	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
-	// sign up and create group
-	fmt.Println("signing up and creating group...")
-	uc, err := NewUserContextFromSignUp("testuser", "pw", "./testuser/", network, ipfs)
 	if err != nil {
-		t.Fatal(err)
+		return nil, fmt.Errorf("could not create new ipfs api conn: Alice: %s", err)
 	}
-	if err := uc.CreateGroup("cucc_group"); err != nil {
-		t.Fatal(err)
+	username := "alice"
+	password := "pwd"
+	homeDir := "./alice/"
+	var alice *UserContext
+
+	if signup {
+		alice, err = NewUserContextFromSignUp(username, password, homeDir, network, ipfs)
+		if err != nil {
+			return nil, fmt.Errorf("could not sign up: Alice: %s", err)
+		}
+	} else {
+		alice, err = NewUserContextFromSignIn(username, password, homeDir, network, ipfs)
+		if err != nil {
+			return nil, fmt.Errorf("could not sign in: Alice: %s", err)
+		}
 	}
-	if err := uc.CreateGroup("cucc_group2"); err != nil {
-		t.Fatal(err)
-	}
-	// sign in and check if group is correct
-	fmt.Println("signing in and checking group...")
-	uc, err = NewUserContextFromSignIn("testuser", "pw", "./testuser/", network, ipfs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(uc.Groups) < 2 {
-		t.Fatal("no groups found")
-	}
-	for _, group := range uc.Groups {
-		fmt.Print(group.Group.Name + ": ")
-		fmt.Println(group.Members)
-	}
+
+	return alice, nil
 }
 
-func TestGroupInvite(t *testing.T) {
-	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
-	network := nw.Network{"http://0.0.0.0:6000"}
+func Bob(signup bool, network *nw.Network) (*UserContext, error) {
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5002)
 	if err != nil {
-		t.Fatal("could not connect to ipfs daemon")
+		return nil, fmt.Errorf("could not create new ipfs api conn: Bob: %s", err)
 	}
-	username1 := "test_user"
-	username2 := "test_user2"
-	uc1, err := NewUserContextFromSignUp(username1, "pw", "./test1/", &network, ipfs)
+	username := "bob"
+	password := "pwd"
+	homeDir := "./bob/"
+	var bob *UserContext
+
+	if signup {
+		bob, err = NewUserContextFromSignUp(username, password, homeDir, network, ipfs)
+		if err != nil {
+			return nil, fmt.Errorf("could not sign up: Bob: %s", err)
+		}
+	} else {
+		bob, err = NewUserContextFromSignIn(username, password, homeDir, network, ipfs)
+		if err != nil {
+			return nil, fmt.Errorf("could not sign in: Bob: %s", err)
+		}
+	}
+
+	return bob, nil
+}
+
+func Charlie(signup bool, network *nw.Network) (*UserContext, error) {
+	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5003)
+	if err != nil {
+		return nil, fmt.Errorf("could not create new ipfs api conn: Charlie: %s", err)
+	}
+	username := "charlie"
+	password := "pwd"
+	homeDir := "./charlie/"
+	var charlie *UserContext
+
+	if signup {
+		charlie, err = NewUserContextFromSignUp(username, password, homeDir, network, ipfs)
+		if err != nil {
+			return nil, fmt.Errorf("could not sign up: Charlie: %s", err)
+		}
+	} else {
+		charlie, err = NewUserContextFromSignIn(username, password, homeDir, network, ipfs)
+		if err != nil {
+			return nil, fmt.Errorf("could not sign in: Charlie: %s", err)
+		}
+	}
+
+	return charlie, nil
+}
+
+func CleanUp() {
+	os.RemoveAll("./alice")
+	os.RemoveAll("./bob")
+	os.RemoveAll("./charlie")
+}
+
+func GetIPAddress() (string, error) {
+	name, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("could not get hostname: GetIPAddress: %s", err)
+	}
+	addrs, err := net.LookupHost(name)
+	if err != nil {
+		return "", fmt.Errorf("could not get addresses: GetIPAddress: %s", err)
+	}
+	if len(addrs) < 1 {
+		return "", fmt.Errorf("no ip addresses found: GetIPAddress")
+	}
+	return addrs[0], nil
+}
+
+
+func TestBigScenario(t *testing.T) {
+	flag.Set("alsologtostderr", fmt.Sprintf("%t", true))
+	var logLevel string
+	flag.StringVar(&logLevel, "logLevel", "4", "test")
+
+	CleanUp()
+	ip, err := GetIPAddress()
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc2, err := NewUserContextFromSignUp(username2, "pw", "./test2/", &network, ipfs)
+	network := &nw.Network{Address: "http://" + ip + ":6000"}
+	alice, err := Alice(true, network)
 	if err != nil {
 		t.Fatal(err)
 	}
-	groupname := "test_group"
-	if err := uc1.CreateGroup(groupname); err != nil {
+
+	// +----------------+
+	// | GROUP CREATION |
+	// +----------------+
+	// create some groups
+	if err := alice.CreateGroup("alice_group"); err != nil {
 		t.Fatal(err)
 	}
-	if err := uc1.Groups[0].Invite(uc2.User.Name); err != nil {
+	if err := alice.CreateGroup("alice_group2"); err != nil {
+		t.Fatal(err)
+	}
+
+	// check if can not create duplicates
+	err = alice.CreateGroup("alice_group")
+	if !strings.Contains(err.Error(), "group name already exists") {
+		t.Fatal(err)
+	}
+	err = alice.CreateGroup("alice_group2")
+	if !strings.Contains(err.Error(), "group name already exists") {
+		t.Fatal(err)
+	}
+
+	// check groups
+	if len(alice.Groups) < 2 {
+		t.Fatalf("%d number of groups found instead of 2", len(alice.Groups))
+	}
+
+	// sign in and check if groups are built up
+	alice.SignOut()
+	time.Sleep(2 * time.Second)
+	alice, err = Alice(false, network)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alice.Groups) < 2 {
+		t.Fatalf("%d number of groups found instead of 2", len(alice.Groups))
+	}
+
+	bob, err := Bob(true, network)
+	if err != nil {
+		t.Fatal(err)
+	}
+	charlie, err := Charlie(true, network)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// +------------+
+	// | INVITATION |
+	// +------------+
+
+	// invite bob
+	if err := alice.Groups[0].Invite(bob.User.Name); err != nil {
+		t.Fatal(err)
+	}
+	// concurrently invite charlie
+	// just the first invitations should be successful
+	if err := alice.Groups[0].Invite(charlie.User.Name); err != nil {
+		t.Fatal(err)
+	}
+
+
+	time.Sleep(210 * time.Second)
+	if len(bob.Groups) < 1 {
+		t.Fatal("bob has no groups")
+	}
+	if len(alice.Groups[0].Members.List) != len(bob.Groups[0].Members.List) {
+		t.Fatal("members do not match")
+	}
+
+	// sign out and in with bob and check if he builds up the group
+	bob.SignOut()
+	bob, err = Bob(false, network)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bob.Groups) < 1 {
+		t.Fatal("bob has no groups")
+	}
+	if len(alice.Groups[0].Members.List) != len(bob.Groups[0].Members.List) {
+		t.Fatal("members do not match")
+	}
+
+	// invite charlie, consensus needed now
+	if err := alice.Groups[0].Invite(charlie.User.Name); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(130 * time.Second)
-	if len(uc1.Groups) != len(uc2.Groups) {
-		t.Fatal("#groups do not match")
+	if len(charlie.Groups) < 1 {
+		t.Fatal("charlie has no groups")
 	}
-	fmt.Println(uc1.Groups[0].Members.List)
-	fmt.Println(uc2.Groups[0].Members.List)
-	if len(uc1.Groups[0].Members.List) != len(uc2.Groups[0].Members.List) {
+	if len(alice.Groups[0].Members.List) != len(bob.Groups[0].Members.List) &&
+	   len(alice.Groups[0].Members.List) != len(charlie.Groups[0].Members.List) {
+
+	   	t.Fatal("members do not match")
+	}
+
+	// sign out and in with charlie and check if he builds up the group
+	charlie.SignOut()
+	charlie, err = Charlie(false, network)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(charlie.Groups) < 1 {
+		t.Fatal("charlie has no groups")
+	}
+	if len(alice.Groups[0].Members.List) != len(charlie.Groups[0].Members.List) {
 		t.Fatal("members do not match")
 	}
+
+	CleanUp()
 }
 
 func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {

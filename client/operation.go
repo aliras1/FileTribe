@@ -3,8 +3,9 @@ package client
 import (
 	"fmt"
 	"strings"
-	"log"
 	"bytes"
+
+	"github.com/golang/glog"
 
 	"ipfs-share/client/filestorage"
 )
@@ -100,7 +101,8 @@ func (i *InviteOperation) RawOperation() RawOperation {
 }
 
 func (i *InviteOperation) Execute(groupCtx *GroupContext) error {
-	log.Printf("[*] %s executes invite cmd...", groupCtx.User.Name)
+	glog.Infof("User '%s' executing invite cmd...\n", groupCtx.User.Name)
+
 	groupCtx.Members = groupCtx.Members.Append(i.NewMember, groupCtx.Network)
 	if err := groupCtx.Storage.CreateGroupAccessCAPForUser(
 		i.NewMember,
@@ -116,14 +118,14 @@ func (i *InviteOperation) Execute(groupCtx *GroupContext) error {
 	}
 	// the proposer invites the new member
 	if strings.Compare(i.From, groupCtx.User.Name) == 0 {
-		log.Printf("\t--> Invite proposer sending chain message...")
+		glog.Info("\t--> Invite proposer sending chain message...")
 		if err := groupCtx.Network.SendMessage(
 			i.From,
 			i.NewMember,
 			"GROUP INVITE",
 			groupCtx.Group.Name+".json",
 		); err != nil {
-			return fmt.Errorf("user '%s'could not send message to user '%s': InviteOperation.Execute: %s", i.From, i.NewMember, err)
+			return fmt.Errorf("user '%s' could not send message to user '%s': InviteOperation.Execute: %s", i.From, i.NewMember, err)
 		}
 	}
 	return nil

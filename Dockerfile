@@ -9,6 +9,7 @@ RUN \
     apt-get update && \
     apt-get -y install git golang-1.9-go wget
 
+RUN /usr/lib/go-1.9/bin/go get github.com/golang/glog
 RUN /usr/lib/go-1.9/bin/go get github.com/whyrusleeping/tar-utils
 RUN /usr/lib/go-1.9/bin/go get -u golang.org/x/crypto/...
 

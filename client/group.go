@@ -7,6 +7,7 @@ import (
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
 	nw "ipfs-share/network"
+	"github.com/golang/glog"
 )
 
 type Group struct {
@@ -34,6 +35,7 @@ func (g *Group) Save(storage *fs.Storage) error {
 }
 
 func (g *Group) Register(owner string, network *nw.Network) error {
+	glog.Infof("Registering group '%s'", g.Name)
 	registered, err := network.IsGroupRegistered(g.Name)
 	if err != nil {
 		return fmt.Errorf("could not check if group is registered: Group.Register: %s", err)

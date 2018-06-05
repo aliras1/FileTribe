@@ -4,8 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
+
+	"github.com/golang/glog"
 
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
@@ -42,7 +43,7 @@ func (ml *MemberList) Bytes() []byte {
 func (ml *MemberList) Append(user string, network *nw.Network) *MemberList {
 	verifyKey, err := network.GetUserVerifyKey(user)
 	if err != nil {
-		log.Printf("could not get user verify key: MemberList.Append: %s", err)
+		glog.Errorf("could not get user verify key: MemberList.Append: %s", err)
 		return ml
 	}
 	newList := make([]Member, len(ml.List))
@@ -109,6 +110,10 @@ func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Netw
 	return gc, nil
 }
 
+func (gc *GroupContext) Stop() {
+	gc.Synchronizer.Kill()
+}
+
 func (gc *GroupContext) CalculateState(members *MemberList, repo *fs.GroupRepo) []byte {
 	digest := append(members.Bytes(), repo.Bytes()...)
 	hash := sha256.Sum256(digest)
@@ -154,10 +159,15 @@ func (gc *GroupContext) AddAndShareFile(filePath string) error {
 	if err := gc.Network.GroupShare(gc.Group.Name, transactionJSON); err != nil {
 		return fmt.Errorf("error while network call: GroupContext.AddANdShareFile: %s", err)
 	}
+
+	fmt.Printf("[*] file '%s' shared with group '%s'\n", filePath, gc.Group.Name)
+
 	return nil
 }
 
 func (gc *GroupContext) Invite(newMember string) error {
+	fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, gc.Group.Name)
+
 	prevHash := gc.CalculateState(gc.Members, gc.Repo)
 	newMembers := gc.Members.Append(newMember, gc.Network)
 	newHash := gc.CalculateState(newMembers, gc.Repo)
