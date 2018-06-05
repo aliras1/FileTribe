@@ -59,10 +59,10 @@ func handleRequest(ctx **client.UserContext, netwrok *nw.Network, ipfs *ipfs.IPF
 		fmt.Printf("error reading: handleRequest: %s", err)
 	}
 	// Send a response back to person contacting us.
-	conn.Write([]byte("Message received."))
+	conn.Write([]byte("Message received.\n"))
 	cmd, err := client.NewCommand(string(buf))
 	if err != nil {
-		fmt.Printf("could not create new command handleRequest: %s", err)
+		fmt.Printf("could not create new command handleRequest: %s\n", err)
 		conn.Write([]byte(err.Error()))
 		conn.Close()
 		return
@@ -72,7 +72,7 @@ func handleRequest(ctx **client.UserContext, netwrok *nw.Network, ipfs *ipfs.IPF
 	glog.Info("[*] Api command executed")
 	if err != nil {
 		fmt.Printf("[ERROR]: could not execute command: handleRequest: %s\n", err)
-		conn.Write([]byte("could not execute command"))
+		conn.Write([]byte("could not execute command\n"))
 		conn.Close()
 		return
 	}
