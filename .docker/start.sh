@@ -1,3 +1,5 @@
+geth --datadir /ethnode init /genesis.json
+
 hostname -i
 address=$(hostname -i)
 last_num="${address##*.}"

@@ -15,8 +15,12 @@ services:
       - ipfs-net
     ports:
       - "3333:3333"
+      - "30311:30311"
+      - "8501:8501"
     depends_on:
       - server
+    volumes:
+      - ./ethereumdocker/alice/keystore:/ethnode
 
   bob:
       image: ipfs-share
@@ -26,8 +30,12 @@ services:
         - ipfs-net
       ports:
         - "3334:3333"
+        - "30312:30311"
+        - "8502:8501"
       depends_on:
         - server
+      volumes:
+        - ./ethereumdocker/bob/keystore:/ethnode
 
   charlie:
       image: ipfs-share
@@ -37,7 +45,11 @@ services:
         - ipfs-net
       ports:
         - "3335:3333"
+        - "30313:30311"
+        - "8503:8501"
       depends_on:
         - server
+      volumes:
+        - ./ethereumdocker/charlie/keystore:/ethnode
 networks:
   ipfs-net:
