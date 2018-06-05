@@ -1,0 +1,31 @@
+sudo: required
+
+language: node_js
+
+node_js:
+  - "9"
+
+services:
+- docker
+
+cache:
+  directories:
+  - node_modules
+
+before_install:
+  - docker build -f ./misc/eth/Dockerfile -t eth .
+  - docker run --rm -d -p 30304:30304 -p 8000:8000 eth:latest
+  - sleep 180
+
+install:
+  - npm install -g truffle
+  - npm install
+
+script:
+  - npm run lint
+  - npm run solium
+  - truffle test
+  - npm run stop
+
+after_script:
+- npm run coverage && cat coverage/lcov.info | coveralls
