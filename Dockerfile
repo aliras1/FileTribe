@@ -5,9 +5,12 @@ ENV GOPATH /root/go
 
 RUN export PATH=${PATH}:${GOPATH}/bin
 
+RUN apt-get update
+RUN apt-get install -y software-properties-common
+RUN add-apt-repository ppa:ethereum/ethereum
 RUN \
     apt-get update && \
-    apt-get -y install git golang-1.9-go wget
+    apt-get -y install git golang-1.9-go wget ethereum
 
 RUN /usr/lib/go-1.9/bin/go get github.com/golang/glog
 RUN /usr/lib/go-1.9/bin/go get github.com/whyrusleeping/tar-utils
