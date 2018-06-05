@@ -5,3 +5,4 @@ client/data
 venv
 test*
 .scannerwork
+eth/build
