@@ -48,7 +48,7 @@ func NewUserContextFromSignUp(username, password, dataPath string, network *nw.N
 }
 
 func NewUserContextFromSignIn(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
-	fmt.Printf("[*] User '%s' signing in.../n", username)
+	fmt.Printf("[*] User '%s' signing in...\n", username)
 
 	user, err := SignIn(username, password, network)
 	if err != nil {
@@ -59,7 +59,7 @@ func NewUserContextFromSignIn(username, password, dataPath string, network *nw.N
 		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignIn: %s", err)
 	}
 
-	fmt.Printf("[*] Signed in\n")
+	fmt.Println("[*] Signed in")
 
 	return uc, nil
 }
@@ -98,7 +98,7 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 }
 
 func (uc *UserContext) SignOut() {
-	fmt.Printf("[*] User '%s' signing out...", uc.User.Name)
+	fmt.Printf("[*] User '%s' signing out...\n", uc.User.Name)
 	for _, groupCtx := range uc.Groups {
 		groupCtx.Stop()
 	}
@@ -135,6 +135,7 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 
 		switch msg.Type {
 		case "PTP READ CAP":
+			fmt.Println("[*] Downloading PTP file")
 			cap, err := fs.DownloadReadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
 			if err != nil {
 				glog.Errorf("could not download read cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", msg.Message, err)
@@ -151,8 +152,7 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 			}
 			ctx.addFileToRepo(file)
 
-			fmt.Println("content of root directory: ")
-			ctx.List()
+			fmt.Println("[*] PTP file downloaded")
 		case "GROUP INVITE":
 			fmt.Printf("[*] Joining group '%s'...\n", strings.Split(msg.Message, ".")[0])
 			glog.Infof("\t--> Donwloading group access cap '%s'...", msg.Message)
@@ -216,7 +216,7 @@ func (uc *UserContext) CreateGroup(groupname string) error {
 }
 
 func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {
-	fmt.Printf("[*] PTP sharing file '%s' with user '%s'...", filePath, shareWith[0])
+	fmt.Printf("[*] PTP sharing file '%s' with user '%s'...\n", filePath, shareWith[0])
 
 	if uc.isFileInRepo("/ipns/" + uc.IPNSAddr + "/files/" + path.Base(filePath)) {
 		return fmt.Errorf("file is already added to the repo: UserContext.AddAndShareFile")
@@ -230,7 +230,7 @@ func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) erro
 	}
 	uc.addFileToRepo(file)
 
-	fmt.Printf("[*] PTP sharing ended")
+	fmt.Println("[*] PTP sharing ended")
 
 	return nil
 }

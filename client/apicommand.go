@@ -58,8 +58,8 @@ func NewCommand(raw string) (ICommand, error) {
 			return nil, fmt.Errorf("invalid # args in 'ptpshare' command")
 		}
 		cmd := CMDPTPAddAndShareFile{
-			FilePath: args[1],
-			ShareWith: args[2],
+			ShareWith: args[1],
+			FilePath: args[2],
 		}
 		return &cmd, nil
 	case "gshare":
@@ -81,6 +81,9 @@ func NewCommand(raw string) (ICommand, error) {
 		cmd := CMDCat{
 			Path: args[1],
 		}
+		return &cmd, nil
+	case "signout":
+		cmd := CMDSignOut{}
 		return &cmd, nil
 	default:
 		return nil, fmt.Errorf("invalid command")
@@ -114,9 +117,21 @@ func (cmd *CMDSignIn) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.
 	}
 	uc, err := NewUserContextFromSignIn(cmd.Username, cmd.Password, cmd.Username, network, ipfs)
 	if err != nil {
-		return nil, "", fmt.Errorf("could not sign up: CMDSignIn.Execute: %s", err)
+		return nil, "", fmt.Errorf("could not sign in: CMDSignIn.Execute: %s", err)
 	}
 	return uc, "", nil
+}
+
+type CMDSignOut struct {
+
+}
+
+func (cmd *CMDSignOut) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+	if ctx == nil {
+		return nil, "", fmt.Errorf("no active user context running: CMDSignOut.Execute")
+	}
+	ctx.SignOut()
+	return nil, "", nil
 }
 
 type CMDCreateGroup struct {
