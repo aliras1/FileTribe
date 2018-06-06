@@ -26,7 +26,6 @@ script:
   - cd eth
   - truffle test
   - ../node_modules/.bin/solidity-coverage 
-  - npm run stop
 
 #after_script:
 #- npm run coverage && cat coverage/lcov.info | coveralls
