@@ -3,6 +3,7 @@
 client/data
 .vscode
 venv
-test*
+test/*
 .scannerwork
 eth/build
+node_modules
