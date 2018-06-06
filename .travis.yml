@@ -20,11 +20,12 @@ before_install:
 install:
   - npm install -g truffle
   - npm install
+  - npm install --save-dev solidity-coverage
 
 script:
-  - npm run lint
-  - npm run solium
+  - cd eth
   - truffle test
+  - ../node_modules/.bin/solidity-coverage 
   - npm run stop
 
 #after_script:

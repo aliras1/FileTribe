@@ -6,3 +6,4 @@ venv
 test*
 .scannerwork
 eth/build
+node_modules

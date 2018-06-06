@@ -1,5 +1,5 @@
-var Storage = artifacts.require("./Storage.sol");
+var Dipfshare = artifacts.require("./Dipfshare.sol");
 
 module.exports = function(deployer) {
-  deployer.deploy(Storage);
+  deployer.deploy(Dipfshare);
 };
