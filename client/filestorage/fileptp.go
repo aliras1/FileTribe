@@ -2,20 +2,19 @@ package filestorage
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"path"
 	"os"
+	"path"
 	"strings"
 
 	"golang.org/x/crypto/ed25519"
 
-
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
-	nw "ipfs-share/network"
-
+	nw "ipfs-share/networketh"
 )
 
 type File interface {
@@ -24,16 +23,16 @@ type File interface {
 }
 
 type FilePTP struct {
-	Name       string                  `json:"name"`
-	Owner      string                  `json:"owner"`
-	IPFSHash   string                  `json:"ipfs_hash"`
-	IPNSPath   string                  `json:"ipns_path"`
-	Path       string                  `json:"path"`
-	SharedWith []string                `json:"shared_with"`
-	WAccess    []string                `json:"w_access"`
-	VerifyKey  crypto.PublicSigningKey `json:"verify_key"`
-	WriteKey   crypto.SecretSigningKey `json:"write_key"`
-	Own        bool                    `json:"own"` // current user owns the file?
+	Name       string            `json:"name"`
+	Owner      [32]byte          `json:"owner"`
+	IPFSHash   string            `json:"ipfs_hash"`
+	IPNSPath   string            `json:"ipns_path"`
+	Path       string            `json:"path"`
+	SharedWith [][32]byte        `json:"shared_with"`
+	WAccess    []string          `json:"w_access"`
+	VerifyKey  crypto.VerifyKey  `json:"verify_key"`
+	WriteKey   crypto.SigningKey `json:"write_key"`
+	Own        bool              `json:"own"` // current user owns the file?
 	// it could be a good idea to hardwire Owner into the file data
 	// as well and validate it...
 }
@@ -52,7 +51,7 @@ func NewFile(filePath string) (*FilePTP, error) {
 }
 
 func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
-	filePath := storage.fileRootPath + "/" + cap.Owner + "/" + cap.FileName
+	filePath := storage.fileRootPath + "/" + base64.StdEncoding.EncodeToString(cap.Owner[:]) + "/" + cap.FileName
 	// we could directly ipfs.get with this /ipns/address but we need it's
 	// /ipfs/hash to be able to check if the file has changed
 	ipfsHash, err := ipfs.Resolve(cap.IPNSPath)
@@ -61,16 +60,16 @@ func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, 
 	}
 
 	file := FilePTP{
-		Name: cap.FileName,
-		Owner: cap.Owner,
-		IPFSHash:  ipfsHash,
-		IPNSPath:  cap.IPNSPath,
-		Path:  filePath,
-		SharedWith:  []string{},
-		WAccess:  []string{},
+		Name:       cap.FileName,
+		Owner:      cap.Owner,
+		IPFSHash:   ipfsHash,
+		IPNSPath:   cap.IPNSPath,
+		Path:       filePath,
+		SharedWith: [][32]byte{},
+		WAccess:    []string{},
 		VerifyKey:  cap.VerifyKey,
-		WriteKey:  crypto.SecretSigningKey{},
-		Own:  false,
+		WriteKey:   crypto.SigningKey{},
+		Own:        false,
 	}
 
 	if err := file.download(storage, ipfs); err != nil {
@@ -95,10 +94,10 @@ func (f *FilePTP) download(storage *Storage, ipfs *ipfs.IPFS) error {
 	}
 	os.Remove(tmpFilePath)
 	// make a directory to the owner
-	dirPath := storage.fileRootPath + "/" + f.Owner
+	dirPath := storage.fileRootPath + "/" + base64.StdEncoding.EncodeToString(f.Owner[:])
 	os.MkdirAll(dirPath, 0770)
 
-	bytesRawFile, ok := f.VerifyKey.Open(nil, bytesSignedFile)
+	bytesRawFile, ok := f.VerifyKey.Verify(bytesSignedFile)
 	if !ok {
 		return fmt.Errorf("could not verify file '%s': FilePTP.download: %s", f.Name, err)
 	}
@@ -122,7 +121,7 @@ func (f *FilePTP) save(storage *Storage) error {
 }
 
 // Create a new shared file object from a local file
-func NewSharedFilePTP(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
+func NewSharedFilePTP(filePath string, owner [32]byte, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
 	newFilePath, err := storage.CopyFileIntoMyFiles(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("could not copy file to user storage: NewSharedFilePTP: %s", err)
@@ -132,8 +131,8 @@ func NewSharedFilePTP(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS)
 	if err != nil {
 		return nil, fmt.Errorf("could not generate signing key pair: NewSharedFilePTP: %s", err)
 	}
-	verifyKey := crypto.PublicSigningKey(vk)
-	writeKey := crypto.SecretSigningKey(wk)
+	verifyKey := crypto.VerifyKey(vk)
+	writeKey := crypto.SigningKey(wk)
 
 	ipfsID, err := ipfs.ID()
 	if err != nil {
@@ -141,16 +140,16 @@ func NewSharedFilePTP(filePath, owner string, storage *Storage, ipfs *ipfs.IPFS)
 	}
 	fileName := path.Base(filePath)
 	file := &FilePTP{
-		Name:  fileName,
-		Owner:  owner,
-		IPFSHash:  "",
-		IPNSPath:  "/ipns/" + ipfsID.ID + "/files/" + fileName,
-		Path:  newFilePath,
-		SharedWith:  []string{},
-		WAccess:  []string{},
+		Name:       fileName,
+		Owner:      owner,
+		IPFSHash:   "",
+		IPNSPath:   "/ipns/" + ipfsID.ID + "/files/" + fileName,
+		Path:       newFilePath,
+		SharedWith: [][32]byte{},
+		WAccess:    []string{},
 		VerifyKey:  verifyKey,
-		WriteKey:  writeKey,
-		Own:  true,
+		WriteKey:   writeKey,
+		Own:        true,
 	}
 	if err := file.signAndAddToIPFS(storage, ipfs); err != nil {
 		return nil, fmt.Errorf("could not sign and add file '%s' to ipfs: NewSharedFilePTP: %s", fileName, err)
@@ -173,7 +172,7 @@ func (f *FilePTP) signAndAddToIPFS(storage *Storage, ipfs *ipfs.IPFS) error {
 	if f.WriteKey == nil {
 		return fmt.Errorf("no write key found in file '%s': FilePTP.signAndAddToIPFS", f.Name)
 	}
-	signedFile := f.WriteKey.Sign(nil, fileBytes)
+	signedFile := f.WriteKey.Sign(fileBytes)
 	if err := WriteFile(publicFilePath, signedFile); err != nil {
 		return fmt.Errorf("could not write signed file '%s': FilePTP.signAndAddToIPFS: %s", f.Name, err)
 	}
@@ -189,19 +188,24 @@ func (f *FilePTP) signAndAddToIPFS(storage *Storage, ipfs *ipfs.IPFS) error {
 // capabilities are made and copied in the corresponding 'public/for/'
 // directories. The 'public' directory is re-published into IPNS. After
 // that, notification messages are sent out.
-func (f *FilePTP) Share(shareWith []string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) error {
-	var newUsers []string
-	for _, user := range shareWith {
+func (f *FilePTP) Share(shareWith [][32]byte, boxer *crypto.BoxingKeyPair, signer *crypto.SigningKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) error {
+	var newUsers [][32]byte
+	for _, userID := range shareWith {
 		// add to share list
-		f.SharedWith = append(f.SharedWith, user)
+		f.SharedWith = append(f.SharedWith, userID)
 		// make new capability into for_X directory
-		if err := CreateFileReadCAPForUser(f, user, f.IPNSPath, boxer, storage, network); err != nil {
-			return fmt.Errorf("could not create CAP for file '%s' for user '%s': FilePTP.Share: %s", f.Name, user, err)
+		if err := CreateFileReadCAPForUser(f, userID, f.IPNSPath, storage, network); err != nil {
+			return fmt.Errorf(
+				"could not create CAP for file '%s' for user '%s': FilePTP.Share: %s",
+				f.Name,
+				base64.StdEncoding.EncodeToString(userID[:]),
+				err,
+			)
 		}
 		// NOTE: we cannot send notification messages here because
 		// from efficiency considerations /public directory will be
 		// published just once, with all the new CAPs in it
-		newUsers = append(newUsers, user)
+		newUsers = append(newUsers, userID)
 	}
 	if err := f.save(storage); err != nil {
 		return fmt.Errorf("could not save file: FilePTP.Share: %s", err)
@@ -210,9 +214,19 @@ func (f *FilePTP) Share(shareWith []string, boxer *crypto.BoxingKeyPair, storage
 		return fmt.Errorf("could not publish public dir: Share: %s", err)
 	}
 	// send share messages
-	for _, user := range newUsers {
-		if err := network.SendMessage(f.Owner, user, "PTP READ CAP", path.Base(f.Name)+".json"); err != nil {
-			return fmt.Errorf("could not send 'PTP READ CAP' message to user '%s': Share: %s", user, err)
+	for _, userID := range newUsers {
+		_, _, publicKeyBytes, _, _, err := network.GetUser(userID)
+		if err != nil {
+			return fmt.Errorf("could not get user data: FilePTP.Share: %s", err)
+		}
+		publicKey := &crypto.AnonymPublicKey{Value: &publicKeyBytes}
+
+		if err := network.SendMessage(publicKey, signer, f.Owner, "PTP READ CAP", path.Base(f.Name)+".json"); err != nil {
+			return fmt.Errorf(
+				"could not send 'PTP READ CAP' message to user '%s': Share: %s",
+				base64.StdEncoding.EncodeToString(userID[:]),
+				err,
+			)
 		}
 	}
 	return nil

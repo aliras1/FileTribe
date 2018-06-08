@@ -2,6 +2,7 @@ package filestorage
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +15,7 @@ import (
 
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
-	nw "ipfs-share/network"
+	nw "ipfs-share/networketh"
 )
 
 type Storage struct {
@@ -82,7 +83,7 @@ func (storage *Storage) GetUserFilesPath() string {
 // last time or not. The other half of files comes from data/userdata/shared.
 // These files are JSON representation of a FilePTP that were shared by the
 // user.
-func (storage *Storage) BuildRepo(username string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) ([]*FilePTP, error) {
+func (storage *Storage) BuildRepo(username string, network *nw.Network, ipfs *ipfs.IPFS) ([]*FilePTP, error) {
 	glog.Info("Building repo...")
 	var repo []*FilePTP
 	// read capabilities from caps and try to refresh them
@@ -126,17 +127,22 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) (stri
 	return newFilePath, CopyFile(filePath, newFilePath)
 }
 
-func (storage *Storage) createFileForUser(user, capName string, data []byte, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
-	forUserPath := storage.publicForPath + "/" + user
+func (storage *Storage) createFileForUser(userID [32]byte, capName string, data []byte, network *nw.Network) error {
+	userIDBase64 := base64.StdEncoding.EncodeToString(userID[:])
+	forUserPath := storage.publicForPath + "/" + userIDBase64
 	err := os.MkdirAll(forUserPath, 0770)
 	if err != nil {
 		glog.Warningf("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
 	}
-	otherPK, err := network.GetUserBoxingKey(path.Base(forUserPath))
+	_, _, publicKey, _, _, err := network.GetUser(userID)
 	if err != nil {
 		return fmt.Errorf("could not get public boxing key: Storage.createFileForUser: %s", err)
 	}
-	encData := boxer.BoxSeal(data, &otherPK)
+	boxer := crypto.AnonymPublicKey{Value: &publicKey}
+	encData, err := boxer.Seal(data)
+	if err != nil {
+		return fmt.Errorf("error while encryption: Storage.createFileForUser: %s", err)
+	}
 	if err := ioutil.WriteFile(forUserPath+"/"+capName+".json", encData, 0644); err != nil {
 		return fmt.Errorf("could not write file: Storage.createFileForUser: %s", err)
 	}
@@ -218,13 +224,13 @@ func (storage *Storage) DownloadGroupData(groupName, file, ipfsHash string, ipfs
 	return ipfs.Get(filePath, ipfsHash)
 }
 
-func (storage *Storage) CreateGroupAccessCAPForUser(user, group string, key crypto.SymmetricKey, boxer *crypto.BoxingKeyPair, network *nw.Network) error {
+func (storage *Storage) CreateGroupAccessCAPForUser(userID [32]byte, group string, key crypto.SymmetricKey, network *nw.Network) error {
 	cap := GroupAccessCAP{group, key}
 	capBytes, err := json.Marshal(cap)
 	if err != nil {
 		return fmt.Errorf("could not marshal group access capability: Storage.CreateGroupAccessCAPForUser: %s", err)
 	}
-	if err := storage.createFileForUser(user, group, capBytes, boxer, network); err != nil {
+	if err := storage.createFileForUser(userID, group, capBytes, network); err != nil {
 		return fmt.Errorf("could not create cap for user: Storage.CreateGroupAccessCAPForUser: %s", err)
 	}
 	return nil
@@ -243,8 +249,8 @@ func (storage *Storage) StoreGroupAccessCAP(group string, key crypto.SymmetricKe
 	return cap.Store(storage)
 }
 
-func (storage *Storage) DownloadGroupAccessCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, network *nw.Network, ipfs *ipfs.IPFS) (*GroupAccessCAP, error) {
-	capBytes, err := downloadCAP(fromUser, username, capName, boxer, storage, network, ipfs)
+func (storage *Storage) DownloadGroupAccessCAP(fromUserID, userID [32]byte, capName string, boxer *crypto.AnonymBoxer, network *nw.Network, ipfs *ipfs.IPFS) (*GroupAccessCAP, error) {
+	capBytes, err := downloadCAP(fromUserID, userID, capName, boxer, storage, network, ipfs)
 	if err != nil {
 		return nil, fmt.Errorf("could not download group cap: Storage.DownloadGroupAccessCAP: %s", err)
 	}

@@ -1,23 +1,21 @@
 package client
 
 import (
+	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/golang/glog"
 
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
-	nw "ipfs-share/network"
+	nw "ipfs-share/networketh"
 )
 
-
 type Member struct {
-	Name      string                  `json:"name"`
-	VerifyKey crypto.PublicSigningKey `json:"-"`
+	ID        [32]byte         `json:"id"`
+	VerifyKey crypto.VerifyKey `json:"-"`
 }
 
 type MemberList struct {
@@ -25,7 +23,7 @@ type MemberList struct {
 }
 
 func NewMemberList() *MemberList {
-	return &MemberList{ List:[]Member{}}
+	return &MemberList{List: []Member{}}
 }
 
 func (ml *MemberList) Length() int {
@@ -35,26 +33,27 @@ func (ml *MemberList) Length() int {
 func (ml *MemberList) Bytes() []byte {
 	var data []byte
 	for _, member := range ml.List {
-		data = append(data, []byte(member.Name)...)
+		data = append(data, member.ID[:]...)
 	}
 	return data
 }
 
-func (ml *MemberList) Append(user string, network *nw.Network) *MemberList {
-	verifyKey, err := network.GetUserVerifyKey(user)
+func (ml *MemberList) Append(userID [32]byte, network *nw.Network) *MemberList {
+	_, _, _, verifyKeyBytes, _, err := network.GetUser(userID)
 	if err != nil {
 		glog.Errorf("could not get user verify key: MemberList.Append: %s", err)
 		return ml
 	}
+	verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
 	newList := make([]Member, len(ml.List))
 	copy(newList, ml.List)
-	newList = append(newList, Member{user, verifyKey})
+	newList = append(newList, Member{userID, verifyKey})
 	return &MemberList{List: newList}
 }
 
-func (ml *MemberList) Get(user string) *Member {
+func (ml *MemberList) Get(userID [32]byte) *Member {
 	for i := 0; i < ml.Length(); i++ {
-		if strings.Compare(ml.List[i].Name, user) == 0 {
+		if bytes.Equal(ml.List[i].ID[:], userID[:]) {
 			return &ml.List[i]
 		}
 	}
@@ -73,29 +72,30 @@ type GroupContext struct {
 }
 
 func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
-	members := NewMemberList()
-	memberStrings, err := network.GetGroupMembers(group.Name)
-	if err != nil {
-		return nil, fmt.Errorf("could not get group members of '%s': NewGroupContext: %s", group.Name, err)
-	}
-	for _, member := range memberStrings {
-		members = members.Append(member, network)
-	}
-	repo := &fs.GroupRepo{
-		Files: []*fs.FileGroup{},
-	}
-	groupContext := &GroupContext{
-		User:         user,
-		Group:        group,
-		Repo:         repo,
-		Members:      members,
-		Synchronizer: nil,
-		Network:      network,
-		IPFS:         ipfs,
-		Storage:      storage,
-	}
-	groupContext.Synchronizer = NewSynchronizer(groupContext)
-	return groupContext, nil
+	// members := NewMemberList()
+	// memberStrings, err := network.GetGroupMembers(group.Name)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not get group members of '%s': NewGroupContext: %s", group.Name, err)
+	// }
+	// for _, member := range memberStrings {
+	// 	members = members.Append(member, network)
+	// }
+	// repo := &fs.GroupRepo{
+	// 	Files: []*fs.FileGroup{},
+	// }
+	// groupContext := &GroupContext{
+	// 	User:         user,
+	// 	Group:        group,
+	// 	Repo:         repo,
+	// 	Members:      members,
+	// 	Synchronizer: nil,
+	// 	Network:      network,
+	// 	IPFS:         ipfs,
+	// 	Storage:      storage,
+	// }
+	// groupContext.Synchronizer = NewSynchronizer(groupContext)
+	// return groupContext, nil
+	return nil, nil
 }
 
 func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
@@ -121,85 +121,86 @@ func (gc *GroupContext) CalculateState(members *MemberList, repo *fs.GroupRepo) 
 }
 
 func (gc *GroupContext) GetState() ([]byte, error) {
-	state, err := gc.Network.GetGroupState(gc.Group.Name)
-	if err != nil {
-		return nil, fmt.Errorf("could not retrieve state from network: GroupContext.GetState: %s", err)
-	}
-	return state, nil
+	// state, err := gc.Network.GetGroupState(gc.Group.Name)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not retrieve state from network: GroupContext.GetState: %s", err)
+	// }
+	// return state, nil
+	return nil, nil
 }
 
 func (gc *GroupContext) AddAndShareFile(filePath string) error {
-	file, err := fs.NewSharedFileGroup(filePath, gc.Group.Name, gc.Group.Boxer, gc.Storage, gc.IPFS)
-	if err != nil {
-		return fmt.Errorf("could not create new shared file group: GroupContext.AddAndShareFile: %s", err)
-	}
+	// file, err := fs.NewSharedFileGroup(filePath, gc.Group.Name, gc.Group.Boxer, gc.Storage, gc.IPFS)
+	// if err != nil {
+	// 	return fmt.Errorf("could not create new shared file group: GroupContext.AddAndShareFile: %s", err)
+	// }
 
-	newRepo := &fs.GroupRepo{
-		Files: append(gc.Repo.Files, file),
-	}
-	newState := gc.CalculateState(gc.Members, newRepo)
-	operation := NewShareFileOperation(gc.User.Name, file.Name, file.IPFSHash)
-	transaction := &Transaction{
-		PrevState: gc.CalculateState(gc.Members, gc.Repo),
-		State: newState,
-		Operation: operation.RawOperation(),
-		SignedBy: []SignedBy{},
-	}
-	signature := gc.User.SignTransaction(transaction)
-	transaction.SignedBy = []SignedBy{
-		{
-			Username:  gc.User.Name,
-			Signature: signature,
-		},
-	}
-	transactionJSON, err := json.Marshal(transaction)
-	if err != nil {
-		return fmt.Errorf("could not marshal transaction: GroupContext.AddAndShareFile: %s", err)
-	}
-	if err := gc.Network.GroupShare(gc.Group.Name, transactionJSON); err != nil {
-		return fmt.Errorf("error while network call: GroupContext.AddANdShareFile: %s", err)
-	}
+	// newRepo := &fs.GroupRepo{
+	// 	Files: append(gc.Repo.Files, file),
+	// }
+	// newState := gc.CalculateState(gc.Members, newRepo)
+	// operation := NewShareFileOperation(gc.User.Name, file.Name, file.IPFSHash)
+	// transaction := &Transaction{
+	// 	PrevState: gc.CalculateState(gc.Members, gc.Repo),
+	// 	State:     newState,
+	// 	Operation: operation.RawOperation(),
+	// 	SignedBy:  []SignedBy{},
+	// }
+	// signature := gc.User.SignTransaction(transaction)
+	// transaction.SignedBy = []SignedBy{
+	// 	{
+	// 		Username:  gc.User.Name,
+	// 		Signature: signature,
+	// 	},
+	// }
+	// transactionJSON, err := json.Marshal(transaction)
+	// if err != nil {
+	// 	return fmt.Errorf("could not marshal transaction: GroupContext.AddAndShareFile: %s", err)
+	// }
+	// if err := gc.Network.GroupShare(gc.Group.Name, transactionJSON); err != nil {
+	// 	return fmt.Errorf("error while network call: GroupContext.AddANdShareFile: %s", err)
+	// }
 
-	fmt.Printf("[*] file '%s' shared with group '%s'\n", filePath, gc.Group.Name)
+	// fmt.Printf("[*] file '%s' shared with group '%s'\n", filePath, gc.Group.Name)
 
 	return nil
 }
 
 func (gc *GroupContext) Invite(newMember string) error {
-	fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, gc.Group.Name)
+	// fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, gc.Group.Name)
 
-	prevHash := gc.CalculateState(gc.Members, gc.Repo)
-	newMembers := gc.Members.Append(newMember, gc.Network)
-	newHash := gc.CalculateState(newMembers, gc.Repo)
+	// prevHash := gc.CalculateState(gc.Members, gc.Repo)
+	// newMembers := gc.Members.Append(newMember, gc.Network)
+	// newHash := gc.CalculateState(newMembers, gc.Repo)
 
-	operation := NewInviteOperation(gc.User.Name, newMember)
-	transaction := Transaction{
-		PrevState: prevHash[:],
-		State:     newHash[:],
-		Operation: operation.RawOperation(),
-		SignedBy:  []SignedBy{},
-	}
-	// fork down the collection of signatures for the operation
-	go gc.Synchronizer.CollectApprovals(&transaction)
+	// operation := NewInviteOperation(gc.User.Name, newMember)
+	// transaction := Transaction{
+	// 	PrevState: prevHash[:],
+	// 	State:     newHash[:],
+	// 	Operation: operation.RawOperation(),
+	// 	SignedBy:  []SignedBy{},
+	// }
+	// // fork down the collection of signatures for the operation
+	// go gc.Synchronizer.CollectApprovals(&transaction)
 
-	// send out the proposed transaction to be signed
-	transactionBytes, err := json.Marshal(transaction)
-	if err != nil {
-		return fmt.Errorf("could not marshal transaction: GroupContext.Invite: %s", err)
-	}
-	signedTransactionBytes := gc.User.Signer.SecretKey.Sign(nil, transactionBytes)
-	groupMsg := GroupMessage{
-		Type: "PROPOSAL",
-		From: gc.User.Name,
-		Data: signedTransactionBytes,
-	}
-	groupMsgBytes, err := json.Marshal(groupMsg)
-	if err != nil {
-		return fmt.Errorf("could not marshal group message: GroupContext.Invite: %s", err)
-	}
-	if err := gc.sendToAll(groupMsgBytes); err != nil {
-		return fmt.Errorf("could not send group message: GroupContext.Invite: %s", err)
-	}
+	// // send out the proposed transaction to be signed
+	// transactionBytes, err := json.Marshal(transaction)
+	// if err != nil {
+	// 	return fmt.Errorf("could not marshal transaction: GroupContext.Invite: %s", err)
+	// }
+	// signedTransactionBytes := gc.User.Signer.VerifyKey.Sign(nil, transactionBytes)
+	// groupMsg := GroupMessage{
+	// 	Type: "PROPOSAL",
+	// 	From: gc.User.Name,
+	// 	Data: signedTransactionBytes,
+	// }
+	// groupMsgBytes, err := json.Marshal(groupMsg)
+	// if err != nil {
+	// 	return fmt.Errorf("could not marshal group message: GroupContext.Invite: %s", err)
+	// }
+	// if err := gc.sendToAll(groupMsgBytes); err != nil {
+	// 	return fmt.Errorf("could not send group message: GroupContext.Invite: %s", err)
+	// }
 	return nil
 }
 

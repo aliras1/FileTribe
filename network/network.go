@@ -64,7 +64,7 @@ func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, e
 	return crypto.Base64ToPublicKeyHash(string(base64PublicKeyHash))
 }
 
-func (n *Network) GetUserVerifyKey(username string) (crypto.PublicSigningKey, error) {
+func (n *Network) GetUserVerifyKey(username string) (crypto.SigningKey, error) {
 	base64PublicSigningKey, err := n.Get("/get/user/signkey", username)
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func (n *Network) GetGroupPrevState(groupName string, state []byte) ([]byte, err
 func (n *Network) GetGroupOperation(groupName string, state []byte) ([]byte, error) {
 	stateBase64 := base64.StdEncoding.EncodeToString(state)
 	operationBytes, err := n.Post(
-		"/get/group/operation/" + groupName,
+		"/get/group/operation/"+groupName,
 		"application/octet-stream",
 		[]byte(stateBase64),
 	)
@@ -139,7 +139,7 @@ func (n *Network) GroupInvite(groupname string, transaction []byte) error {
 
 func (n *Network) GroupShare(groupname string, transaction []byte) error {
 	if _, err := n.Post(
-		"/group/share/" + groupname,
+		"/group/share/"+groupname,
 		"application/json",
 		transaction,
 	); err != nil {
@@ -178,7 +178,7 @@ func (n *Network) GetMessages(username string) ([]*Message, error) {
 }
 
 func (n *Network) Post(path string, contentType string, data []byte) ([]byte, error) {
-	url := n.Address+path
+	url := n.Address + path
 	resp, err := http.Post(
 		url,
 		contentType,
@@ -199,7 +199,7 @@ func (n *Network) Post(path string, contentType string, data []byte) ([]byte, er
 	return body, nil
 }
 
-func (n *Network) PutVerifyKey(hash crypto.PublicKeyHash, key crypto.PublicSigningKey) error {
+func (n *Network) PutVerifyKey(hash crypto.PublicKeyHash, key crypto.SigningKey) error {
 	jsonStr := fmt.Sprintf(`{"hash":"%s", "signkey":"%s"}`, hash.ToBase64(), key.ToBase64())
 	_, err := n.Post(
 		"/put/signkey",

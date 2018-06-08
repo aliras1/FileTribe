@@ -2,14 +2,18 @@ package client
 
 import (
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"path"
 	"strings"
-	"time"
 
 	fs "ipfs-share/client/filestorage"
+	"ipfs-share/crypto"
+	"ipfs-share/eth"
 	"ipfs-share/ipfs"
-	nw "ipfs-share/network"
+	nw "ipfs-share/networketh"
+
 	"github.com/golang/glog"
 )
 
@@ -22,7 +26,6 @@ type UserContext struct {
 	IPFS     *ipfs.IPFS
 	Storage  *fs.Storage // TODO lock
 
-	channelMsg  chan nw.Message
 	channelStop chan int
 }
 
@@ -73,7 +76,7 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	uc.Storage = fs.NewStorage(dataPath)
 	uc.Storage.Init()
 	uc.Groups = []*GroupContext{}
-	uc.Repo, err = uc.Storage.BuildRepo(user.Name, &user.Boxer, network, ipfs)
+	uc.Repo, err = uc.Storage.BuildRepo(user.Name, network, ipfs)
 	if err != nil {
 		return nil, fmt.Errorf("could not build file repo: NewUserContext: %s", err)
 	}
@@ -83,10 +86,8 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	}
 	uc.IPNSAddr = ipfsID.ID
 
-	uc.channelMsg = make(chan nw.Message)
 	uc.channelStop = make(chan int)
-	go MessageGetter(uc.User.Name, network, uc.channelMsg, uc.channelStop)
-	go MessageProcessor(uc.channelMsg, uc.User.Name, &uc)
+	go MessageProcessor(&uc)
 
 	if err := uc.BuildGroups(); err != nil {
 		return nil, fmt.Errorf("could not build groups: NewUserContext: %s", err)
@@ -105,40 +106,59 @@ func (uc *UserContext) SignOut() {
 	uc.channelStop <- 1
 }
 
-func MessageGetter(username string, network *nw.Network, channelMsg chan nw.Message, channelStop chan int) {
-	for true {
-		select {
-		case <-channelStop:
-			glog.Infof("User '%s' received 'STOP' signal: MessageGetter", username)
-			close(channelMsg)
-			close(channelStop)
-			return
-		default:
-			msgs, err := network.GetMessages(username)
-			if err != nil {
-				glog.Errorf("could not get messages: MessageGetter: %s", err)
-				break
-			}
-			for _, msg := range msgs {
-				channelMsg <- *msg
-			}
-			time.Sleep(1 * time.Second)
-		}
+func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Message, error) {
+	var messageEnc []byte
+	for _, b := range event.Message {
+		messageEnc = append(messageEnc, b[0])
 	}
+
+	messageSigned, err := ctx.User.Boxer.Open(messageEnc)
+	if err != nil {
+		return nil, fmt.Errorf("could not decrypt event: MessageProcessor: %s", err)
+	}
+
+	messageJSON := messageSigned[64:]
+
+	var message nw.Message
+	if err := json.Unmarshal(messageJSON, &message); err != nil {
+		return nil, fmt.Errorf("could not unmarshal message: MessageProcessor: %s", err)
+	}
+
+	_, _, _, verifyKeyBytes, _, err := ctx.Network.GetUser(message.From)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"could not get user '%s': MessageProcessor: %s",
+			base64.StdEncoding.EncodeToString(message.From[:]),
+			err,
+		)
+	}
+	verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
+	_, ok := verifyKey.Verify(messageSigned)
+	if !ok {
+		return nil, fmt.Errorf("could not verify message: MessageProcessor")
+	}
+	return &message, nil
 }
 
-func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserContext) {
-	glog.Infof("User '%s' is processing messages...\n", username)
+func MessageProcessor(ctx *UserContext) {
+	glog.Infof("User '%s' is processing messages...\n", ctx.User.Name)
+	fmt.Printf("msg proc of '%s'\n", ctx.User.Name)
 
-	for msg := range channelMsg {
-		glog.Infof("--> user '%s' got message", username)
+	for messageSentEvent := range ctx.Network.MessageSentChannel {
+		message, err := unpackMessageSentEvent(messageSentEvent, ctx)
+		if err != nil {
+			glog.Warning("error while processing 'MessageSentEvent': MessageProcessor: %s", err)
+			continue
+		}
 
-		switch msg.Type {
+		glog.Infof("--> user '%s' got message", ctx.User.Name)
+
+		switch message.Type {
 		case "PTP READ CAP":
 			fmt.Println("[*] Downloading PTP file")
-			cap, err := fs.DownloadReadCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
+			cap, err := fs.DownloadReadCAP(message.From, ctx.User.ID, message.Payload, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
 			if err != nil {
-				glog.Errorf("could not download read cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", msg.Message, err)
+				glog.Errorf("could not download read cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", message.Payload, err)
 				continue
 			}
 			if ctx.isFileInRepo(cap.IPNSPath) {
@@ -154,10 +174,10 @@ func MessageProcessor(channelMsg chan nw.Message, username string, ctx *UserCont
 
 			fmt.Println("[*] PTP file downloaded")
 		case "GROUP INVITE":
-			fmt.Printf("[*] Joining group '%s'...\n", strings.Split(msg.Message, ".")[0])
-			glog.Infof("\t--> Donwloading group access cap '%s'...", msg.Message)
+			fmt.Printf("[*] Joining group '%s'...\n", strings.Split(message.Payload, ".")[0])
+			glog.Infof("\t--> Donwloading group access cap '%s'...", message.Payload)
 
-			cap, err := ctx.Storage.DownloadGroupAccessCAP(msg.From, username, msg.Message, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
+			cap, err := ctx.Storage.DownloadGroupAccessCAP(message.From, ctx.User.ID, message.Payload, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
 			if err != nil {
 				glog.Errorf("could not download ga cap: MessageProcessor: %s", err)
 				continue
@@ -197,40 +217,40 @@ func (uc *UserContext) BuildGroups() error {
 }
 
 func (uc *UserContext) CreateGroup(groupname string) error {
-	group := NewGroup(groupname)
-	if err := group.Register(uc.User.Name, uc.Network); err != nil {
-		return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
-	}
-	if err := group.Save(uc.Storage); err != nil {
-		return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
-	}
-	groupCtx, err := NewGroupContext(group, uc.User, uc.Network, uc.IPFS, uc.Storage)
-	if err != nil {
-		return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
-	}
-	uc.Groups = append(uc.Groups, groupCtx)
+	// group := NewGroup(groupname)
+	// if err := group.Register(uc.User.Name, uc.Network); err != nil {
+	// 	return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
+	// }
+	// if err := group.Save(uc.Storage); err != nil {
+	// 	return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
+	// }
+	// groupCtx, err := NewGroupContext(group, uc.User, uc.Network, uc.IPFS, uc.Storage)
+	// if err != nil {
+	// 	return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
+	// }
+	// uc.Groups = append(uc.Groups, groupCtx)
 
-	fmt.Printf("[*] Group '%s' created!\n", groupname)
+	// fmt.Printf("[*] Group '%s' created!\n", groupname)
 
 	return nil
 }
 
 func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {
-	fmt.Printf("[*] PTP sharing file '%s' with user '%s'...\n", filePath, shareWith[0])
+	// fmt.Printf("[*] PTP sharing file '%s' with user '%s'...\n", filePath, shareWith[0])
 
-	if uc.isFileInRepo("/ipns/" + uc.IPNSAddr + "/files/" + path.Base(filePath)) {
-		return fmt.Errorf("file is already added to the repo: UserContext.AddAndShareFile")
-	}
-	file, err := fs.NewSharedFilePTP(filePath, uc.User.Name, uc.Storage, uc.IPFS)
-	if err != nil {
-		return fmt.Errorf("could not create new shared file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
-	}
-	if err := file.Share(shareWith, &uc.User.Boxer, uc.Storage, uc.Network, uc.IPFS); err != nil {
-		return fmt.Errorf("could not share file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
-	}
-	uc.addFileToRepo(file)
+	// if uc.isFileInRepo("/ipns/" + uc.IPNSAddr + "/files/" + path.Base(filePath)) {
+	// 	return fmt.Errorf("file is already added to the repo: UserContext.AddAndShareFile")
+	// }
+	// file, err := fs.NewSharedFilePTP(filePath, uc.User.Name, uc.Storage, uc.IPFS)
+	// if err != nil {
+	// 	return fmt.Errorf("could not create new shared file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
+	// }
+	// if err := file.Share(shareWith, &uc.User.Boxer, uc.Storage, uc.Network, uc.IPFS); err != nil {
+	// 	return fmt.Errorf("could not share file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
+	// }
+	// uc.addFileToRepo(file)
 
-	fmt.Println("[*] PTP sharing ended")
+	// fmt.Println("[*] PTP sharing ended")
 
 	return nil
 }
