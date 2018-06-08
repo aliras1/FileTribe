@@ -14,21 +14,28 @@ contract('Dipfshare', accounts => {
     });
 
     it('register user', async function () {
+        id = "0x0000000000000000000000000000000000000000000000000000000000000001"
         username = "Alice"
+        publicKey = "0x0000000000000000000000000000000000000000000000000000000000000002"
+        verifyKey = "0x0000000000000000000000000000000000000000000000000000000000000003"
+        ipfsAddress = "rweiro34n3453uz4grsrd"
+
         await dipfshare.registerUser(
+            id,
             username,
-            "0x0000000000000000000000000000000000000000000000000000000000000001",
-            "0x0000000000000000000000000000000000000000000000000000000000000002",
-            "/ipfs/23h1kjh1329sdfhsdk2323rfsdf"
+            publicKey,
+            verifyKey,
+            ipfsAddress
         );
 
         const registered = await dipfshare.isUserRegistered(username)
         assert(registered === true);
 
-        const user = await dipfshare.getUser(username)
+        const user = await dipfshare.getUser(id)
         assert(user[0] === creator)
-        assert(user[1] === "0x0000000000000000000000000000000000000000000000000000000000000001",)
-        assert(user[2] === "0x0000000000000000000000000000000000000000000000000000000000000002",)
-        assert(user[3] === "/ipfs/23h1kjh1329sdfhsdk2323rfsdf")
+        assert(user[1] === username)
+        assert(user[2] === publicKey)
+        assert(user[3] === verifyKey)
+        assert(user[4] === ipfsAddress)
     });
 });
