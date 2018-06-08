@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"ipfs-share/ipfs"
-	nw "ipfs-share/network"
+	nw "ipfs-share/networketh"
 )
 
 type ICommand interface {

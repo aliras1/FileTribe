@@ -10,32 +10,38 @@ import (
 	"ipfs-share/crypto/ed25519/util/edwards25519"
 )
 
-type PublicSigningKey ed25519.PublicKey
-type SecretSigningKey ed25519.PrivateKey
+type VerifyKey ed25519.PublicKey
+type SigningKey ed25519.PrivateKey
 
 //https://github.com/golang/crypto/blob/master/nacl/sign/sign.go
 
 const Overhead = 64
 
-func (ssk *SecretSigningKey) Sign(out, message []byte) []byte {
-	sig := ed25519.Sign(ed25519.PrivateKey(*ssk), message)
-	ret, out := sliceForAppend(out, Overhead+len(message))
+func (sk *SigningKey) Sign(message []byte) []byte {
+	sig := ed25519.Sign(ed25519.PrivateKey(*sk), message)
+	ret, out := sliceForAppend(nil, Overhead+len(message))
 	copy(out, sig)
 	copy(out[Overhead:], message)
 	return ret
 }
 
+func (vk *VerifyKey) Bytes() *[32]byte {
+	var vkBytes [32]byte
+	copy(vkBytes[:], *vk)
+	return &vkBytes
+}
+
 // Open verifies a signed message produced by Sign and appends the message to
 // out, which must not overlap the signed message. The output will be Overhead
 // bytes smaller than the signed message.
-func (psk *PublicSigningKey) Open(out, signedMessage []byte) ([]byte, bool) {
+func (vk *VerifyKey) Verify(signedMessage []byte) ([]byte, bool) {
 	if len(signedMessage) < Overhead {
 		return nil, false
 	}
-	if !ed25519.Verify(ed25519.PublicKey(*psk), signedMessage[Overhead:], signedMessage[:Overhead]) {
+	if !ed25519.Verify(ed25519.PublicKey(*vk), signedMessage[Overhead:], signedMessage[:Overhead]) {
 		return nil, false
 	}
-	ret, out := sliceForAppend(out, len(signedMessage)-Overhead)
+	ret, out := sliceForAppend(nil, len(signedMessage)-Overhead)
 	copy(out, signedMessage[Overhead:])
 	return ret, true
 }
@@ -56,22 +62,22 @@ func sliceForAppend(in []byte, n int) (head, tail []byte) {
 }
 
 type SigningKeyPair struct {
-	PublicKey PublicSigningKey
-	SecretKey SecretSigningKey
+	SigningKey SigningKey
+	VerifyKey  VerifyKey
 }
 
-func (s *PublicSigningKey) ToBase64() string {
+func (s *SigningKey) ToBase64() string {
 	return base64.StdEncoding.EncodeToString(*s)
 }
 
-func (p *PublicSigningKey) Equals(other *PublicSigningKey) bool {
+func (p *SigningKey) Equals(other *SigningKey) bool {
 	if bytes.Compare(*p, *other) != 0 {
 		return false
 	}
 	return true
 }
 
-func Ed25519KeyPair(sk *[32]byte) (PublicSigningKey, SecretSigningKey) {
+func Ed25519KeyPair(sk *[32]byte) (VerifyKey, SigningKey) {
 	// equivalent to https://github.com/golang/crypto/blob/master/ed25519/ed25519.go
 	// the only difference is that it uses sk instead of an RNG
 
@@ -96,10 +102,10 @@ func Ed25519KeyPair(sk *[32]byte) (PublicSigningKey, SecretSigningKey) {
 	return publicKey, privateKey
 }
 
-func Base64ToPublicSigningKey(src string) (PublicSigningKey, error) {
+func Base64ToPublicSigningKey(src string) (SigningKey, error) {
 	pBytes, err := base64.StdEncoding.DecodeString(src)
 	if err != nil {
 		return nil, err
 	}
-	return PublicSigningKey(pBytes), nil
+	return SigningKey(pBytes), nil
 }

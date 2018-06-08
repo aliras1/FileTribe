@@ -5,40 +5,39 @@ import (
 	"strings"
 	"testing"
 
-	nw "ipfs-share/network"
+	nw "ipfs-share/networketh"
 )
 
 func TestBoxing(t *testing.T) {
-	username1 := "testuser1"
-	password1 := "password1"
-	username2 := "testuser2"
-	password2 := "password2"
+	username := "testuser"
+	password := "password"
 
-	user1 := NewUser(username1, password1)
-	user2 := NewUser(username2, password2)
+	user := NewUser(username, password)
 
 	message := "Hello friend!"
-	encMsg := user1.Boxer.BoxSeal([]byte(message), &user2.Boxer.PublicKey)
-	var nonce [24]byte
-	copy(nonce[:], encMsg[:24])
-	plain, success := user2.Boxer.BoxOpen(encMsg, &user1.Boxer.PublicKey)
-	if !success {
-		t.Fatal("could not decrypt message")
+	encMsg, err := user.Boxer.Seal([]byte(message))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plain, err := user.Boxer.Open(encMsg)
+	if err != nil {
+		t.Fatalf("could not decrypt message: %s", err)
 	}
 	if strings.Compare(string(plain), message) != 0 {
 		t.Fatal("the original and the decrypted messages are not the same")
 	}
 }
 
-func TestSiging(t *testing.T) {
+func TestSigning(t *testing.T) {
 	username1 := "testuser1"
 	password1 := "password1"
 
 	user1 := NewUser(username1, password1)
 
 	message := "Hello friend!"
-	signedMessage := user1.Signer.SecretKey.Sign(nil, []byte(message))
-	msg, ok := user1.Signer.PublicKey.Open(nil, signedMessage)
+	signedMessage := user1.Signer.SigningKey.Sign([]byte(message))
+	msg, ok := user1.Signer.VerifyKey.Verify(signedMessage)
 	if !ok {
 		t.Fatal("failed to verify")
 	}
@@ -50,59 +49,56 @@ func TestSiging(t *testing.T) {
 func TestUserDataOnServer(t *testing.T) {
 	username := "testuser"
 	password := "password"
-	network := nw.Network{"http://0.0.0.0:6000"}
-	user, err := SignUp(username, password, "ipfs", &network)
+	ipfsAddress := "2434hasdf439asdjhbvc234f"
+	network, err := nw.NewTestNetwork()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Public key hash
-	publicKeyHash, err := network.GetUserPublicKeyHash(username)
+	user, err := SignUp(username, password, ipfsAddress, network)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !publicKeyHash.Equals(&user.PublicKeyHash) {
-		t.Fatal("the public key hashes do not match")
-	}
-	// Public signing key
-	publicSigningKey, err := network.GetUserVerifyKey(username)
+
+	registered, err := network.IsUserRegistered(user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !publicSigningKey.Equals(&user.Signer.PublicKey) {
-		t.Fatal("the public signing keys do not match")
+	if !registered {
+		t.Fatal("user should be registered")
 	}
-	// Public boxing key
-	publicBoxingKey, err := network.GetUserBoxingKey(username)
-	if err != nil {
-		t.Fatal(err)
+
+	_, uName, bKey, vKey, ipfs, err := network.GetUser(user.ID)
+	if strings.Compare(uName, user.Name) != 0 {
+		t.Fatal("usernames do not match")
 	}
-	if !publicBoxingKey.Equals(&user.Boxer.PublicKey) {
-		t.Fatal("the public boxing keys do not match")
+	if !bytes.Equal(bKey[:], user.Boxer.PublicKey.Value[:]) {
+		t.Fatal("boxing keys do not match")
 	}
-	// Ipfs address
-	ipfsAddr, err := network.GetUserIPFSAddr(username)
-	if err != nil {
-		t.Fatal(err)
+	if !bytes.Equal(vKey[:], user.Signer.VerifyKey[:]) {
+		t.Fatal("verify keys do not match")
 	}
-	if strings.Compare(ipfsAddr, "ipfs") != 0 {
-		t.Fatal("the public boxing keys do not match")
+	if strings.Compare(ipfs, ipfsAddress) != 0 {
+		t.Fatal("ipfs addresses do not match")
 	}
 }
 
 func TestSignIn(t *testing.T) {
-	username := "testuser3"
-	password := "password3"
-	network := nw.Network{"http://0.0.0.0:6000"}
-	_, err := SignUp(username, password, "ipfs", &network)
+	username := "testuser"
+	password := "password"
+	network, err := nw.NewTestNetwork()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = SignUp(username, password, "ipfs", network)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	user_in, err := SignIn(username, password, &network)
+	user, err := SignIn(username, password, network)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user_in == nil {
+	if user == nil {
 		t.Fatal("user is nil")
 	}
 }

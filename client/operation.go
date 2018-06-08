@@ -3,9 +3,6 @@ package client
 import (
 	"fmt"
 	"strings"
-	"bytes"
-
-	"github.com/golang/glog"
 
 	"ipfs-share/client/filestorage"
 )
@@ -55,7 +52,7 @@ func NewOperation(operation *RawOperation) (IOperation, error) {
 			return nil, fmt.Errorf("invalid #args in operation 'INVITE' data: NewOperation")
 		}
 		cmd := InviteOperation{
-			From: args[0],
+			From:      args[0],
 			NewMember: args[1],
 		}
 		return &cmd, nil
@@ -65,7 +62,7 @@ func NewOperation(operation *RawOperation) (IOperation, error) {
 			return nil, fmt.Errorf("invalid #args in operation 'SHARE' data: NewOperation")
 		}
 		cmd := ShareFileOperation{
-			Owner: args[0],
+			Owner:    args[0],
 			FileName: args[1],
 			IPFSHash: args[2],
 		}
@@ -77,18 +74,18 @@ func NewOperation(operation *RawOperation) (IOperation, error) {
 
 func NewInviteOperation(from string, newMember string) IOperation {
 	inviteOperation := InviteOperation{
-		From: from,
+		From:      from,
 		NewMember: newMember,
 	}
 	return &inviteOperation
 }
 
 func (i *InviteOperation) Validate(state []byte, groupCtx *GroupContext) error {
-	newMembers := groupCtx.Members.Append(i.NewMember, groupCtx.Network)
-	newState := groupCtx.CalculateState(newMembers, groupCtx.Repo)
-	if !bytes.Equal(newState[:], state) {
-		return fmt.Errorf("invalid new state in transaction proposal: Synchronizer.validateTransaction")
-	}
+	// newMembers := groupCtx.Members.Append(i.NewMember, groupCtx.Network)
+	// newState := groupCtx.CalculateState(newMembers, groupCtx.Repo)
+	// if !bytes.Equal(newState[:], state) {
+	// 	return fmt.Errorf("invalid new state in transaction proposal: Synchronizer.validateTransaction")
+	// }
 	return nil
 }
 
@@ -101,45 +98,45 @@ func (i *InviteOperation) RawOperation() RawOperation {
 }
 
 func (i *InviteOperation) Execute(groupCtx *GroupContext) error {
-	glog.Infof("User '%s' executing invite cmd...\n", groupCtx.User.Name)
+	// glog.Infof("User '%s' executing invite cmd...\n", groupCtx.User.Name)
 
-	groupCtx.Members = groupCtx.Members.Append(i.NewMember, groupCtx.Network)
-	if err := groupCtx.Storage.CreateGroupAccessCAPForUser(
-		i.NewMember,
-		groupCtx.Group.Name,
-		groupCtx.Group.Boxer,
-		&groupCtx.User.Boxer,
-		groupCtx.Network,
-	); err != nil {
-		return fmt.Errorf("could not create ga cap for user '%s': InviteOperation.Execute: %s", i.NewMember, err)
-	}
-	if err := groupCtx.Storage.PublishPublicDir(groupCtx.IPFS); err != nil {
-		return fmt.Errorf("could not publish public dir: InviteOperation.Execute: %s", err)
-	}
-	// the proposer invites the new member
-	if strings.Compare(i.From, groupCtx.User.Name) == 0 {
-		glog.Info("\t--> Invite proposer sending chain message...")
-		if err := groupCtx.Network.SendMessage(
-			i.From,
-			i.NewMember,
-			"GROUP INVITE",
-			groupCtx.Group.Name+".json",
-		); err != nil {
-			return fmt.Errorf("user '%s' could not send message to user '%s': InviteOperation.Execute: %s", i.From, i.NewMember, err)
-		}
-	}
+	// groupCtx.Members = groupCtx.Members.Append(i.NewMember, groupCtx.Network)
+	// if err := groupCtx.Storage.CreateGroupAccessCAPForUser(
+	// 	i.NewMember,
+	// 	groupCtx.Group.Name,
+	// 	groupCtx.Group.Boxer,
+	// 	&groupCtx.User.Boxer,
+	// 	groupCtx.Network,
+	// ); err != nil {
+	// 	return fmt.Errorf("could not create ga cap for user '%s': InviteOperation.Execute: %s", i.NewMember, err)
+	// }
+	// if err := groupCtx.Storage.PublishPublicDir(groupCtx.IPFS); err != nil {
+	// 	return fmt.Errorf("could not publish public dir: InviteOperation.Execute: %s", err)
+	// }
+	// // the proposer invites the new member
+	// if strings.Compare(i.From, groupCtx.User.Name) == 0 {
+	// 	glog.Info("\t--> Invite proposer sending chain message...")
+	// 	if err := groupCtx.Network.SendMessage(
+	// 		i.From,
+	// 		i.NewMember,
+	// 		"GROUP INVITE",
+	// 		groupCtx.Group.Name+".json",
+	// 	); err != nil {
+	// 		return fmt.Errorf("user '%s' could not send message to user '%s': InviteOperation.Execute: %s", i.From, i.NewMember, err)
+	// 	}
+	// }
 	return nil
 }
 
 type ShareFileOperation struct {
-	Owner string
+	Owner    string
 	FileName string
 	IPFSHash string
 }
 
 func NewShareFileOperation(owner, fileName, ipfsHash string) IOperation {
 	shareFileOperation := &ShareFileOperation{
-		Owner: owner,
+		Owner:    owner,
 		FileName: fileName,
 		IPFSHash: ipfsHash,
 	}
@@ -161,7 +158,7 @@ func (share *ShareFileOperation) Validate(state []byte, groupCtx *GroupContext) 
 
 func (share *ShareFileOperation) Execute(groupCtx *GroupContext) error {
 	file := &filestorage.FileGroup{
-		Name: share.FileName,
+		Name:     share.FileName,
 		IPFSHash: share.IPFSHash,
 	}
 	if err := groupCtx.Storage.DownloadGroupFile(file,
@@ -169,7 +166,7 @@ func (share *ShareFileOperation) Execute(groupCtx *GroupContext) error {
 		&groupCtx.Group.Boxer,
 		groupCtx.IPFS,
 	); err != nil {
-		return fmt.Errorf("could not download group share file: ShareFileOperation: %s")
+		return fmt.Errorf("could not download group share file: ShareFileOperation: %s", err)
 	}
 
 	groupCtx.Repo.Append(file)

@@ -1,6 +1,7 @@
 package filestorage
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,7 +12,7 @@ import (
 
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
-	nw "ipfs-share/network"
+	nw "ipfs-share/networketh"
 )
 
 type GroupAccessCAP struct {
@@ -32,10 +33,10 @@ func (cap *GroupAccessCAP) Store(storage *Storage) error {
 }
 
 type ReadCAP struct {
-	FileName  string                  `json:"name"`
-	IPNSPath  string                  `json:"ipns_path"`
-	Owner     string                  `json:"owner"`
-	VerifyKey crypto.PublicSigningKey `json:"verify_key"`
+	FileName  string            `json:"name"`
+	IPNSPath  string            `json:"ipns_path"`
+	Owner     [32]byte            `json:"owner"`
+	VerifyKey crypto.VerifyKey `json:"verify_key"`
 }
 
 // Store ReadCAP in json format locally
@@ -55,8 +56,8 @@ func (cap *ReadCAP) Refresh(username string, boxer *crypto.BoxingKeyPair, storag
 	return false, fmt.Errorf("not implemented: ReadCAP.Refresh")
 }
 
-func DownloadReadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
-	capBytes, err := downloadCAP(fromUser, username, capName, boxer, storage, network, ipfs)
+func DownloadReadCAP(fromUserID, userID [32]byte, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
+	capBytes, err := downloadCAP(fromUserID, userID, capName, boxer, storage, network, ipfs)
 	if err != nil {
 		return nil, fmt.Errorf("could not download ReadCAP '%s': DownloadReadCAP: %s", capName, err)
 	}
@@ -69,18 +70,15 @@ func DownloadReadCAP(fromUser, username, capName string, boxer *crypto.BoxingKey
 
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
-func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
+func downloadCAP(fromUserID, userID [32]byte, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
 	glog.Info("Downloading CAP...")
 	// get address and key
-	ipfsAddr, err := network.GetUserIPFSAddr(fromUser)
+	_, _, _, _, ipfsAddr, err := network.GetUser(fromUserID)
 	if err != nil {
-		return nil, fmt.Errorf("could not get ipfs address of user '%s': downloadCAP: %s", username, err)
+		return nil, fmt.Errorf("could not get data of user '%s': downloadCAP: %s", base64.StdEncoding.EncodeToString(fromUserID[:]), err)
 	}
-	otherPK, err := network.GetUserBoxingKey(fromUser)
-	if err != nil {
-		return nil, fmt.Errorf("could not get public boxing key of user '%s': downloadCAP: %s", username, err)
-	}
-	ipnsPath := "/ipns/" + ipfsAddr + "/for/" + username + "/" + capName
+
+	ipnsPath := "/ipns/" + ipfsAddr + "/for/" + base64.StdEncoding.EncodeToString(userID[:]) + "/" + capName
 	// download cap file
 	tmpFilePath := storage.tmpPath + "/" + capName
 	err = ipfs.Get(tmpFilePath, ipnsPath)
@@ -91,23 +89,33 @@ func downloadCAP(fromUser, username, capName string, boxer *crypto.BoxingKeyPair
 	if err != nil {
 		return nil, fmt.Errorf("could not read file '%s': downloadCAP: %s", tmpFilePath, err)
 	}
-	bytesDecr, success := boxer.BoxOpen(bytesEnc, &otherPK)
-	if !success {
-		return nil, fmt.Errorf("could not decrypt cap '%s' from user '%s' with path '%s': downloadCAP", capName, fromUser, ipnsPath)
+	bytesDecr, err := boxer.Open(bytesEnc)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"could not decrypt cap '%s' from user '%s' with path '%s': downloadCAP",
+			capName,
+			base64.StdEncoding.EncodeToString(fromUserID[:]),
+			ipnsPath,
+		)
 	}
 	os.Remove(tmpFilePath)
 	glog.Info("\t<-- CAP Downloaded")
 	return bytesDecr, nil
 }
 
-func CreateFileReadCAPForUser(f *FilePTP, username, ipnsAddr string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network) error {
+func CreateFileReadCAPForUser(f *FilePTP, userID [32]byte, ipnsAddr string, storage *Storage, network *nw.Network) error {
 	cap := ReadCAP{path.Base(f.Name), ipnsAddr, f.Owner, f.VerifyKey}
 	capBytes, err := json.Marshal(cap)
 	if err != nil {
 		return fmt.Errorf("could not marshal cap '%s': CreateFileReadCAPForUser: '%s'", cap.FileName, err)
 	}
-	if err := storage.createFileForUser(username, path.Base(f.Name), capBytes, boxer, network); err != nil {
-		return fmt.Errorf("could not create file '%s' for user '%s': CreateFileReadCAPForUser: %s", cap.FileName, username, err)
+	if err := storage.createFileForUser(userID, path.Base(f.Name), capBytes, network); err != nil {
+		return fmt.Errorf(
+			"could not create file '%s' for user '%s': CreateFileReadCAPForUser: %s",
+			cap.FileName,
+			base64.StdEncoding.EncodeToString(userID[:]),
+			err,
+		)
 	}
 	return nil
 }
