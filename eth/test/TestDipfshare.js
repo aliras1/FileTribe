@@ -28,7 +28,7 @@ contract('Dipfshare', accounts => {
             ipfsAddress
         );
 
-        const registered = await dipfshare.isUserRegistered(username)
+        const registered = await dipfshare.isUserRegistered(id)
         assert(registered === true);
 
         const user = await dipfshare.getUser(id)
