@@ -2,7 +2,12 @@ package client
 
 import (
 	"fmt"
+	"io/ioutil"
 
+	"github.com/ethereum/go-ethereum/common"
+
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/glog"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/scrypt"
@@ -13,13 +18,13 @@ import (
 )
 
 type User struct {
-	Name   string
-	ID     [32]byte
-	Signer crypto.SigningKeyPair
-	Boxer  crypto.AnonymBoxer
+	Address common.Address
+	Name    string
+	Signer  *crypto.Signer
+	Boxer   crypto.AnonymBoxer
 }
 
-func NewUser(username, password string) *User {
+func NewUser(username, password, ethKeyPath string) (*User, error) {
 	passwordDigest := sha3.Sum256([]byte(password))
 	keySeeds, err := scrypt.Key(
 		passwordDigest[:],
@@ -27,43 +32,45 @@ func NewUser(username, password string) *User {
 		32768,
 		8,
 		1,
-		64,
+		32,
 	)
 	if err != nil {
 		glog.Error("error while scrypt: NewUser: %s", err)
-		return nil
+		return nil, err
 	}
 
 	var secretBoxerBytes [32]byte
 	var publicBoxerBytes [32]byte
-	var signingKeyBytes [32]byte
-	copy(secretBoxerBytes[:], keySeeds[:32])
-	copy(signingKeyBytes[:], keySeeds[32:])
-
+	copy(secretBoxerBytes[:], keySeeds)
 	curve25519.ScalarBaseMult(&publicBoxerBytes, &secretBoxerBytes)
-	verifyKey, signingKey := crypto.Ed25519KeyPair(&signingKeyBytes)
+
+	json, err := ioutil.ReadFile(ethKeyPath)
+	if err != nil {
+		return nil, err
+	}
+	key, err := keystore.DecryptKey(json, password)
+	if err != nil {
+		return nil, err
+	}
 
 	return &User{
-		Name: username,
-		ID:   sha3.Sum256(append(publicBoxerBytes[:], verifyKey...)),
-		Signer: crypto.SigningKeyPair{
-			SigningKey: signingKey,
-			VerifyKey:  verifyKey,
-		},
+		Address: key.Address,
+		Name:    username,
+		Signer:  &crypto.Signer{key.PrivateKey},
 		Boxer: crypto.AnonymBoxer{
 			PublicKey: crypto.AnonymPublicKey{Value: &publicBoxerBytes},
 			SecretKey: crypto.AnonymSecretKey{Value: &secretBoxerBytes},
 		},
-	}
+	}, nil
 }
 
-func SignUp(username, password, ipfsAddr string, network *nw.Network) (*User, error) {
-	user := NewUser(username, password)
-	if user == nil {
-		return nil, fmt.Errorf("could not generate user: SignUp")
+func SignUp(username, password, ethKeyPath, ipfsAddr string, network *nw.Network) (*User, error) {
+	user, err := NewUser(username, password, ethKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not generate user: SignUp: %s", err)
 	}
 
-	exists, err := network.IsUserRegistered(user.ID)
+	exists, err := network.IsUserRegistered(user.Address)
 	if err != nil {
 		return nil, fmt.Errorf("could not check if username '%s', is registered: SignUp: %s", username, err)
 	}
@@ -71,20 +78,21 @@ func SignUp(username, password, ipfsAddr string, network *nw.Network) (*User, er
 		return nil, fmt.Errorf("username '%s' already exists: SignUp", username)
 	}
 
-	if err = network.RegisterUser(user.ID, username, *user.Boxer.PublicKey.Value, *user.Signer.VerifyKey.Bytes(), ipfsAddr); err != nil {
+	pk := ethcrypto.CompressPubkey(&user.Signer.PrivateKey.PublicKey)
+	if err = network.RegisterUser(username, *user.Boxer.PublicKey.Value, pk, ipfsAddr); err != nil {
 		return nil, fmt.Errorf("could not register username '%s': SignUp: %s", username, err)
 	}
 
 	return user, nil
 }
 
-func SignIn(username, password string, network *nw.Network) (*User, error) {
-	user := NewUser(username, password)
-	if user == nil {
+func SignIn(username, password, keyStore string, network *nw.Network) (*User, error) {
+	user, err := NewUser(username, password, keyStore)
+	if err != nil {
 		return nil, fmt.Errorf("could not generate user: SignIn")
 	}
 
-	exists, err := network.IsUserRegistered(user.ID)
+	exists, err := network.IsUserRegistered(user.Address)
 	if err != nil {
 		return nil, fmt.Errorf("could not check if username '%s' is registered: SignIn: %s", username, err)
 	}

@@ -1,6 +1,7 @@
 package filestorage
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -127,14 +128,14 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) (stri
 	return newFilePath, CopyFile(filePath, newFilePath)
 }
 
-func (storage *Storage) createFileForUser(userID [32]byte, capName string, data []byte, network *nw.Network) error {
+func (storage *Storage) createFileForUser(userID common.Address, capName string, data []byte, network *nw.Network) error {
 	userIDBase64 := base64.StdEncoding.EncodeToString(userID[:])
 	forUserPath := storage.publicForPath + "/" + userIDBase64
 	err := os.MkdirAll(forUserPath, 0770)
 	if err != nil {
 		glog.Warningf("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
 	}
-	_, _, publicKey, _, _, err := network.GetUser(userID)
+	_, publicKey, _, _, err := network.GetUser(userID)
 	if err != nil {
 		return fmt.Errorf("could not get public boxing key: Storage.createFileForUser: %s", err)
 	}
@@ -224,7 +225,7 @@ func (storage *Storage) DownloadGroupData(groupName, file, ipfsHash string, ipfs
 	return ipfs.Get(filePath, ipfsHash)
 }
 
-func (storage *Storage) CreateGroupAccessCAPForUser(userID [32]byte, group string, key crypto.SymmetricKey, network *nw.Network) error {
+func (storage *Storage) CreateGroupAccessCAPForUser(userID common.Address, group string, key crypto.SymmetricKey, network *nw.Network) error {
 	cap := GroupAccessCAP{group, key}
 	capBytes, err := json.Marshal(cap)
 	if err != nil {
@@ -249,7 +250,7 @@ func (storage *Storage) StoreGroupAccessCAP(group string, key crypto.SymmetricKe
 	return cap.Store(storage)
 }
 
-func (storage *Storage) DownloadGroupAccessCAP(fromUserID, userID [32]byte, capName string, boxer *crypto.AnonymBoxer, network *nw.Network, ipfs *ipfs.IPFS) (*GroupAccessCAP, error) {
+func (storage *Storage) DownloadGroupAccessCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, network *nw.Network, ipfs *ipfs.IPFS) (*GroupAccessCAP, error) {
 	capBytes, err := downloadCAP(fromUserID, userID, capName, boxer, storage, network, ipfs)
 	if err != nil {
 		return nil, fmt.Errorf("could not download group cap: Storage.DownloadGroupAccessCAP: %s", err)

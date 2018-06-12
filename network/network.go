@@ -64,12 +64,13 @@ func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, e
 	return crypto.Base64ToPublicKeyHash(string(base64PublicKeyHash))
 }
 
-func (n *Network) GetUserVerifyKey(username string) (crypto.SigningKey, error) {
-	base64PublicSigningKey, err := n.Get("/get/user/signkey", username)
-	if err != nil {
-		return nil, err
-	}
-	return crypto.Base64ToPublicSigningKey(string(base64PublicSigningKey))
+func (n *Network) GetUserVerifyKey(username string) (crypto.Signer, error) {
+	// base64PublicSigningKey, err := n.Get("/get/user/signkey", username)
+	// if err != nil {
+	// 	return crypto.Signer{}, err
+	// }
+	// return crypto.Base64ToPublicSigningKey(string(base64PublicSigningKey))
+	return crypto.Signer{}, nil
 }
 
 func (n *Network) GetUserBoxingKey(username string) (crypto.PublicBoxingKey, error) {
@@ -199,16 +200,16 @@ func (n *Network) Post(path string, contentType string, data []byte) ([]byte, er
 	return body, nil
 }
 
-func (n *Network) PutVerifyKey(hash crypto.PublicKeyHash, key crypto.SigningKey) error {
-	jsonStr := fmt.Sprintf(`{"hash":"%s", "signkey":"%s"}`, hash.ToBase64(), key.ToBase64())
-	_, err := n.Post(
-		"/put/signkey",
-		"application/json",
-		[]byte(jsonStr),
-	)
-	if err != nil {
-		return fmt.Errorf("error while post: Network.PutVerifyKey: %s", err)
-	}
+func (n *Network) PutVerifyKey(hash crypto.PublicKeyHash, key crypto.Signer) error {
+	// jsonStr := fmt.Sprintf(`{"hash":"%s", "signkey":"%s"}`, hash.ToBase64(), key.ToBase64())
+	// _, err := n.Post(
+	// 	"/put/signkey",
+	// 	"application/json",
+	// 	[]byte(jsonStr),
+	// )
+	// if err != nil {
+	// 	return fmt.Errorf("error while post: Network.PutVerifyKey: %s", err)
+	// }
 	return nil
 }
 

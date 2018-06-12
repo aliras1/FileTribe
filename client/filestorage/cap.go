@@ -1,6 +1,7 @@
 package filestorage
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -35,7 +36,7 @@ func (cap *GroupAccessCAP) Store(storage *Storage) error {
 type ReadCAP struct {
 	FileName  string            `json:"name"`
 	IPNSPath  string            `json:"ipns_path"`
-	Owner     [32]byte            `json:"owner"`
+	Owner     common.Address            `json:"owner"`
 	VerifyKey crypto.VerifyKey `json:"verify_key"`
 }
 
@@ -56,7 +57,7 @@ func (cap *ReadCAP) Refresh(username string, boxer *crypto.BoxingKeyPair, storag
 	return false, fmt.Errorf("not implemented: ReadCAP.Refresh")
 }
 
-func DownloadReadCAP(fromUserID, userID [32]byte, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
+func DownloadReadCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
 	capBytes, err := downloadCAP(fromUserID, userID, capName, boxer, storage, network, ipfs)
 	if err != nil {
 		return nil, fmt.Errorf("could not download ReadCAP '%s': DownloadReadCAP: %s", capName, err)
@@ -70,10 +71,10 @@ func DownloadReadCAP(fromUserID, userID [32]byte, capName string, boxer *crypto.
 
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
-func downloadCAP(fromUserID, userID [32]byte, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
+func downloadCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
 	glog.Info("Downloading CAP...")
 	// get address and key
-	_, _, _, _, ipfsAddr, err := network.GetUser(fromUserID)
+	_, _, _, ipfsAddr, err := network.GetUser(fromUserID)
 	if err != nil {
 		return nil, fmt.Errorf("could not get data of user '%s': downloadCAP: %s", base64.StdEncoding.EncodeToString(fromUserID[:]), err)
 	}
@@ -103,7 +104,7 @@ func downloadCAP(fromUserID, userID [32]byte, capName string, boxer *crypto.Anon
 	return bytesDecr, nil
 }
 
-func CreateFileReadCAPForUser(f *FilePTP, userID [32]byte, ipnsAddr string, storage *Storage, network *nw.Network) error {
+func CreateFileReadCAPForUser(f *FilePTP, userID common.Address, ipnsAddr string, storage *Storage, network *nw.Network) error {
 	cap := ReadCAP{path.Base(f.Name), ipnsAddr, f.Owner, f.VerifyKey}
 	capBytes, err := json.Marshal(cap)
 	if err != nil {

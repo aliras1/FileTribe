@@ -15,10 +15,10 @@ import (
 )
 
 // EthABI is the input ABI used to generate the binding from.
-const EthABI = "[{\"constant\":true,\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"UserRegistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"name\":\"message\",\"type\":\"bytes1[]\"}],\"name\":\"MessageSent\",\"type\":\"event\"},{\"constant\":false,\"inputs\":[{\"name\":\"id\",\"type\":\"bytes32\"},{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"boxingKey\",\"type\":\"bytes32\"},{\"name\":\"verifyKey\",\"type\":\"bytes32\"},{\"name\":\"ipfsAddr\",\"type\":\"string\"}],\"name\":\"registerUser\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[{\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"isUserRegistered\",\"outputs\":[{\"name\":\"\",\"type\":\"bool\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[{\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"getUser\",\"outputs\":[{\"name\":\"\",\"type\":\"address\"},{\"name\":\"\",\"type\":\"string\"},{\"name\":\"\",\"type\":\"bytes32\"},{\"name\":\"\",\"type\":\"bytes32\"},{\"name\":\"\",\"type\":\"string\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"name\":\"message\",\"type\":\"bytes1[]\"}],\"name\":\"sendMessage\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+const EthABI = "[{\"constant\":true,\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"UserRegistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"name\":\"message\",\"type\":\"bytes1[]\"}],\"name\":\"MessageSent\",\"type\":\"event\"},{\"constant\":false,\"inputs\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"boxingKey\",\"type\":\"bytes32\"},{\"name\":\"verifyKey\",\"type\":\"bytes1[]\"},{\"name\":\"ipfsAddr\",\"type\":\"string\"}],\"name\":\"registerUser\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[{\"name\":\"id\",\"type\":\"address\"}],\"name\":\"isUserRegistered\",\"outputs\":[{\"name\":\"\",\"type\":\"bool\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[{\"name\":\"id\",\"type\":\"address\"}],\"name\":\"getUser\",\"outputs\":[{\"name\":\"\",\"type\":\"string\"},{\"name\":\"\",\"type\":\"bytes32\"},{\"name\":\"\",\"type\":\"bytes1[]\"},{\"name\":\"\",\"type\":\"string\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"name\":\"message\",\"type\":\"bytes1[]\"}],\"name\":\"sendMessage\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 
 // EthBin is the compiled bytecode used for deploying new contracts.
-const EthBin = `0x608060405234801561001057600080fd5b50336000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff160217905550610a7a806100606000396000f30060806040526004361061006d576000357c0100000000000000000000000000000000000000000000000000000000900463ffffffff168063311607db1461007257806351b6d61f146100bb5780636517579c146101945780638da5cb5b146102fb578063ad9eb55714610352575b600080fd5b34801561007e57600080fd5b506100a160048036038101908080356000191690602001909291905050506103b8565b604051808215151515815260200191505060405180910390f35b3480156100c757600080fd5b506101926004803603810190808035600019169060200190929190803590602001908201803590602001908080601f016020809104026020016040519081016040528093929190818152602001838380828437820191505050505050919291929080356000191690602001909291908035600019169060200190929190803590602001908201803590602001908080601f01602080910402602001604051908101604052809392919081815260200183838082843782019150505050505091929192905050506103fe565b005b3480156101a057600080fd5b506101c36004803603810190808035600019169060200190929190505050610637565b604051808673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001806020018560001916600019168152602001846000191660001916815260200180602001838103835287818151815260200191508051906020019080838360005b8381101561025557808201518184015260208101905061023a565b50505050905090810190601f1680156102825780820380516001836020036101000a031916815260200191505b50838103825284818151815260200191508051906020019080838360005b838110156102bb5780820151818401526020810190506102a0565b50505050905090810190601f1680156102e85780820380516001836020036101000a031916815260200191505b5097505050505050505060405180910390f35b34801561030757600080fd5b506103106108b4565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b34801561035e57600080fd5b506103b6600480360381019080803590602001908201803590602001908080602002602001604051908101604052809392919081815260200183836020028082843782019150505050505091929192905050506108d9565b005b600060016000836000191660001916815260200190815260200160002060050160009054906101000a900460ff16156103f457600190506103f9565b600090505b919050565b60016000836000191660001916815260200190815260200160002060050160009054906101000a900460ff1615151561049f576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260178152602001807f557365726e616d6520616c72656164792065786973747300000000000000000081525060200191505060405180910390fd5b60c0604051908101604052803373ffffffffffffffffffffffffffffffffffffffff16815260200185815260200184600019168152602001836000191681526020018281526020016001151581525060016000876000191660001916815260200190815260200160002060008201518160000160006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff160217905550602082015181600101908051906020019061056c929190610954565b50604082015181600201906000191690556060820151816003019060001916905560808201518160040190805190602001906105a9929190610954565b5060a08201518160050160006101000a81548160ff0219169083151502179055509050507f54db7a5cb4735e1aac1f53db512d3390390bb6637bd30ad4bf9fc98667d9b9b933604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390a15050505050565b6000606060008060606106486109d4565b60016000886000191660001916815260200190815260200160002060050160009054906101000a900460ff16151561067f57600080fd5b60016000886000191660001916815260200190815260200160002060c060405190810160405290816000820160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001600182018054600181600116156101000203166002900480601f0160208091040260200160405190810160405280929190818152602001828054600181600116156101000203166002900480156107955780601f1061076a57610100808354040283529160200191610795565b820191906000526020600020905b81548152906001019060200180831161077857829003601f168201915b50505050508152602001600282015460001916600019168152602001600382015460001916600019168152602001600482018054600181600116156101000203166002900480601f01602080910402602001604051908101604052809291908181526020018280546001816001161561010002031660029004801561085b5780601f106108305761010080835404028352916020019161085b565b820191906000526020600020905b81548152906001019060200180831161083e57829003601f168201915b505050505081526020016005820160009054906101000a900460ff161515151581525050905080600001518160200151826040015183606001518460800151839350809050955095509550955095505091939590929450565b6000809054906101000a900473ffffffffffffffffffffffffffffffffffffffff1681565b7ff8bf0ac14a97aa75283adb748197d00e04cddea87df0f19cdb29aae4ca69bf83816040518080602001828103825283818151815260200191508051906020019060200280838360005b8381101561093e578082015181840152602081019050610923565b505050509050019250505060405180910390a150565b828054600181600116156101000203166002900490600052602060002090601f016020900481019282601f1061099557805160ff19168380011785556109c3565b828001600101855582156109c3579182015b828111156109c25782518255916020019190600101906109a7565b5b5090506109d09190610a29565b5090565b60c060405190810160405280600073ffffffffffffffffffffffffffffffffffffffff168152602001606081526020016000801916815260200160008019168152602001606081526020016000151581525090565b610a4b91905b80821115610a47576000816000905550600101610a2f565b5090565b905600a165627a7a72305820acb020bf1bd6045e844fa481ef79958ace44dc76abf32a9ce9aed74d839ff0910029`
+const EthBin = `0x608060405234801561001057600080fd5b50336000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff160217905550610c47806100606000396000f30060806040526004361061006d576000357c0100000000000000000000000000000000000000000000000000000000900463ffffffff168063163f7522146100725780636f77926b146100cd5780638178c0261461024c5780638da5cb5b1461034c578063ad9eb557146103a3575b600080fd5b34801561007e57600080fd5b506100b3600480360381019080803573ffffffffffffffffffffffffffffffffffffffff169060200190929190505050610409565b604051808215151515815260200191505060405180910390f35b3480156100d957600080fd5b5061010e600480360381019080803573ffffffffffffffffffffffffffffffffffffffff169060200190929190505050610473565b604051808060200185600019166000191681526020018060200180602001848103845288818151815260200191508051906020019080838360005b83811015610164578082015181840152602081019050610149565b50505050905090810190601f1680156101915780820380516001836020036101000a031916815260200191505b50848103835286818151815260200191508051906020019060200280838360005b838110156101cd5780820151818401526020810190506101b2565b50505050905001848103825285818151815260200191508051906020019080838360005b8381101561020c5780820151818401526020810190506101f1565b50505050905090810190601f1680156102395780820380516001836020036101000a031916815260200191505b5097505050505050505060405180910390f35b34801561025857600080fd5b5061034a600480360381019080803590602001908201803590602001908080601f0160208091040260200160405190810160405280939291908181526020018383808284378201915050505050509192919290803560001916906020019092919080359060200190820180359060200190808060200260200160405190810160405280939291908181526020018383602002808284378201915050505050509192919290803590602001908201803590602001908080601f0160208091040260200160405190810160405280939291908181526020018383808284378201915050505050509192919290505050610784565b005b34801561035857600080fd5b506103616109aa565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b3480156103af57600080fd5b50610407600480360381019080803590602001908201803590602001908080602002602001604051908101604052809392919081815260200183836020028082843782019150505050505091929192905050506109cf565b005b6000600160008373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060040160009054906101000a900460ff1615610469576001905061046e565b600090505b919050565b60606000606080610482610a4a565b600160008773ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060040160009054906101000a900460ff1615156104dd57600080fd5b600160008773ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060a06040519081016040529081600082018054600181600116156101000203166002900480601f0160208091040260200160405190810160405280929190818152602001828054600181600116156101000203166002900480156105c15780601f10610596576101008083540402835291602001916105c1565b820191906000526020600020905b8154815290600101906020018083116105a457829003601f168201915b505050505081526020016001820154600019166000191681526020016002820180548060200260200160405190810160405280929190818152602001828054801561068f57602002820191906000526020600020906000905b82829054906101000a90047f0100000000000000000000000000000000000000000000000000000000000000027effffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff19168152602001906001019060208260000104928301926001038202915080841161061a5790505b50505050508152602001600382018054600181600116156101000203166002900480601f0160208091040260200160405190810160405280929190818152602001828054600181600116156101000203166002900480156107315780601f1061070657610100808354040283529160200191610731565b820191906000526020600020905b81548152906001019060200180831161071457829003601f168201915b505050505081526020016004820160009054906101000a900460ff161515151581525050905080600001518160200151826040015183606001518393508191508090509450945094509450509193509193565b600160003373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060040160009054906101000a900460ff16151515610849576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260178152602001807f557365726e616d6520616c72656164792065786973747300000000000000000081525060200191505060405180910390fd5b60a0604051908101604052808581526020018460001916815260200183815260200182815260200160011515815250600160003373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060008201518160000190805190602001906108d3929190610a7f565b50602082015181600101906000191690556040820151816002019080519060200190610900929190610aff565b50606082015181600301908051906020019061091d929190610a7f565b5060808201518160040160006101000a81548160ff0219169083151502179055509050507f54db7a5cb4735e1aac1f53db512d3390390bb6637bd30ad4bf9fc98667d9b9b933604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390a150505050565b6000809054906101000a900473ffffffffffffffffffffffffffffffffffffffff1681565b7ff8bf0ac14a97aa75283adb748197d00e04cddea87df0f19cdb29aae4ca69bf83816040518080602001828103825283818151815260200191508051906020019060200280838360005b83811015610a34578082015181840152602081019050610a19565b505050509050019250505060405180910390a150565b60a060405190810160405280606081526020016000801916815260200160608152602001606081526020016000151581525090565b828054600181600116156101000203166002900490600052602060002090601f016020900481019282601f10610ac057805160ff1916838001178555610aee565b82800160010185558215610aee579182015b82811115610aed578251825591602001919060010190610ad2565b5b509050610afb9190610bc6565b5090565b82805482825590600052602060002090601f01602090048101928215610bb55791602002820160005b83821115610b8657835183826101000a81548160ff02191690837f0100000000000000000000000000000000000000000000000000000000000000900402179055509260200192600101602081600001049283019260010302610b28565b8015610bb35782816101000a81549060ff0219169055600101602081600001049283019260010302610b86565b505b509050610bc29190610beb565b5090565b610be891905b80821115610be4576000816000905550600101610bcc565b5090565b90565b610c1891905b80821115610c1457600081816101000a81549060ff021916905550600101610bf1565b5090565b905600a165627a7a72305820a84f36d3251172953ab2093a58ed24f89e8e605147d1168b709c31a278699e5a0029`
 
 // DeployEth deploys a new Ethereum contract, binding an instance of Eth to it.
 func DeployEth(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, *types.Transaction, *Eth, error) {
@@ -175,46 +175,44 @@ func (_Eth *EthTransactorRaw) Transact(opts *bind.TransactOpts, method string, p
 	return _Eth.Contract.contract.Transact(opts, method, params...)
 }
 
-// GetUser is a free data retrieval call binding the contract method 0x6517579c.
+// GetUser is a free data retrieval call binding the contract method 0x6f77926b.
 //
-// Solidity: function getUser(id bytes32) constant returns(address, string, bytes32, bytes32, string)
-func (_Eth *EthCaller) GetUser(opts *bind.CallOpts, id [32]byte) (common.Address, string, [32]byte, [32]byte, string, error) {
+// Solidity: function getUser(id address) constant returns(string, bytes32, bytes1[], string)
+func (_Eth *EthCaller) GetUser(opts *bind.CallOpts, id common.Address) (string, [32]byte, [][1]byte, string, error) {
 	var (
-		ret0 = new(common.Address)
-		ret1 = new(string)
-		ret2 = new([32]byte)
-		ret3 = new([32]byte)
-		ret4 = new(string)
+		ret0 = new(string)
+		ret1 = new([32]byte)
+		ret2 = new([][1]byte)
+		ret3 = new(string)
 	)
 	out := &[]interface{}{
 		ret0,
 		ret1,
 		ret2,
 		ret3,
-		ret4,
 	}
 	err := _Eth.contract.Call(opts, out, "getUser", id)
-	return *ret0, *ret1, *ret2, *ret3, *ret4, err
+	return *ret0, *ret1, *ret2, *ret3, err
 }
 
-// GetUser is a free data retrieval call binding the contract method 0x6517579c.
+// GetUser is a free data retrieval call binding the contract method 0x6f77926b.
 //
-// Solidity: function getUser(id bytes32) constant returns(address, string, bytes32, bytes32, string)
-func (_Eth *EthSession) GetUser(id [32]byte) (common.Address, string, [32]byte, [32]byte, string, error) {
+// Solidity: function getUser(id address) constant returns(string, bytes32, bytes1[], string)
+func (_Eth *EthSession) GetUser(id common.Address) (string, [32]byte, [][1]byte, string, error) {
 	return _Eth.Contract.GetUser(&_Eth.CallOpts, id)
 }
 
-// GetUser is a free data retrieval call binding the contract method 0x6517579c.
+// GetUser is a free data retrieval call binding the contract method 0x6f77926b.
 //
-// Solidity: function getUser(id bytes32) constant returns(address, string, bytes32, bytes32, string)
-func (_Eth *EthCallerSession) GetUser(id [32]byte) (common.Address, string, [32]byte, [32]byte, string, error) {
+// Solidity: function getUser(id address) constant returns(string, bytes32, bytes1[], string)
+func (_Eth *EthCallerSession) GetUser(id common.Address) (string, [32]byte, [][1]byte, string, error) {
 	return _Eth.Contract.GetUser(&_Eth.CallOpts, id)
 }
 
-// IsUserRegistered is a free data retrieval call binding the contract method 0x311607db.
+// IsUserRegistered is a free data retrieval call binding the contract method 0x163f7522.
 //
-// Solidity: function isUserRegistered(id bytes32) constant returns(bool)
-func (_Eth *EthCaller) IsUserRegistered(opts *bind.CallOpts, id [32]byte) (bool, error) {
+// Solidity: function isUserRegistered(id address) constant returns(bool)
+func (_Eth *EthCaller) IsUserRegistered(opts *bind.CallOpts, id common.Address) (bool, error) {
 	var (
 		ret0 = new(bool)
 	)
@@ -223,17 +221,17 @@ func (_Eth *EthCaller) IsUserRegistered(opts *bind.CallOpts, id [32]byte) (bool,
 	return *ret0, err
 }
 
-// IsUserRegistered is a free data retrieval call binding the contract method 0x311607db.
+// IsUserRegistered is a free data retrieval call binding the contract method 0x163f7522.
 //
-// Solidity: function isUserRegistered(id bytes32) constant returns(bool)
-func (_Eth *EthSession) IsUserRegistered(id [32]byte) (bool, error) {
+// Solidity: function isUserRegistered(id address) constant returns(bool)
+func (_Eth *EthSession) IsUserRegistered(id common.Address) (bool, error) {
 	return _Eth.Contract.IsUserRegistered(&_Eth.CallOpts, id)
 }
 
-// IsUserRegistered is a free data retrieval call binding the contract method 0x311607db.
+// IsUserRegistered is a free data retrieval call binding the contract method 0x163f7522.
 //
-// Solidity: function isUserRegistered(id bytes32) constant returns(bool)
-func (_Eth *EthCallerSession) IsUserRegistered(id [32]byte) (bool, error) {
+// Solidity: function isUserRegistered(id address) constant returns(bool)
+func (_Eth *EthCallerSession) IsUserRegistered(id common.Address) (bool, error) {
 	return _Eth.Contract.IsUserRegistered(&_Eth.CallOpts, id)
 }
 
@@ -263,25 +261,25 @@ func (_Eth *EthCallerSession) Owner() (common.Address, error) {
 	return _Eth.Contract.Owner(&_Eth.CallOpts)
 }
 
-// RegisterUser is a paid mutator transaction binding the contract method 0x51b6d61f.
+// RegisterUser is a paid mutator transaction binding the contract method 0x8178c026.
 //
-// Solidity: function registerUser(id bytes32, name string, boxingKey bytes32, verifyKey bytes32, ipfsAddr string) returns()
-func (_Eth *EthTransactor) RegisterUser(opts *bind.TransactOpts, id [32]byte, name string, boxingKey [32]byte, verifyKey [32]byte, ipfsAddr string) (*types.Transaction, error) {
-	return _Eth.contract.Transact(opts, "registerUser", id, name, boxingKey, verifyKey, ipfsAddr)
+// Solidity: function registerUser(name string, boxingKey bytes32, verifyKey bytes1[], ipfsAddr string) returns()
+func (_Eth *EthTransactor) RegisterUser(opts *bind.TransactOpts, name string, boxingKey [32]byte, verifyKey [][1]byte, ipfsAddr string) (*types.Transaction, error) {
+	return _Eth.contract.Transact(opts, "registerUser", name, boxingKey, verifyKey, ipfsAddr)
 }
 
-// RegisterUser is a paid mutator transaction binding the contract method 0x51b6d61f.
+// RegisterUser is a paid mutator transaction binding the contract method 0x8178c026.
 //
-// Solidity: function registerUser(id bytes32, name string, boxingKey bytes32, verifyKey bytes32, ipfsAddr string) returns()
-func (_Eth *EthSession) RegisterUser(id [32]byte, name string, boxingKey [32]byte, verifyKey [32]byte, ipfsAddr string) (*types.Transaction, error) {
-	return _Eth.Contract.RegisterUser(&_Eth.TransactOpts, id, name, boxingKey, verifyKey, ipfsAddr)
+// Solidity: function registerUser(name string, boxingKey bytes32, verifyKey bytes1[], ipfsAddr string) returns()
+func (_Eth *EthSession) RegisterUser(name string, boxingKey [32]byte, verifyKey [][1]byte, ipfsAddr string) (*types.Transaction, error) {
+	return _Eth.Contract.RegisterUser(&_Eth.TransactOpts, name, boxingKey, verifyKey, ipfsAddr)
 }
 
-// RegisterUser is a paid mutator transaction binding the contract method 0x51b6d61f.
+// RegisterUser is a paid mutator transaction binding the contract method 0x8178c026.
 //
-// Solidity: function registerUser(id bytes32, name string, boxingKey bytes32, verifyKey bytes32, ipfsAddr string) returns()
-func (_Eth *EthTransactorSession) RegisterUser(id [32]byte, name string, boxingKey [32]byte, verifyKey [32]byte, ipfsAddr string) (*types.Transaction, error) {
-	return _Eth.Contract.RegisterUser(&_Eth.TransactOpts, id, name, boxingKey, verifyKey, ipfsAddr)
+// Solidity: function registerUser(name string, boxingKey bytes32, verifyKey bytes1[], ipfsAddr string) returns()
+func (_Eth *EthTransactorSession) RegisterUser(name string, boxingKey [32]byte, verifyKey [][1]byte, ipfsAddr string) (*types.Transaction, error) {
+	return _Eth.Contract.RegisterUser(&_Eth.TransactOpts, name, boxingKey, verifyKey, ipfsAddr)
 }
 
 // SendMessage is a paid mutator transaction binding the contract method 0xad9eb557.

@@ -1,16 +1,20 @@
 package networketh
 
 import (
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/big"
+	"path"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	c "github.com/ethereum/go-ethereum/crypto"
+	// c "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/event"
 
@@ -22,9 +26,9 @@ const key = `{"address":"c4f45f1822b614116ea5b68d4020f3ae1a0179e5","crypto":{"ci
 const contractAddress = "0x41cf9ed28c99cc5ebd531bd1929a7e99c122fed8"
 
 type Message struct {
-	From    [32]byte `json:"from"`
-	Type    string   `json:"type"`
-	Payload string   `json:"payload"`
+	From    common.Address `json:"from"`
+	Type    string         `json:"type"`
+	Payload string         `json:"payload"`
 }
 
 type Network struct {
@@ -37,19 +41,24 @@ type Network struct {
 	Simulator *backends.SimulatedBackend
 }
 
-func NewTestNetwork() (*Network, error) {
-	key, _ := c.GenerateKey()
-	auth := bind.NewKeyedTransactor(key)
-
-	simulator := backends.NewSimulatedBackend(core.GenesisAlloc{
-		auth.From: core.GenesisAccount{Balance: big.NewInt(10000000000)},
-	})
-
-	_, _, ethclient, err := eth.DeployEth(auth, simulator)
+func NewAccount(ks *keystore.KeyStore, dir, password string) (*ecdsa.PrivateKey, string, error) {
+	acc, err := ks.NewAccount(password)
 	if err != nil {
-		return nil, fmt.Errorf("could not deploy contract on cimulated chain")
+		return nil, "", err
 	}
+	ethKeyPath := dir + "/" + path.Base(acc.URL.String())
+	json, err := ioutil.ReadFile(ethKeyPath)
+	if err != nil {
+		return nil, "", err
+	}
+	key, err := keystore.DecryptKey(json, password)
+	if err != nil {
+		return nil, "", err
+	}
+	return key.PrivateKey, ethKeyPath, nil
+}
 
+func newTestNet(ethclient *eth.Eth, auth *bind.TransactOpts, backend *backends.SimulatedBackend) (*Network, error) {
 	session := &eth.EthSession{
 		Contract: ethclient,
 		CallOpts: bind.CallOpts{
@@ -79,9 +88,36 @@ func NewTestNetwork() (*Network, error) {
 		Auth:    auth,
 		MessageSentSubscription: sub,
 		MessageSentChannel:      channel,
-		Simulator:               simulator,
+		Simulator:               backend,
 	}
 	return network, nil
+}
+
+func NewTestNetwork(keyAlice, keyBob *ecdsa.PrivateKey) (*Network, *Network, error) {
+	authAlice := bind.NewKeyedTransactor(keyAlice)
+	authBob := bind.NewKeyedTransactor(keyBob)
+
+	simulator := backends.NewSimulatedBackend(core.GenesisAlloc{
+		authAlice.From: core.GenesisAccount{Balance: big.NewInt(10000000000)},
+		authBob.From:   core.GenesisAccount{Balance: big.NewInt(10000000000)},
+	})
+
+	_, _, ethclient, err := eth.DeployEth(authAlice, simulator)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not deploy contract on simulated chain")
+	}
+
+	networkAlice, err := newTestNet(ethclient, authAlice, simulator)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	networkBob, err := newTestNet(ethclient, authBob, simulator)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return networkAlice, networkBob, nil
 }
 
 func NewNetwork() (*Network, error) {
@@ -135,15 +171,31 @@ func NewNetwork() (*Network, error) {
 	return &network, nil
 }
 
-func (network *Network) RegisterUser(userID [32]byte, username string, boxingKey, verifyKey [32]byte, ipfsAddress string) error {
-	_, err := network.Session.RegisterUser(userID, username, boxingKey, verifyKey, ipfsAddress)
+func goToEthByteArray(array []byte) ([][1]byte) {
+	var newArray [][1]byte
+	for _, b := range(array) {
+		newArray = append(newArray, [1]byte{b})
+	}
+	return newArray
+}
+
+func ethToGoByteArray(array [][1]byte) ([]byte) {
+	var newArray []byte
+	for _, b := range(array) {
+		newArray = append(newArray, b[0])
+	}
+	return newArray
+}
+
+func (network *Network) RegisterUser(username string, boxingKey [32]byte, verifyKey []byte, ipfsAddress string) error {
+	_, err := network.Session.RegisterUser(username, boxingKey, goToEthByteArray(verifyKey), ipfsAddress)
 	if err != nil {
 		return fmt.Errorf("error while Network.RegisterUser(): %s", err)
 	}
 	return nil
 }
 
-func (network *Network) IsUserRegistered(id [32]byte) (bool, error) {
+func (network *Network) IsUserRegistered(id common.Address) (bool, error) {
 	registered, err := network.Session.IsUserRegistered(id)
 	if err != nil {
 		return true, fmt.Errorf("error while Network.IsUserRegistered(): %s", err)
@@ -151,15 +203,15 @@ func (network *Network) IsUserRegistered(id [32]byte) (bool, error) {
 	return registered, nil
 }
 
-func (network *Network) GetUser(id [32]byte) (common.Address, string, [32]byte, [32]byte, string, error) {
-	address, username, boxingKey, verifyKey, ipfsAddress, err := network.Session.GetUser(id)
+func (network *Network) GetUser(id common.Address) (string, [32]byte, []byte, string, error) {
+	username, boxingKey, verifyKey, ipfsAddress, err := network.Session.GetUser(id)
 	if err != nil {
-		return common.Address{}, "", [32]byte{}, [32]byte{}, "", fmt.Errorf("error while Network-GetUser(): %s", err)
+		return "", [32]byte{}, []byte{}, "", fmt.Errorf("error while Network-GetUser(): %s", err)
 	}
-	return address, username, boxingKey, verifyKey, ipfsAddress, nil
+	return username, boxingKey, ethToGoByteArray(verifyKey), ipfsAddress, nil
 }
 
-func (network *Network) SendMessage(boxer *crypto.AnonymPublicKey, signer *crypto.SigningKeyPair, from [32]byte, msgType, payload string) error {
+func (network *Network) SendMessage(boxer *crypto.AnonymPublicKey, signer *crypto.Signer, from common.Address, msgType, payload string) error {
 	message := Message{
 		From:    from,
 		Type:    msgType,
@@ -171,7 +223,10 @@ func (network *Network) SendMessage(boxer *crypto.AnonymPublicKey, signer *crypt
 		return fmt.Errorf("could not marshal message")
 	}
 
-	messageSigned := signer.SigningKey.Sign(messageJSON)
+	messageSigned, err := signer.Sign(messageJSON)
+	if err != nil {
+		return fmt.Errorf("could not sign message: Network.SendMessage")
+	}
 	messageEnc, err := boxer.Seal(messageSigned)
 	if err != nil {
 		return fmt.Errorf("could not encrypt data: Network.SendMessage")

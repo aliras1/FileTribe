@@ -3,16 +3,15 @@ pragma solidity ^0.4.23;
 
 contract Dipfshare {
     struct User {
-        address addr;
         string name;
         bytes32 boxingKey;
-        bytes32 verifyKey;
+        byte[] verifyKey;
         string ipfsAddr;
         bool exists;
     }
 
     address public owner;
-    mapping(bytes32 => User) private userBindings; // user.verify_key = key
+    mapping(address => User) private userBindings; // user.verify_key = key
 
     event UserRegistered(address addr);
     event MessageSent(byte[] message);
@@ -22,31 +21,30 @@ contract Dipfshare {
     }
 
     function registerUser(
-        bytes32 id,
         string name, 
         bytes32 boxingKey, 
-        bytes32 verifyKey, 
+        byte[] verifyKey, 
         string ipfsAddr
     ) 
         public
     {
-        require(!userBindings[verifyKey].exists, "Username already exists");
+        require(!userBindings[msg.sender].exists, "Username already exists");
 
-        userBindings[id] = User(msg.sender, name, boxingKey, verifyKey, ipfsAddr, true);
+        userBindings[msg.sender] = User(name, boxingKey, verifyKey, ipfsAddr, true);
         
         emit UserRegistered(msg.sender);
     }
 
-    function isUserRegistered(bytes32 id) public view returns(bool) {
+    function isUserRegistered(address id) public view returns(bool) {
         if (userBindings[id].exists)
             return true;
         return false;
     }
 
-    function getUser(bytes32 id) public view returns(address, string, bytes32, bytes32, string) {
+    function getUser(address id) public view returns(string, bytes32, byte[], string) {
         require(userBindings[id].exists);
         User memory user = userBindings[id];
-        return (user.addr, user.name, user.boxingKey, user.verifyKey, user.ipfsAddr);
+        return (user.name, user.boxingKey, user.verifyKey, user.ipfsAddr);
     }
 
     function sendMessage(byte[] message) public {

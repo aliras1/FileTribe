@@ -1,6 +1,7 @@
 package client
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	"bytes"
 	"crypto/sha256"
 	"fmt"
@@ -14,7 +15,7 @@ import (
 )
 
 type Member struct {
-	ID        [32]byte         `json:"id"`
+	ID        common.Address         `json:"id"`
 	VerifyKey crypto.VerifyKey `json:"-"`
 }
 
@@ -38,8 +39,8 @@ func (ml *MemberList) Bytes() []byte {
 	return data
 }
 
-func (ml *MemberList) Append(userID [32]byte, network *nw.Network) *MemberList {
-	_, _, _, verifyKeyBytes, _, err := network.GetUser(userID)
+func (ml *MemberList) Append(userID common.Address, network *nw.Network) *MemberList {
+	_, _, verifyKeyBytes, _, err := network.GetUser(userID)
 	if err != nil {
 		glog.Errorf("could not get user verify key: MemberList.Append: %s", err)
 		return ml

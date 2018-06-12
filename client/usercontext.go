@@ -36,7 +36,7 @@ func NewUserContextFromSignUp(username, password, dataPath string, network *nw.N
 	if err != nil {
 		return nil, fmt.Errorf("could not get ipfs id: NewUserContextFromSignUp: %s", err)
 	}
-	user, err := SignUp(username, password, ipfsID.ID, network)
+	user, err := SignUp(username, password, "", ipfsID.ID, network)
 	if err != nil {
 		return nil, fmt.Errorf("could not sign up: NewUserContextFromSignUp: %s", err)
 	}
@@ -53,7 +53,7 @@ func NewUserContextFromSignUp(username, password, dataPath string, network *nw.N
 func NewUserContextFromSignIn(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
 	fmt.Printf("[*] User '%s' signing in...\n", username)
 
-	user, err := SignIn(username, password, network)
+	user, err := SignIn(username, password, "", network)
 	if err != nil {
 		return nil, fmt.Errorf("could not sign in: NewUserContextFromSignIn: %s", err)
 	}
@@ -124,7 +124,7 @@ func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Me
 		return nil, fmt.Errorf("could not unmarshal message: MessageProcessor: %s", err)
 	}
 
-	_, _, _, verifyKeyBytes, _, err := ctx.Network.GetUser(message.From)
+	_, _, verifyKeyBytes, _, err := ctx.Network.GetUser(message.From)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"could not get user '%s': MessageProcessor: %s",
@@ -133,7 +133,10 @@ func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Me
 		)
 	}
 	verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
-	_, ok := verifyKey.Verify(messageSigned)
+	
+	return nil, fmt.Errorf("FIX IT")
+
+	ok := verifyKey.Verify(messageSigned, messageSigned)
 	if !ok {
 		return nil, fmt.Errorf("could not verify message: MessageProcessor")
 	}
@@ -156,7 +159,7 @@ func MessageProcessor(ctx *UserContext) {
 		switch message.Type {
 		case "PTP READ CAP":
 			fmt.Println("[*] Downloading PTP file")
-			cap, err := fs.DownloadReadCAP(message.From, ctx.User.ID, message.Payload, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
+			cap, err := fs.DownloadReadCAP(message.From, ctx.User.Address, message.Payload, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
 			if err != nil {
 				glog.Errorf("could not download read cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", message.Payload, err)
 				continue
@@ -177,7 +180,7 @@ func MessageProcessor(ctx *UserContext) {
 			fmt.Printf("[*] Joining group '%s'...\n", strings.Split(message.Payload, ".")[0])
 			glog.Infof("\t--> Donwloading group access cap '%s'...", message.Payload)
 
-			cap, err := ctx.Storage.DownloadGroupAccessCAP(message.From, ctx.User.ID, message.Payload, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
+			cap, err := ctx.Storage.DownloadGroupAccessCAP(message.From, ctx.User.Address, message.Payload, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
 			if err != nil {
 				glog.Errorf("could not download ga cap: MessageProcessor: %s", err)
 				continue
