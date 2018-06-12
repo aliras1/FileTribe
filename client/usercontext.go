@@ -2,14 +2,14 @@ package client
 
 import (
 	"crypto/rand"
-	"encoding/base64"
-	"encoding/json"
+	// "encoding/base64"
+	// "encoding/json"
 	"fmt"
 	"path"
 	"strings"
 
 	fs "ipfs-share/client/filestorage"
-	"ipfs-share/crypto"
+	// "ipfs-share/crypto"
 	"ipfs-share/eth"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/networketh"
@@ -107,40 +107,41 @@ func (uc *UserContext) SignOut() {
 }
 
 func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Message, error) {
-	var messageEnc []byte
-	for _, b := range event.Message {
-		messageEnc = append(messageEnc, b[0])
-	}
+	// var messageEnc []byte
+	// for _, b := range event.Message {
+	// 	messageEnc = append(messageEnc, b[0])
+	// }
 
-	messageSigned, err := ctx.User.Boxer.Open(messageEnc)
-	if err != nil {
-		return nil, fmt.Errorf("could not decrypt event: MessageProcessor: %s", err)
-	}
+	// messageSigned, err := ctx.User.Boxer.Open(messageEnc)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not decrypt event: MessageProcessor: %s", err)
+	// }
 
-	messageJSON := messageSigned[64:]
+	// messageJSON := messageSigned[64:]
 
-	var message nw.Message
-	if err := json.Unmarshal(messageJSON, &message); err != nil {
-		return nil, fmt.Errorf("could not unmarshal message: MessageProcessor: %s", err)
-	}
+	// var message nw.Message
+	// if err := json.Unmarshal(messageJSON, &message); err != nil {
+	// 	return nil, fmt.Errorf("could not unmarshal message: MessageProcessor: %s", err)
+	// }
 
-	_, _, verifyKeyBytes, _, err := ctx.Network.GetUser(message.From)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"could not get user '%s': MessageProcessor: %s",
-			base64.StdEncoding.EncodeToString(message.From[:]),
-			err,
-		)
-	}
-	verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
+	// _, _, verifyKeyBytes, _, err := ctx.Network.GetUser(message.From)
+	// if err != nil {
+	// 	return nil, fmt.Errorf(
+	// 		"could not get user '%s': MessageProcessor: %s",
+	// 		base64.StdEncoding.EncodeToString(message.From[:]),
+	// 		err,
+	// 	)
+	// }
+	// verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
 	
-	return nil, fmt.Errorf("FIX IT")
+	// return nil, fmt.Errorf("FIX IT")
 
-	ok := verifyKey.Verify(messageSigned, messageSigned)
-	if !ok {
-		return nil, fmt.Errorf("could not verify message: MessageProcessor")
-	}
-	return &message, nil
+	// ok := verifyKey.Verify(messageSigned, messageSigned)
+	// if !ok {
+	// 	return nil, fmt.Errorf("could not verify message: MessageProcessor")
+	// }
+	// return &message, nil
+	return nil, nil
 }
 
 func MessageProcessor(ctx *UserContext) {

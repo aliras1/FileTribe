@@ -6,7 +6,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/golang/glog"
+	// "github.com/golang/glog"
 
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
@@ -40,16 +40,17 @@ func (ml *MemberList) Bytes() []byte {
 }
 
 func (ml *MemberList) Append(userID common.Address, network *nw.Network) *MemberList {
-	_, _, verifyKeyBytes, _, err := network.GetUser(userID)
-	if err != nil {
-		glog.Errorf("could not get user verify key: MemberList.Append: %s", err)
-		return ml
-	}
-	verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
-	newList := make([]Member, len(ml.List))
-	copy(newList, ml.List)
-	newList = append(newList, Member{userID, verifyKey})
-	return &MemberList{List: newList}
+	// _, _, verifyKeyBytes, _, err := network.GetUser(userID)
+	// if err != nil {
+	// 	glog.Errorf("could not get user verify key: MemberList.Append: %s", err)
+	// 	return ml
+	// }
+	// verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
+	// newList := make([]Member, len(ml.List))
+	// copy(newList, ml.List)
+	// newList = append(newList, Member{userID, verifyKey})
+	// return &MemberList{List: newList}
+	return nil
 }
 
 func (ml *MemberList) Get(userID [32]byte) *Member {

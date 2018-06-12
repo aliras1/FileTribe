@@ -68,7 +68,6 @@ func TestSigning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-
 	pk := ethcrypto.CompressPubkey(&user1.Signer.PrivateKey.PublicKey)
 	fmt.Println(pk)
 	ok := ethcrypto.VerifySignature(pk, digest[:], sig[:64])
@@ -113,18 +112,18 @@ func TestUserDataOnServer(t *testing.T) {
 		t.Fatal("user should be registered")
 	}
 
-	uName, bKey, vKey, ipfs, err := network.GetUser(user.Address)
-	if strings.Compare(uName, user.Name) != 0 {
+	contact, err := network.GetUser(user.Address)
+	if strings.Compare(contact.Name, user.Name) != 0 {
 		t.Fatal("usernames do not match")
 	}
-	if !bytes.Equal(bKey[:], user.Boxer.PublicKey.Value[:]) {
+	if !bytes.Equal(contact.Boxer[:], user.Boxer.PublicKey.Value[:]) {
 		t.Fatal("boxing keys do not match")
 	}
 	pk := ethcrypto.CompressPubkey(&user.Signer.PrivateKey.PublicKey)
-	if !bytes.Equal(vKey, pk) {
+	if !bytes.Equal(contact.VerifyKey, pk) {
 		t.Fatal("verify keys do not match")
 	}
-	if strings.Compare(ipfs, ipfsAddress) != 0 {
+	if strings.Compare(contact.IPFSAddress, ipfsAddress) != 0 {
 		t.Fatal("ipfs addresses do not match")
 	}
 

@@ -5,11 +5,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
+	// "io/ioutil"
+	// "os"
 	"path"
 
-	"github.com/golang/glog"
+	// "github.com/golang/glog"
 
 	"ipfs-share/crypto"
 	"ipfs-share/ipfs"
@@ -72,36 +72,37 @@ func DownloadReadCAP(fromUserID, userID common.Address, capName string, boxer *c
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
 func downloadCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
-	glog.Info("Downloading CAP...")
-	// get address and key
-	_, _, _, ipfsAddr, err := network.GetUser(fromUserID)
-	if err != nil {
-		return nil, fmt.Errorf("could not get data of user '%s': downloadCAP: %s", base64.StdEncoding.EncodeToString(fromUserID[:]), err)
-	}
+	// glog.Info("Downloading CAP...")
+	// // get address and key
+	// _, _, _, ipfsAddr, err := network.GetUser(fromUserID)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not get data of user '%s': downloadCAP: %s", base64.StdEncoding.EncodeToString(fromUserID[:]), err)
+	// }
 
-	ipnsPath := "/ipns/" + ipfsAddr + "/for/" + base64.StdEncoding.EncodeToString(userID[:]) + "/" + capName
-	// download cap file
-	tmpFilePath := storage.tmpPath + "/" + capName
-	err = ipfs.Get(tmpFilePath, ipnsPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not ipfs get file '%s': downloadCAP: %s", ipnsPath, err)
-	}
-	bytesEnc, err := ioutil.ReadFile(tmpFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("could not read file '%s': downloadCAP: %s", tmpFilePath, err)
-	}
-	bytesDecr, err := boxer.Open(bytesEnc)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"could not decrypt cap '%s' from user '%s' with path '%s': downloadCAP",
-			capName,
-			base64.StdEncoding.EncodeToString(fromUserID[:]),
-			ipnsPath,
-		)
-	}
-	os.Remove(tmpFilePath)
-	glog.Info("\t<-- CAP Downloaded")
-	return bytesDecr, nil
+	// ipnsPath := "/ipns/" + ipfsAddr + "/for/" + base64.StdEncoding.EncodeToString(userID[:]) + "/" + capName
+	// // download cap file
+	// tmpFilePath := storage.tmpPath + "/" + capName
+	// err = ipfs.Get(tmpFilePath, ipnsPath)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not ipfs get file '%s': downloadCAP: %s", ipnsPath, err)
+	// }
+	// bytesEnc, err := ioutil.ReadFile(tmpFilePath)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not read file '%s': downloadCAP: %s", tmpFilePath, err)
+	// }
+	// bytesDecr, err := boxer.Open(bytesEnc)
+	// if err != nil {
+	// 	return nil, fmt.Errorf(
+	// 		"could not decrypt cap '%s' from user '%s' with path '%s': downloadCAP",
+	// 		capName,
+	// 		base64.StdEncoding.EncodeToString(fromUserID[:]),
+	// 		ipnsPath,
+	// 	)
+	// }
+	// os.Remove(tmpFilePath)
+	// glog.Info("\t<-- CAP Downloaded")
+	// return bytesDecr, nil
+	return nil, fmt.Errorf("not implemented: downloadCAP")
 }
 
 func CreateFileReadCAPForUser(f *FilePTP, userID common.Address, ipnsAddr string, storage *Storage, network *nw.Network) error {

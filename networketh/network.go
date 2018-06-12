@@ -31,6 +31,14 @@ type Message struct {
 	Payload string         `json:"payload"`
 }
 
+type Contact struct {
+	Address     common.Address
+	Name        string
+	Boxer       crypto.PublicBoxingKey
+	VerifyKey   crypto.VerifyKey
+	IPFSAddress string
+}
+
 type Network struct {
 	Session *eth.EthSession
 	Auth    *bind.TransactOpts
@@ -171,24 +179,24 @@ func NewNetwork() (*Network, error) {
 	return &network, nil
 }
 
-func goToEthByteArray(array []byte) ([][1]byte) {
+func goToEthByteArray(array []byte) [][1]byte {
 	var newArray [][1]byte
-	for _, b := range(array) {
+	for _, b := range array {
 		newArray = append(newArray, [1]byte{b})
 	}
 	return newArray
 }
 
-func ethToGoByteArray(array [][1]byte) ([]byte) {
+func ethToGoByteArray(array [][1]byte) []byte {
 	var newArray []byte
-	for _, b := range(array) {
+	for _, b := range array {
 		newArray = append(newArray, b[0])
 	}
 	return newArray
 }
 
 func (network *Network) RegisterUser(username string, boxingKey [32]byte, verifyKey []byte, ipfsAddress string) error {
-	_, err := network.Session.RegisterUser(username, boxingKey, goToEthByteArray(verifyKey), ipfsAddress)
+	_, err := network.Session.RegisterUser(username, boxingKey, verifyKey, ipfsAddress)
 	if err != nil {
 		return fmt.Errorf("error while Network.RegisterUser(): %s", err)
 	}
@@ -203,12 +211,18 @@ func (network *Network) IsUserRegistered(id common.Address) (bool, error) {
 	return registered, nil
 }
 
-func (network *Network) GetUser(id common.Address) (string, [32]byte, []byte, string, error) {
-	username, boxingKey, verifyKey, ipfsAddress, err := network.Session.GetUser(id)
+func (network *Network) GetUser(address common.Address) (*Contact, error) {
+	username, boxingKey, verifyKey, ipfsAddress, err := network.Session.GetUser(address)
 	if err != nil {
-		return "", [32]byte{}, []byte{}, "", fmt.Errorf("error while Network-GetUser(): %s", err)
+		return &Contact{}, fmt.Errorf("error while Network-GetUser(): %s", err)
 	}
-	return username, boxingKey, ethToGoByteArray(verifyKey), ipfsAddress, nil
+	return &Contact{
+		Address:     address,
+		Name:        username,
+		Boxer:       crypto.PublicBoxingKey(boxingKey),
+		VerifyKey:   crypto.VerifyKey(verifyKey),
+		IPFSAddress: ipfsAddress,
+	}, nil
 }
 
 func (network *Network) SendMessage(boxer *crypto.AnonymPublicKey, signer *crypto.Signer, from common.Address, msgType, payload string) error {
@@ -235,11 +249,7 @@ func (network *Network) SendMessage(boxer *crypto.AnonymPublicKey, signer *crypt
 	fmt.Println("net enc:")
 	fmt.Println(messageEnc)
 
-	var msg [][1]byte
-	for _, b := range messageEnc {
-		msg = append(msg, [1]byte{b})
-	}
-	if _, err := network.Session.SendMessage(msg); err != nil {
+	if _, err := network.Session.SendMessage(messageEnc); err != nil {
 		return fmt.Errorf("error while Network.SendMessage(): %s", err)
 	}
 	return nil

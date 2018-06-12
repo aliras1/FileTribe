@@ -3,7 +3,7 @@ package filestorage
 import (
 	"github.com/ethereum/go-ethereum/common"
 	"crypto/rand"
-	"encoding/base64"
+	// "encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -129,25 +129,26 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) (stri
 }
 
 func (storage *Storage) createFileForUser(userID common.Address, capName string, data []byte, network *nw.Network) error {
-	userIDBase64 := base64.StdEncoding.EncodeToString(userID[:])
-	forUserPath := storage.publicForPath + "/" + userIDBase64
-	err := os.MkdirAll(forUserPath, 0770)
-	if err != nil {
-		glog.Warningf("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
-	}
-	_, publicKey, _, _, err := network.GetUser(userID)
-	if err != nil {
-		return fmt.Errorf("could not get public boxing key: Storage.createFileForUser: %s", err)
-	}
-	boxer := crypto.AnonymPublicKey{Value: &publicKey}
-	encData, err := boxer.Seal(data)
-	if err != nil {
-		return fmt.Errorf("error while encryption: Storage.createFileForUser: %s", err)
-	}
-	if err := ioutil.WriteFile(forUserPath+"/"+capName+".json", encData, 0644); err != nil {
-		return fmt.Errorf("could not write file: Storage.createFileForUser: %s", err)
-	}
-	return nil
+	// userIDBase64 := base64.StdEncoding.EncodeToString(userID[:])
+	// forUserPath := storage.publicForPath + "/" + userIDBase64
+	// err := os.MkdirAll(forUserPath, 0770)
+	// if err != nil {
+	// 	glog.Warningf("error while creating dir: Storage.createFileForUser: %s", err) /* TODO check for permission errors */
+	// }
+	// _, publicKey, _, _, err := network.GetUser(userID)
+	// if err != nil {
+	// 	return fmt.Errorf("could not get public boxing key: Storage.createFileForUser: %s", err)
+	// }
+	// boxer := crypto.AnonymPublicKey{Value: &publicKey}
+	// encData, err := boxer.Seal(data)
+	// if err != nil {
+	// 	return fmt.Errorf("error while encryption: Storage.createFileForUser: %s", err)
+	// }
+	// if err := ioutil.WriteFile(forUserPath+"/"+capName+".json", encData, 0644); err != nil {
+	// 	return fmt.Errorf("could not write file: Storage.createFileForUser: %s", err)
+	// }
+	// return nil
+	return fmt.Errorf("not implemented Storage.createFileForUser")
 }
 
 // +------------------------------+
