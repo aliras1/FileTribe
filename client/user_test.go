@@ -1,6 +1,7 @@
 package client
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	"bytes"
 	// "crypto/rand"
 	"fmt"
@@ -102,6 +103,12 @@ func TestUserDataOnServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	txt, _ := user.Address.MarshalText()
+	fmt.Println(string(txt))
+	newAd := common.BytesToAddress(user.Address.Bytes())
+	fmt.Println(newAd.String())
+	fmt.Println(user.Address.String())
+
 	network.Simulator.Commit()
 
 	registered, err := network.IsUserRegistered(user.Address)
@@ -116,7 +123,7 @@ func TestUserDataOnServer(t *testing.T) {
 	if strings.Compare(contact.Name, user.Name) != 0 {
 		t.Fatal("usernames do not match")
 	}
-	if !bytes.Equal(contact.Boxer[:], user.Boxer.PublicKey.Value[:]) {
+	if !bytes.Equal(contact.Boxer.Value[:], user.Boxer.PublicKey.Value[:]) {
 		t.Fatal("boxing keys do not match")
 	}
 	pk := ethcrypto.CompressPubkey(&user.Signer.PrivateKey.PublicKey)

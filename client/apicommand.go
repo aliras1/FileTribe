@@ -93,13 +93,14 @@ func NewCommand(raw string) (ICommand, error) {
 type CMDSignUp struct {
 	Username string
 	Password string
+	EthKeyPath string
 }
 
 func (cmd *CMDSignUp) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx != nil {
 		return nil, "", fmt.Errorf("an active user context already running: CMDSignup.Execute")
 	}
-	uc, err := NewUserContextFromSignUp(cmd.Username, cmd.Password, cmd.Username, network, ipfs)
+	uc, err := NewUserContextFromSignUp(cmd.Username, cmd.Password, cmd.EthKeyPath, cmd.Username, network, ipfs)
 	if err != nil {
 		return nil, "", fmt.Errorf("could not sign up: CMDSignUp.Execute: %s", err)
 	}
@@ -109,13 +110,14 @@ func (cmd *CMDSignUp) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.
 type CMDSignIn struct {
 	Username string
 	Password string
+	EthKeyPath string
 }
 
 func (cmd *CMDSignIn) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
 	if ctx != nil {
 		return nil, "", fmt.Errorf("an active user context already running: CMDSignIn.Execute")
 	}
-	uc, err := NewUserContextFromSignIn(cmd.Username, cmd.Password, cmd.Username, network, ipfs)
+	uc, err := NewUserContextFromSignIn(cmd.Username, cmd.Password, cmd.EthKeyPath, cmd.Username, network, ipfs)
 	if err != nil {
 		return nil, "", fmt.Errorf("could not sign in: CMDSignIn.Execute: %s", err)
 	}

@@ -15,7 +15,7 @@ contract Dipfshare {
         bytes from;        // encrypted with pk_to
         bytes to;        // encrypted with pk_from
         bytes signingKey;  // encrypted with pk_to
-        bytes32 check;     // (32 0's | rand), encrypted with common_key = Gen(pk_from, sk_to) = Gen(pk_to, sk_from)
+        bytes32 digest;     // (32 0's | rand), encrypted with common_key = Gen(pk_from, sk_to) = Gen(pk_to, sk_from)
         address verifyAddress;
         bool confirmed;
     }
@@ -26,6 +26,9 @@ contract Dipfshare {
 
     event UserRegistered(address addr);
     event MessageSent(bytes message);
+    event NewFriendRequest(bytes32 id, bytes from, bytes to, bytes signingKey, bytes32 digest);
+    event FriendshipConfirmed(bytes32 id);
+    event Debug(address addr);
 
     constructor () public {
         owner = msg.sender;
@@ -67,17 +70,24 @@ contract Dipfshare {
         bytes from, 
         bytes to, 
         bytes signingKey,
-        bytes32 check,
+        bytes32 digest,
         address verifyAddress
     )
     public {
-        friendships[id] = Friendship(from, to, signingKey, check, verifyAddress, false);
+        friendships[id] = Friendship(from, to, signingKey, digest, verifyAddress, false);
+
+        emit NewFriendRequest(id, from, to, signingKey, digest);
     }
 
     function confirmFriendship(bytes32 id, bytes signature) public {
-        address addr = ECRecovery.recover(friendships[id].check, signature);
+        address addr = ECRecovery.recover(friendships[id].digest, signature);
+        emit Debug(addr);
+        
+        require(!friendships[id].confirmed);
         require(addr == friendships[id].verifyAddress);
 
         friendships[id].confirmed = true;
+
+        emit FriendshipConfirmed(id);
     }
 }

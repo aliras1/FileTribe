@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"path"
-	"strings"
+	// "strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	// c "github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
+	// "github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/event"
 
 	"ipfs-share/crypto"
@@ -34,7 +34,7 @@ type Message struct {
 type Contact struct {
 	Address     common.Address
 	Name        string
-	Boxer       crypto.PublicBoxingKey
+	Boxer       crypto.AnonymPublicKey
 	VerifyKey   crypto.VerifyKey
 	IPFSAddress string
 }
@@ -43,8 +43,17 @@ type Network struct {
 	Session *eth.EthSession
 	Auth    *bind.TransactOpts
 
-	MessageSentSubscription event.Subscription
+	MessageSentSub event.Subscription
 	MessageSentChannel      chan *eth.EthMessageSent
+
+	NewFriendRequestSub event.Subscription
+	NewFriendRequestChannel      chan *eth.EthNewFriendRequest
+
+	FriendshipConfirmedSub event.Subscription
+	FriendshipConfirmedChannel      chan *eth.EthFriendshipConfirmed
+
+	DebugSub event.Subscription
+	DebugChannel chan *eth.EthDebug
 
 	Simulator *backends.SimulatedBackend
 }
@@ -78,7 +87,10 @@ func newTestNet(ethclient *eth.Eth, auth *bind.TransactOpts, backend *backends.S
 			GasLimit: 3141592,
 		},
 	}
-	channel := make(chan *eth.EthMessageSent)
+	channelMessageSent := make(chan *eth.EthMessageSent)
+	channelNewFriendRequest := make(chan *eth.EthNewFriendRequest)
+	channelFriendshipConfirmed := make(chan *eth.EthFriendshipConfirmed)
+	channelDebug := make(chan *eth.EthDebug)
 
 	start := uint64(0)
 	watchOpts := &bind.WatchOpts{
@@ -86,7 +98,19 @@ func newTestNet(ethclient *eth.Eth, auth *bind.TransactOpts, backend *backends.S
 		Context: auth.Context,
 	}
 
-	sub, err := session.Contract.WatchMessageSent(watchOpts, channel)
+	subMessageSent, err := session.Contract.WatchMessageSent(watchOpts, channelMessageSent)
+	if err != nil {
+		return nil, err
+	}
+	subNewFriendRequest, err := session.Contract.WatchNewFriendRequest(watchOpts, channelNewFriendRequest)
+	if err != nil {
+		return nil, err
+	}
+	subFriendshipConfirmed, err := session.Contract.WatchFriendshipConfirmed(watchOpts, channelFriendshipConfirmed)
+	if err != nil {
+		return nil, err
+	}
+	subDebug, err := session.Contract.WatchDebug(watchOpts, channelDebug)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +118,19 @@ func newTestNet(ethclient *eth.Eth, auth *bind.TransactOpts, backend *backends.S
 	network := &Network{
 		Session: session,
 		Auth:    auth,
-		MessageSentSubscription: sub,
-		MessageSentChannel:      channel,
+
+		MessageSentSub: subMessageSent,
+		MessageSentChannel:      channelMessageSent,
+		
+		NewFriendRequestSub: subNewFriendRequest,
+		NewFriendRequestChannel: channelNewFriendRequest,
+
+		FriendshipConfirmedSub: subFriendshipConfirmed,
+		FriendshipConfirmedChannel: channelFriendshipConfirmed,
+
+		DebugSub: subDebug,
+		DebugChannel: channelDebug,
+		
 		Simulator:               backend,
 	}
 	return network, nil
@@ -130,53 +165,54 @@ func NewTestNetwork(keyAlice, keyBob *ecdsa.PrivateKey) (*Network, *Network, err
 
 func NewNetwork() (*Network, error) {
 
-	conn, err := ethclient.Dial("ws://127.0.0.1:8001")
-	if err != nil {
-		return nil, fmt.Errorf("could not connect to ethereum node: NewNetwork(): %s", err)
-	}
+	// conn, err := ethclient.Dial("ws://127.0.0.1:8001")
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not connect to ethereum node: NewNetwork(): %s", err)
+	// }
 
-	dipfshare, err := eth.NewEth(common.HexToAddress(contractAddress), conn)
-	if err != nil {
-		return nil, fmt.Errorf("could not instantiate contract: NewNetwork: %s", err)
-	}
+	// dipfshare, err := eth.NewEth(common.HexToAddress(contractAddress), conn)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not instantiate contract: NewNetwork: %s", err)
+	// }
 
-	auth, err := bind.NewTransactor(strings.NewReader(key), "pwd")
-	if err != nil {
-		return nil, fmt.Errorf("could not load account key data: NewNetwork: %s", err)
-	}
+	// auth, err := bind.NewTransactor(strings.NewReader(key), "pwd")
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not load account key data: NewNetwork: %s", err)
+	// }
 
-	session := &eth.EthSession{
-		Contract: dipfshare,
-		CallOpts: bind.CallOpts{
-			Pending: true,
-		},
-		TransactOpts: bind.TransactOpts{
-			From:     auth.From,
-			Signer:   auth.Signer,
-			GasLimit: 3141592, // should be fine tuned...
-		},
-	}
+	// session := &eth.EthSession{
+	// 	Contract: dipfshare,
+	// 	CallOpts: bind.CallOpts{
+	// 		Pending: true,
+	// 	},
+	// 	TransactOpts: bind.TransactOpts{
+	// 		From:     auth.From,
+	// 		Signer:   auth.Signer,
+	// 		GasLimit: 3141592, // should be fine tuned...
+	// 	},
+	// }
 
-	channel := make(chan *eth.EthMessageSent)
+	// channel := make(chan *eth.EthMessageSent)
 
-	start := uint64(0)
-	watchOpts := &bind.WatchOpts{
-		Start:   &start,
-		Context: auth.Context,
-	}
-	messageSentSubscription, err := session.Contract.WatchMessageSent(watchOpts, channel)
-	if err != nil {
-		return nil, fmt.Errorf("could not subscript to 'MessageSent' event: NewNetwork: %s", err)
-	}
+	// start := uint64(0)
+	// watchOpts := &bind.WatchOpts{
+	// 	Start:   &start,
+	// 	Context: auth.Context,
+	// }
+	// messageSentSubscription, err := session.Contract.WatchMessageSent(watchOpts, channel)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not subscript to 'MessageSent' event: NewNetwork: %s", err)
+	// }
 
-	network := Network{
-		Session: session,
-		Auth:    auth,
-		MessageSentSubscription: messageSentSubscription,
-		MessageSentChannel:      channel,
-	}
+	// network := Network{
+	// 	Session: session,
+	// 	Auth:    auth,
+	// 	MessageSentSubscription: messageSentSubscription,
+	// 	MessageSentChannel:      channel,
+	// }
 
-	return &network, nil
+	// return &network, nil
+	return nil, nil
 }
 
 func goToEthByteArray(array []byte) [][1]byte {
@@ -219,10 +255,15 @@ func (network *Network) GetUser(address common.Address) (*Contact, error) {
 	return &Contact{
 		Address:     address,
 		Name:        username,
-		Boxer:       crypto.PublicBoxingKey(boxingKey),
+		Boxer:       crypto.AnonymPublicKey{&boxingKey},
 		VerifyKey:   crypto.VerifyKey(verifyKey),
 		IPFSAddress: ipfsAddress,
 	}, nil
+}
+
+func (network *Network) AddFriend(id [32]byte, from, to, signingKey []byte, digest [32]byte, verifyAddress common.Address) error {
+	_, err := network.Session.AddFriend(id, from, to, signingKey, digest, verifyAddress)
+	return err
 }
 
 func (network *Network) SendMessage(boxer *crypto.AnonymPublicKey, signer *crypto.Signer, from common.Address, msgType, payload string) error {

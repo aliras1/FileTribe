@@ -1,42 +1,75 @@
 package client
 
 import (
+
+	"bytes"
 	"crypto/rand"
+	// "io/ioutil"
 	// "encoding/base64"
 	// "encoding/json"
 	"fmt"
 	"path"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/golang/glog"
+	"golang.org/x/crypto/sha3"
+
 	fs "ipfs-share/client/filestorage"
-	// "ipfs-share/crypto"
+	"ipfs-share/crypto"
 	"ipfs-share/eth"
 	"ipfs-share/ipfs"
 	nw "ipfs-share/networketh"
-
-	"github.com/golang/glog"
 )
 
+type Friend struct {
+	FriendshipID [32]byte
+	Contact      *nw.Contact
+	Directory    string
+}
+
+type WaitingFriendRequest struct {
+	Friend *Friend
+	Digest [32]byte
+	Signer crypto.Signer
+}
+
+func (wfr *WaitingFriendRequest) Confirm(ctx *UserContext) error {
+	sig, err := wfr.Signer.Sign(wfr.Digest[:])
+	if err != nil {
+		return fmt.Errorf("could not sign digest: WaitingFriendRequest:Confirm: %s", err)
+	}
+
+	if _, err := ctx.Network.Session.ConfirmFriendship(wfr.Friend.FriendshipID, sig); err != nil {
+		return fmt.Errorf("could not confirm friendship: WaitingFriendRequest:Confirm: %s", err)
+	}
+	return nil
+}
+
 type UserContext struct {
-	User     *User // TODO lock boxer
-	Groups   []*GroupContext
-	Repo     []*fs.FilePTP
-	IPNSAddr string
-	Network  *nw.Network
-	IPFS     *ipfs.IPFS
-	Storage  *fs.Storage // TODO lock
+	User           *User // TODO lock boxer
+	Groups         []*GroupContext
+	Friends        []*Friend
+	PendingFriends []*Friend
+	WaitingFriends []*WaitingFriendRequest
+	Repo           []*fs.FilePTP
+	IPNSAddr       string
+	Network        *nw.Network
+	IPFS           *ipfs.IPFS
+	Storage        *fs.Storage // TODO lock
 
 	channelStop chan int
 }
 
-func NewUserContextFromSignUp(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
 	fmt.Printf("[*] User '%s' signing up...\n", username)
 
 	ipfsID, err := ipfs.ID()
 	if err != nil {
 		return nil, fmt.Errorf("could not get ipfs id: NewUserContextFromSignUp: %s", err)
 	}
-	user, err := SignUp(username, password, "", ipfsID.ID, network)
+	user, err := SignUp(username, password, ethKeyPath, ipfsID.ID, network)
 	if err != nil {
 		return nil, fmt.Errorf("could not sign up: NewUserContextFromSignUp: %s", err)
 	}
@@ -50,10 +83,10 @@ func NewUserContextFromSignUp(username, password, dataPath string, network *nw.N
 	return uc, nil
 }
 
-func NewUserContextFromSignIn(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
 	fmt.Printf("[*] User '%s' signing in...\n", username)
 
-	user, err := SignIn(username, password, "", network)
+	user, err := SignIn(username, password, ethKeyPath, network)
 	if err != nil {
 		return nil, fmt.Errorf("could not sign in: NewUserContextFromSignIn: %s", err)
 	}
@@ -80,6 +113,10 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 	if err != nil {
 		return nil, fmt.Errorf("could not build file repo: NewUserContext: %s", err)
 	}
+	uc.Friends = []*Friend{}
+	uc.PendingFriends = []*Friend{}
+	uc.WaitingFriends = []*WaitingFriendRequest{}
+
 	ipfsID, err := ipfs.ID()
 	if err != nil {
 		return nil, fmt.Errorf("could not get ipfs id: NewUserContect: %s", err)
@@ -88,6 +125,9 @@ func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs
 
 	uc.channelStop = make(chan int)
 	go MessageProcessor(&uc)
+	go NewFriendRequestHandler(&uc)
+	go FriendshipConfirmedHandler(&uc)
+	go DebugHandler(&uc)
 
 	if err := uc.BuildGroups(); err != nil {
 		return nil, fmt.Errorf("could not build groups: NewUserContext: %s", err)
@@ -104,6 +144,169 @@ func (uc *UserContext) SignOut() {
 		groupCtx.Stop()
 	}
 	uc.channelStop <- 1
+}
+
+func (uc *UserContext) AddFriend(address common.Address) error {
+	var r [32]byte
+	_, err := rand.Read(r[:])
+	if err != nil {
+		return fmt.Errorf("could not read random: UserContext.AddFriend: %s", err)
+	}
+	addresses := append(r[:], uc.User.Address.Bytes()...)
+	addresses = append(addresses, address.Bytes()...)
+
+	id := sha3.Sum256(addresses)
+
+	toUser, err := uc.Network.GetUser(address)
+	if err != nil {
+		return fmt.Errorf("could not retrieve user: UserContext.AddFriend: %s", err)
+	}
+
+	fromDigest := sha3.Sum256(uc.User.Address.Bytes())
+	fromSig, err := uc.User.Signer.Sign(fromDigest[:])
+	if err != nil {
+		return fmt.Errorf("could not sign from: UserContext.AddFriend: %s", err)
+	}
+	fromEnc, err := toUser.Boxer.Seal(append(fromSig[:64], uc.User.Address.Bytes()...))
+	if err != nil {
+		return fmt.Errorf("could not encrpyt from: UserContext.AddFriend: %s", err)
+	}
+
+	toDigest := sha3.Sum256(address.Bytes())
+	toSig, err := uc.User.Signer.Sign(toDigest[:])
+	if err != nil {
+		return fmt.Errorf("could not sign to: UserContext.AddFriend: %s", err)
+	}
+	toEnc, err := uc.User.Boxer.Seal(append(toSig[:64], address.Bytes()...))
+	if err != nil {
+		return fmt.Errorf("could not encrpyt to: UserContext.AddFriend: %s", err)
+	}
+
+	_, err = rand.Read(r[:])
+	if err != nil {
+		return fmt.Errorf("could not read random digest: UserContext.AddFriend: %s", err)
+	}
+
+	key, err := ethcrypto.GenerateKey()
+	if err != nil {
+		return fmt.Errorf("could not generate key: UserContext:AddFriend: %s", err)
+	}
+
+	rawKey := ethcrypto.FromECDSA(key)
+	keyEnc, err := toUser.Boxer.Seal(rawKey)
+	if err != nil {
+		return fmt.Errorf("could not enc key: UserContext.AddFriend: %s", err)
+	}
+
+	verifyAddress := ethcrypto.PubkeyToAddress(key.PublicKey)
+
+	if err := uc.Network.AddFriend(id, fromEnc, toEnc, keyEnc, r, verifyAddress); err != nil {
+		return fmt.Errorf("could not send transaction: UserContext.AddFriend: %s", err)
+	}
+	return nil
+}
+
+func DebugHandler(ctx *UserContext) {
+	for debug := range ctx.Network.DebugChannel {
+		glog.Info("incoming address: ", debug.Addr.Bytes())
+	}
+}
+
+func NewFriendRequestHandler(ctx *UserContext) {
+	glog.Infof("User '%s' is processing new friend requests...\n", ctx.User.Name)
+	fmt.Printf("new friend requests proc of '%s'\n", ctx.User.Name)
+
+	for newFriendRequest := range ctx.Network.NewFriendRequestChannel {
+		// sender wants to be friends with me
+		from, err := ctx.User.Boxer.Open(newFriendRequest.From)
+		if err == nil {
+			fromSig := from[:64]
+			fromBytes := from[64:]
+			fromDigest := sha3.Sum256(fromBytes)
+			address := common.BytesToAddress(fromBytes)
+			contact, err := ctx.Network.GetUser(address)
+			if err != nil {
+				glog.Warningf("could not get user from: NewFriendRequestHandler: %s", err)
+				continue
+			}
+			if ok := contact.VerifyKey.Verify(fromDigest[:], fromSig); !ok {
+				glog.Warning("could not verify friend request from: NewFriendRequestHandler")
+				continue
+			}
+			signerBytes, err := ctx.User.Boxer.Open(newFriendRequest.SigningKey)
+			if err != nil {
+				glog.Warningf("could not decrypt signer: %s", err)
+				continue
+			}
+			signer, err := ethcrypto.ToECDSA(signerBytes)
+			if err != nil {
+				glog.Warningf("could not load signer: %s", err)
+			}
+
+			friend := &Friend{
+				FriendshipID: newFriendRequest.Id,
+				Contact:      contact,
+				Directory:    "",
+			}
+			waitingRequest := &WaitingFriendRequest{
+				Friend: friend,
+				Digest: newFriendRequest.Digest,
+				Signer: crypto.Signer{
+					PrivateKey: signer,
+				},
+			}
+
+			ctx.WaitingFriends = append(ctx.WaitingFriends, waitingRequest)
+
+			continue
+		}
+
+		to, err := ctx.User.Boxer.Open(newFriendRequest.To)
+		if err == nil {
+			toSig := to[:64]
+			toBytes := to[64:]
+			toDigest := sha3.Sum256(toBytes)
+			address := common.BytesToAddress(toBytes)
+			contact, err := ctx.Network.GetUser(address)
+			if err != nil {
+				glog.Warning("could not get user to: NewFriendRequestHandler")
+				continue
+			}
+
+			vk := crypto.VerifyKey(ethcrypto.CompressPubkey(&ctx.User.Signer.PrivateKey.PublicKey))
+			if ok := vk.Verify(toDigest[:], toSig); !ok {
+				glog.Warning("could not verify friend request to: NewFriendRequestHandler")
+			}
+
+			friend := &Friend{
+				FriendshipID: newFriendRequest.Id,
+				Contact:      contact,
+				Directory:    "",
+			}
+			ctx.PendingFriends = append(ctx.PendingFriends, friend)
+			continue
+		}
+	}
+}
+
+func FriendshipConfirmedHandler(ctx *UserContext) {
+	glog.Infof("User '%s' is processing friendship confirmations...\n", ctx.User.Name)
+
+	for confirmation := range ctx.Network.FriendshipConfirmedChannel {
+		for _, pending := range ctx.PendingFriends {
+			if bytes.Equal(confirmation.Id[:], pending.FriendshipID[:]) {
+				ctx.Friends = append(ctx.Friends, pending)
+				break
+			}
+		}
+
+		for _, waiting := range ctx.WaitingFriends {
+			if bytes.Equal(confirmation.Id[:], waiting.Friend.FriendshipID[:]) {
+				ctx.Friends = append(ctx.Friends, waiting.Friend)
+				break
+			}
+		}
+	}
 }
 
 func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Message, error) {
@@ -133,7 +336,7 @@ func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Me
 	// 	)
 	// }
 	// verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
-	
+
 	// return nil, fmt.Errorf("FIX IT")
 
 	// ok := verifyKey.Verify(messageSigned, messageSigned)
