@@ -43,16 +43,16 @@ type Network struct {
 	Session *eth.EthSession
 	Auth    *bind.TransactOpts
 
-	MessageSentSub event.Subscription
-	MessageSentChannel      chan *eth.EthMessageSent
+	MessageSentSub     event.Subscription
+	MessageSentChannel chan *eth.EthMessageSent
 
-	NewFriendRequestSub event.Subscription
-	NewFriendRequestChannel      chan *eth.EthNewFriendRequest
+	NewFriendRequestSub     event.Subscription
+	NewFriendRequestChannel chan *eth.EthNewFriendRequest
 
-	FriendshipConfirmedSub event.Subscription
-	FriendshipConfirmedChannel      chan *eth.EthFriendshipConfirmed
+	FriendshipConfirmedSub     event.Subscription
+	FriendshipConfirmedChannel chan *eth.EthFriendshipConfirmed
 
-	DebugSub event.Subscription
+	DebugSub     event.Subscription
 	DebugChannel chan *eth.EthDebug
 
 	Simulator *backends.SimulatedBackend
@@ -84,7 +84,7 @@ func newTestNet(ethclient *eth.Eth, auth *bind.TransactOpts, backend *backends.S
 		TransactOpts: bind.TransactOpts{
 			From:     auth.From,
 			Signer:   auth.Signer,
-			GasLimit: 3141592,
+			GasLimit: 2141592, // orig 3141592
 		},
 	}
 	channelMessageSent := make(chan *eth.EthMessageSent)
@@ -119,19 +119,19 @@ func newTestNet(ethclient *eth.Eth, auth *bind.TransactOpts, backend *backends.S
 		Session: session,
 		Auth:    auth,
 
-		MessageSentSub: subMessageSent,
-		MessageSentChannel:      channelMessageSent,
-		
-		NewFriendRequestSub: subNewFriendRequest,
+		MessageSentSub:     subMessageSent,
+		MessageSentChannel: channelMessageSent,
+
+		NewFriendRequestSub:     subNewFriendRequest,
 		NewFriendRequestChannel: channelNewFriendRequest,
 
-		FriendshipConfirmedSub: subFriendshipConfirmed,
+		FriendshipConfirmedSub:     subFriendshipConfirmed,
 		FriendshipConfirmedChannel: channelFriendshipConfirmed,
 
-		DebugSub: subDebug,
+		DebugSub:     subDebug,
 		DebugChannel: channelDebug,
-		
-		Simulator:               backend,
+
+		Simulator: backend,
 	}
 	return network, nil
 }
@@ -259,11 +259,6 @@ func (network *Network) GetUser(address common.Address) (*Contact, error) {
 		VerifyKey:   crypto.VerifyKey(verifyKey),
 		IPFSAddress: ipfsAddress,
 	}, nil
-}
-
-func (network *Network) AddFriend(id [32]byte, from, to, signingKey []byte, digest [32]byte, verifyAddress common.Address) error {
-	_, err := network.Session.AddFriend(id, from, to, signingKey, digest, verifyAddress)
-	return err
 }
 
 func (network *Network) SendMessage(boxer *crypto.AnonymPublicKey, signer *crypto.Signer, from common.Address, msgType, payload string) error {

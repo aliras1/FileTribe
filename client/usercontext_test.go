@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/golang/glog"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 
@@ -140,6 +143,8 @@ func TestBigScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	glog.Info("----- fun begins -----")
+
 	if err := alice.AddFriend(bob.User.Address); err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +165,13 @@ func TestBigScenario(t *testing.T) {
 	}
 	if len(bob.Friends) < 1 {
 		t.Fatal("bob has no friend")
+	}
+
+	if strings.Compare(alice.Friends[0].MyDirectory, bob.Friends[0].HisDirectory) != 0 {
+		t.Fatal("alices dir mismatch")
+	}
+	if strings.Compare(alice.Friends[0].HisDirectory, bob.Friends[0].MyDirectory) != 0 {
+		t.Fatal("bobs dir mismatch")
 	}
 }
 

@@ -28,18 +28,6 @@ func getNonce(pk1, pk2 *[32]byte) *[24]byte {
 	return &nonce
 }
 
-func random() ([]byte, error) {
-	var r [32]byte
-	n, err := rand.Read(r[:])
-	if err != nil {
-		return nil, err
-	}
-	if n != 32 {
-		return nil, fmt.Errorf("could not read enough bytes from random: random()")
-	}
-	return r[:], nil
-}
-
 func (pk AnonymPublicKey) Seal(m []byte) ([]byte, error) {
 	ephemeral_pk, ephemeral_sk, err := box.GenerateKey(rand.Reader)
 	if err != nil {
@@ -47,11 +35,12 @@ func (pk AnonymPublicKey) Seal(m []byte) ([]byte, error) {
 	}
 
 	nonce := getNonce(ephemeral_pk, pk.Value)
-	r, err := random()
+	var r [32]byte
+	_, err = rand.Read(r[:])
 	if err != nil {
 		return nil, err
 	}
-	m = append(r, m...)
+	m = append(r[:], m...)
 
 	ct := append(ephemeral_pk[:], box.Seal(nil, m, nonce, pk.Value, ephemeral_sk)...)
 	return ct, nil
@@ -74,4 +63,21 @@ func (boxer AnonymBoxer) Open(ct []byte) ([]byte, error) {
 		return nil, fmt.Errorf("could not decrypt")
 	}
 	return m[32:], nil
+}
+
+
+func AuthSeal(message []byte, otherPK *AnonymPublicKey, mySK *AnonymSecretKey) ([]byte, error) {
+	var nonce [24]byte
+	_, err := rand.Read(nonce[:])
+	if err != nil {
+		return nil, err
+	}
+	ct := box.Seal(nonce[:], message, &nonce, otherPK.Value, mySK.Value)
+	return ct, nil
+}
+
+func AuthOpen(bytesBox []byte, otherPK *AnonymPublicKey, mySK *AnonymSecretKey) ([]byte, bool) {
+	var nonce [24]byte
+	copy(nonce[:], bytesBox[:24])
+	return box.Open(nil, bytesBox[24:], &nonce, otherPK.Value, mySK.Value)
 }

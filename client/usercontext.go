@@ -1,11 +1,10 @@
 package client
 
 import (
-
 	"bytes"
 	"crypto/rand"
 	// "io/ioutil"
-	// "encoding/base64"
+	"encoding/base64"
 	// "encoding/json"
 	"fmt"
 	"path"
@@ -26,7 +25,8 @@ import (
 type Friend struct {
 	FriendshipID [32]byte
 	Contact      *nw.Contact
-	Directory    string
+	MyDirectory  string
+	HisDirectory string
 }
 
 type WaitingFriendRequest struct {
@@ -41,7 +41,22 @@ func (wfr *WaitingFriendRequest) Confirm(ctx *UserContext) error {
 		return fmt.Errorf("could not sign digest: WaitingFriendRequest:Confirm: %s", err)
 	}
 
-	if _, err := ctx.Network.Session.ConfirmFriendship(wfr.Friend.FriendshipID, sig); err != nil {
+	var dir [32]byte
+	_, err = rand.Read(dir[:])
+	if err != nil {
+		return fmt.Errorf("could not read random dir: UserContext.AddFriend: %s", err)
+	}
+
+	dirEnc, err := crypto.AuthSeal(
+		[]byte(base64.StdEncoding.EncodeToString(dir[:])),
+		&wfr.Friend.Contact.Boxer,
+		&ctx.User.Boxer.SecretKey,
+	)
+	if err != nil {
+		return fmt.Errorf("could not encrypt directory name: UserContext.AddFriend: %s", err)
+	}
+
+	if _, err := ctx.Network.Session.ConfirmFriendship(wfr.Friend.FriendshipID, sig, dirEnc); err != nil {
 		return fmt.Errorf("could not confirm friendship: WaitingFriendRequest:Confirm: %s", err)
 	}
 	return nil
@@ -69,6 +84,7 @@ func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, n
 	if err != nil {
 		return nil, fmt.Errorf("could not get ipfs id: NewUserContextFromSignUp: %s", err)
 	}
+	glog.Info("IPFS ID of ", username, " : ", ipfsID.ID)
 	user, err := SignUp(username, password, ethKeyPath, ipfsID.ID, network)
 	if err != nil {
 		return nil, fmt.Errorf("could not sign up: NewUserContextFromSignUp: %s", err)
@@ -162,6 +178,7 @@ func (uc *UserContext) AddFriend(address common.Address) error {
 		return fmt.Errorf("could not retrieve user: UserContext.AddFriend: %s", err)
 	}
 
+	// sign then encrypt `from`
 	fromDigest := sha3.Sum256(uc.User.Address.Bytes())
 	fromSig, err := uc.User.Signer.Sign(fromDigest[:])
 	if err != nil {
@@ -172,6 +189,7 @@ func (uc *UserContext) AddFriend(address common.Address) error {
 		return fmt.Errorf("could not encrpyt from: UserContext.AddFriend: %s", err)
 	}
 
+	// sign then encrypt `to`
 	toDigest := sha3.Sum256(address.Bytes())
 	toSig, err := uc.User.Signer.Sign(toDigest[:])
 	if err != nil {
@@ -182,6 +200,7 @@ func (uc *UserContext) AddFriend(address common.Address) error {
 		return fmt.Errorf("could not encrpyt to: UserContext.AddFriend: %s", err)
 	}
 
+	// generate signer
 	_, err = rand.Read(r[:])
 	if err != nil {
 		return fmt.Errorf("could not read random digest: UserContext.AddFriend: %s", err)
@@ -198,15 +217,36 @@ func (uc *UserContext) AddFriend(address common.Address) error {
 		return fmt.Errorf("could not enc key: UserContext.AddFriend: %s", err)
 	}
 
+	// share /ipns/id/for/to directory
+	_, err = rand.Read(r[:])
+	if err != nil {
+		return fmt.Errorf("could not read random dir: UserContext.AddFriend: %s", err)
+	}
+	dirEnc, err := crypto.AuthSeal(
+		[]byte(base64.StdEncoding.EncodeToString(r[:])),
+		&toUser.Boxer,
+		&uc.User.Boxer.SecretKey,
+	)
+	if err != nil {
+		return fmt.Errorf("could not encrypt directory name: UserContext.AddFriend: %s", err)
+	}
+
+	_, ok := crypto.AuthOpen(dirEnc, &toUser.Boxer, &uc.User.Boxer.SecretKey)
+	if !ok {
+		return fmt.Errorf("bad orig enc")
+	}
+	glog.Info("direnc: ", len(dirEnc), " -> ", dirEnc)
+
 	verifyAddress := ethcrypto.PubkeyToAddress(key.PublicKey)
 
-	if err := uc.Network.AddFriend(id, fromEnc, toEnc, keyEnc, r, verifyAddress); err != nil {
+	if _, err := uc.Network.Session.AddFriend(id, fromEnc, toEnc, keyEnc, dirEnc, r, verifyAddress); err != nil {
 		return fmt.Errorf("could not send transaction: UserContext.AddFriend: %s", err)
 	}
 	return nil
 }
 
 func DebugHandler(ctx *UserContext) {
+	glog.Info("debug handleing...")
 	for debug := range ctx.Network.DebugChannel {
 		glog.Info("incoming address: ", debug.Addr.Bytes())
 	}
@@ -246,7 +286,6 @@ func NewFriendRequestHandler(ctx *UserContext) {
 			friend := &Friend{
 				FriendshipID: newFriendRequest.Id,
 				Contact:      contact,
-				Directory:    "",
 			}
 			waitingRequest := &WaitingFriendRequest{
 				Friend: friend,
@@ -281,7 +320,6 @@ func NewFriendRequestHandler(ctx *UserContext) {
 			friend := &Friend{
 				FriendshipID: newFriendRequest.Id,
 				Contact:      contact,
-				Directory:    "",
 			}
 			ctx.PendingFriends = append(ctx.PendingFriends, friend)
 			continue
@@ -295,6 +333,17 @@ func FriendshipConfirmedHandler(ctx *UserContext) {
 	for confirmation := range ctx.Network.FriendshipConfirmedChannel {
 		for _, pending := range ctx.PendingFriends {
 			if bytes.Equal(confirmation.Id[:], pending.FriendshipID[:]) {
+				myDir, ok := crypto.AuthOpen(confirmation.DirOfFromByTo, &pending.Contact.Boxer, &ctx.User.Boxer.SecretKey)
+				if !ok {
+					glog.Error("could not decrypt p my dir")
+				}
+				hisDir, ok := crypto.AuthOpen(confirmation.DirOfToByFrom, &pending.Contact.Boxer, &ctx.User.Boxer.SecretKey)
+				if !ok {
+					glog.Error("could not decrypt p his dir")
+				}
+				pending.MyDirectory = string(myDir)
+				pending.HisDirectory = string(hisDir)
+
 				ctx.Friends = append(ctx.Friends, pending)
 				break
 			}
@@ -302,6 +351,25 @@ func FriendshipConfirmedHandler(ctx *UserContext) {
 
 		for _, waiting := range ctx.WaitingFriends {
 			if bytes.Equal(confirmation.Id[:], waiting.Friend.FriendshipID[:]) {
+				myDir, ok := crypto.AuthOpen(
+					confirmation.DirOfToByFrom,
+					&waiting.Friend.Contact.Boxer,
+					&ctx.User.Boxer.SecretKey,
+				)
+				if !ok {
+					glog.Error("could not decrypt w my dir")
+				}
+				hisDir, ok := crypto.AuthOpen(
+					confirmation.DirOfFromByTo,
+					&waiting.Friend.Contact.Boxer,
+					&ctx.User.Boxer.SecretKey,
+				)
+				if !ok {
+					glog.Error("could not decrypt w his dir")
+				}
+				waiting.Friend.MyDirectory = string(myDir)
+				waiting.Friend.HisDirectory = string(hisDir)
+
 				ctx.Friends = append(ctx.Friends, waiting.Friend)
 				break
 			}

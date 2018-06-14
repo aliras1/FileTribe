@@ -15,6 +15,8 @@ contract Dipfshare {
         bytes from;        // encrypted with pk_to
         bytes to;        // encrypted with pk_from
         bytes signingKey;  // encrypted with pk_to
+        bytes dirOfToByFrom; // encrypted with common key
+        bytes dirOfFromByTo; // encrypted with common key
         bytes32 digest;     // (32 0's | rand), encrypted with common_key = Gen(pk_from, sk_to) = Gen(pk_to, sk_from)
         address verifyAddress;
         bool confirmed;
@@ -27,7 +29,7 @@ contract Dipfshare {
     event UserRegistered(address addr);
     event MessageSent(bytes message);
     event NewFriendRequest(bytes32 id, bytes from, bytes to, bytes signingKey, bytes32 digest);
-    event FriendshipConfirmed(bytes32 id);
+    event FriendshipConfirmed(bytes32 id, bytes dirOfToByFrom, bytes dirOfFromByTo);
     event Debug(address addr);
 
     constructor () public {
@@ -70,16 +72,19 @@ contract Dipfshare {
         bytes from, 
         bytes to, 
         bytes signingKey,
+        bytes dirOfToByFrom,
         bytes32 digest,
         address verifyAddress
     )
     public {
-        friendships[id] = Friendship(from, to, signingKey, digest, verifyAddress, false);
+        emit Debug(msg.sender);
+
+        friendships[id] = Friendship(from, to, signingKey, dirOfToByFrom, new bytes(0), digest, verifyAddress, false);
 
         emit NewFriendRequest(id, from, to, signingKey, digest);
     }
 
-    function confirmFriendship(bytes32 id, bytes signature) public {
+    function confirmFriendship(bytes32 id, bytes signature, bytes dirOfFromByTo) public {
         address addr = ECRecovery.recover(friendships[id].digest, signature);
         emit Debug(addr);
         
@@ -87,7 +92,8 @@ contract Dipfshare {
         require(addr == friendships[id].verifyAddress);
 
         friendships[id].confirmed = true;
+        friendships[id].dirOfFromByTo = dirOfFromByTo;
 
-        emit FriendshipConfirmed(id);
+        emit FriendshipConfirmed(id, friendships[id].dirOfToByFrom, dirOfFromByTo);
     }
 }
