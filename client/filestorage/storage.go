@@ -1,8 +1,10 @@
 package filestorage
 
 import (
-	"github.com/ethereum/go-ethereum/common"
 	"crypto/rand"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
 	// "encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,12 +12,12 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"strings"
+	// "strings"
 
 	"github.com/golang/glog"
+	ipfsapi "github.com/ipfs/go-ipfs-api"
 
 	"ipfs-share/crypto"
-	"ipfs-share/ipfs"
 	nw "ipfs-share/networketh"
 )
 
@@ -84,7 +86,7 @@ func (storage *Storage) GetUserFilesPath() string {
 // last time or not. The other half of files comes from data/userdata/shared.
 // These files are JSON representation of a FilePTP that were shared by the
 // user.
-func (storage *Storage) BuildRepo(username string, network *nw.Network, ipfs *ipfs.IPFS) ([]*FilePTP, error) {
+func (storage *Storage) BuildRepo(username string, network *nw.Network, ipfs *ipfsapi.Shell) ([]*FilePTP, error) {
 	glog.Info("Building repo...")
 	var repo []*FilePTP
 	// read capabilities from caps and try to refresh them
@@ -191,7 +193,7 @@ func (storage *Storage) CreateGroupStorage(groupName string) {
 	os.MkdirAll(storage.fileRootPath+"/"+groupName, 0770)
 }
 
-func (storage *Storage) DownloadGroupFile(fileGroup *FileGroup, groupname string, boxer *crypto.SymmetricKey, ipfs *ipfs.IPFS) error {
+func (storage *Storage) DownloadGroupFile(fileGroup *FileGroup, groupname string, boxer *crypto.SymmetricKey, ipfs *ipfsapi.Shell) error {
 	// TODO: choice: download to ipfsFiles and host it
 	tmpFilePath, err := storage.downloadToTmp(fileGroup.IPFSHash, ipfs)
 	if err != nil {
@@ -221,7 +223,7 @@ func (storage *Storage) GetGroupDataPath(groupname, data string) string {
 }
 
 // Downloads the given group meta data
-func (storage *Storage) DownloadGroupData(groupName, file, ipfsHash string, ipfs *ipfs.IPFS, network *nw.Network) error {
+func (storage *Storage) DownloadGroupData(groupName, file, ipfsHash string, ipfs *ipfsapi.Shell, network *nw.Network) error {
 	filePath := storage.publicForPath + "/" + groupName + "/" + file
 	return ipfs.Get(filePath, ipfsHash)
 }
@@ -251,7 +253,7 @@ func (storage *Storage) StoreGroupAccessCAP(group string, key crypto.SymmetricKe
 	return cap.Store(storage)
 }
 
-func (storage *Storage) DownloadGroupAccessCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, network *nw.Network, ipfs *ipfs.IPFS) (*GroupAccessCAP, error) {
+func (storage *Storage) DownloadGroupAccessCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, network *nw.Network, ipfs *ipfsapi.Shell) (*GroupAccessCAP, error) {
 	capBytes, err := downloadCAP(fromUserID, userID, capName, boxer, storage, network, ipfs)
 	if err != nil {
 		return nil, fmt.Errorf("could not download group cap: Storage.DownloadGroupAccessCAP: %s", err)
@@ -267,26 +269,35 @@ func (storage *Storage) DownloadGroupAccessCAP(fromUserID, userID common.Address
 // |       Helper functions       |
 // +------------------------------+
 
-func (storage *Storage) PublishPublicDir(ipfs *ipfs.IPFS) error {
+func (storage *Storage) PublishPublicDir(ipfs *ipfsapi.Shell) error {
 	glog.Info("Publishing...")
+	t := time.Now()
 	publicDir := storage.dataPath + "/public"
-	merkleNodes, err := ipfs.AddDir(publicDir)
+	hash, err := ipfs.AddDir(publicDir)
 	if err != nil {
 		return fmt.Errorf("could not ipfs add dir: Storage.PublishPublicDir: %s", err)
 	}
-	for _, mn := range merkleNodes {
-		if strings.Compare(mn.Name, "public") == 0 {
-			if err := ipfs.NamePublish(mn.Hash); err != nil {
-				return fmt.Errorf("could not ipfs name publish: Storage.PublishPublicDir: %s", err)
-			}
-			break
-		}
+	glog.Info("ipfs add: ", time.Since(t))
+
+	if err := ipfs.Publish("", hash); err != nil {
+		return fmt.Errorf("could not ipfs name publish: Storage.PublishPublicDir: %s", err)
 	}
+
+	glog.Info("ipfs add n pub: ", time.Since(t))
 	glog.Info("Publishing ended")
 	return nil
 }
 
-func (storage *Storage) downloadToTmp(ipfsHash string, ipfs *ipfs.IPFS) (string, error) {
+func (storage *Storage)  MakeForDirectory(dirName string, ipfs *ipfsapi.Shell) error {
+	dirPath := storage.publicForPath + "/" + dirName
+	os.Mkdir(dirPath, 0770)
+	if err := storage.PublishPublicDir(ipfs); err != nil {
+		return fmt.Errorf("could not publish: Storage.MakeForDirectory: %s", err)
+	}
+	return nil
+}
+
+func (storage *Storage) downloadToTmp(ipfsHash string, ipfs *ipfsapi.Shell) (string, error) {
 	filePath := storage.tmpPath + "/" + path.Base(ipfsHash)
 	if err := ipfs.Get(filePath, ipfsHash); err != nil {
 		return "", fmt.Errorf("could not ipfs get into tmp path '%s': Storage.downloadToTmp: %s", filePath, err)

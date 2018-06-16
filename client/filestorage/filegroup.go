@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path"
+	"bytes"
+
+	ipfsapi "github.com/ipfs/go-ipfs-api"
 
 	"ipfs-share/crypto"
-	"ipfs-share/ipfs"
 )
 
 type FileGroup struct {
@@ -15,7 +17,7 @@ type FileGroup struct {
 	IPFSHash string
 }
 
-func NewSharedFileGroup(filePath, groupName string, dataKey crypto.SymmetricKey, storage *Storage, ipfs *ipfs.IPFS) (*FileGroup, error) {
+func NewSharedFileGroup(filePath, groupName string, dataKey crypto.SymmetricKey, storage *Storage, ipfs *ipfsapi.Shell) (*FileGroup, error) {
 	fileName := path.Base(filePath)
 
 	// First just encrypt and add to ipfs, then call file.Share()
@@ -31,11 +33,14 @@ func NewSharedFileGroup(filePath, groupName string, dataKey crypto.SymmetricKey,
 	if err := WriteFile(ipfsFilePath, encFileBytes); err != nil {
 		return nil, fmt.Errorf("could not copy file into ipfs file: NewSharedFileGroup: %s", err)
 	}
-	merkleNode, err := ipfs.AddFile(ipfsFilePath)
+
+	reader := bytes.NewReader(encFileBytes)
+	
+	hash, err := ipfs.Add(reader)
 	if err != nil {
 		return nil, fmt.Errorf("could not ipfs add file '%s': NewSharedFileGroup: %s", ipfsFilePath, err)
 	}
-	ipfsHash := "/ipfs/" + merkleNode.Hash
+	ipfsHash := "/ipfs/" + hash
 
 	file := &FileGroup{
 		Name: fileName,

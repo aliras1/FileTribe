@@ -4,12 +4,14 @@ import (
 	"strings"
 	"fmt"
 	"io/ioutil"
-	"ipfs-share/ipfs"
+
+	ipfsapi "github.com/ipfs/go-ipfs-api"
+
 	nw "ipfs-share/networketh"
 )
 
 type ICommand interface {
-	Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error)
+	Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error)
 }
 
 func NewCommand(raw string) (ICommand, error) {
@@ -96,7 +98,7 @@ type CMDSignUp struct {
 	EthKeyPath string
 }
 
-func (cmd *CMDSignUp) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDSignUp) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx != nil {
 		return nil, "", fmt.Errorf("an active user context already running: CMDSignup.Execute")
 	}
@@ -113,7 +115,7 @@ type CMDSignIn struct {
 	EthKeyPath string
 }
 
-func (cmd *CMDSignIn) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDSignIn) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx != nil {
 		return nil, "", fmt.Errorf("an active user context already running: CMDSignIn.Execute")
 	}
@@ -128,7 +130,7 @@ type CMDSignOut struct {
 
 }
 
-func (cmd *CMDSignOut) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDSignOut) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx == nil {
 		return nil, "", fmt.Errorf("no active user context running: CMDSignOut.Execute")
 	}
@@ -140,7 +142,7 @@ type CMDCreateGroup struct {
 	GroupName string
 }
 
-func (cmd *CMDCreateGroup) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDCreateGroup) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx == nil {
 		return nil, "", fmt.Errorf("no active user context CMDCreateGroup.Execute")
 	}
@@ -155,7 +157,7 @@ type CMDGroupInvite struct {
 	NewMember string
 }
 
-func (cmd *CMDGroupInvite) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDGroupInvite) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx == nil {
 		return nil, "", fmt.Errorf("no active user context CMDGroupInvite.Execute")
 	}
@@ -175,7 +177,7 @@ type CMDPTPAddAndShareFile struct {
 	ShareWith string
 }
 
-func (cmd *CMDPTPAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDPTPAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx == nil {
 		return nil, "", fmt.Errorf("no active user context CMDPTPAddAndShareFile.Execute")
 	}
@@ -190,7 +192,7 @@ type CMDGroupAddAndShareFile struct {
 	Path string
 }
 
-func (cmd *CMDGroupAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDGroupAddAndShareFile) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx == nil {
 		return nil, "", fmt.Errorf("no active user context CMDPTPAddAndShareFile.Execute")
 	}
@@ -209,7 +211,7 @@ type CMDList struct {
 
 }
 
-func (cmd *CMDList) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDList) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx == nil {
 		return nil, "", fmt.Errorf("no active user context CMDList.Execute")
 	}
@@ -220,7 +222,7 @@ type CMDCat struct {
 	Path string
 }
 
-func (cmd *CMDCat) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, string, error) {
+func (cmd *CMDCat) Execute(ctx *UserContext, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, string, error) {
 	if ctx == nil {
 		return nil, "", fmt.Errorf("no active user context CMDList.Execute")
 	}

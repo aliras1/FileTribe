@@ -12,9 +12,9 @@ import (
 	// "strings"
 
 	// "golang.org/x/crypto/ed25519"
+	ipfsapi "github.com/ipfs/go-ipfs-api"
 
 	"ipfs-share/crypto"
-	"ipfs-share/ipfs"
 	nw "ipfs-share/networketh"
 )
 
@@ -51,7 +51,7 @@ func NewFile(filePath string) (*FilePTP, error) {
 	return &file, nil
 }
 
-func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
+func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfsapi.Shell) (*FilePTP, error) {
 	filePath := storage.fileRootPath + "/" + base64.StdEncoding.EncodeToString(cap.Owner[:]) + "/" + cap.FileName
 	// we could directly ipfs.get with this /ipns/address but we need it's
 	// /ipfs/hash to be able to check if the file has changed
@@ -83,7 +83,7 @@ func NewFileFromCAP(cap *ReadCAP, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, 
 }
 
 // Downloads and verifies the file from IPFS
-func (f *FilePTP) download(storage *Storage, ipfs *ipfs.IPFS) error {
+func (f *FilePTP) download(storage *Storage, ipfs *ipfsapi.Shell) error {
 	// tmpFilePath := storage.tmpPath + "/" + path.Base(f.Name)
 	// err := ipfs.Get(tmpFilePath, f.IPFSHash)
 	// if err != nil {
@@ -122,7 +122,7 @@ func (f *FilePTP) save(storage *Storage) error {
 }
 
 // Create a new shared file object from a local file
-func NewSharedFilePTP(filePath string, owner common.Address, storage *Storage, ipfs *ipfs.IPFS) (*FilePTP, error) {
+func NewSharedFilePTP(filePath string, owner common.Address, storage *Storage, ipfs *ipfsapi.Shell) (*FilePTP, error) {
 	// newFilePath, err := storage.CopyFileIntoMyFiles(filePath)
 	// if err != nil {
 	// 	return nil, fmt.Errorf("could not copy file to user storage: NewSharedFilePTP: %s", err)
@@ -164,7 +164,7 @@ func NewSharedFilePTP(filePath string, owner common.Address, storage *Storage, i
 // Signs the files with the Write key and then the function adds
 // it to IPFS. The function returns with the with the IPFS hash
 // of the file
-func (f *FilePTP) signAndAddToIPFS(storage *Storage, ipfs *ipfs.IPFS) error {
+func (f *FilePTP) signAndAddToIPFS(storage *Storage, ipfs *ipfsapi.Shell) error {
 	// publicFilePath := storage.publicFilesPath + "/" + f.Name
 	// fileBytes, err := ioutil.ReadFile(f.Path)
 	// if err != nil {
@@ -189,7 +189,7 @@ func (f *FilePTP) signAndAddToIPFS(storage *Storage, ipfs *ipfs.IPFS) error {
 // capabilities are made and copied in the corresponding 'public/for/'
 // directories. The 'public' directory is re-published into IPNS. After
 // that, notification messages are sent out.
-func (f *FilePTP) Share(shareWith []common.Address, boxer *crypto.BoxingKeyPair, signer *crypto.Signer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) error {
+func (f *FilePTP) Share(shareWith []common.Address, boxer *crypto.BoxingKeyPair, signer *crypto.Signer, storage *Storage, network *nw.Network, ipfs *ipfsapi.Shell) error {
 	// var newUsers []common.Address
 	// for _, userID := range shareWith {
 	// 	// add to share list
@@ -233,7 +233,7 @@ func (f *FilePTP) Share(shareWith []common.Address, boxer *crypto.BoxingKeyPair,
 	return nil
 }
 
-func (f *FilePTP) Refresh(storage *Storage, ipfs *ipfs.IPFS) error {
+func (f *FilePTP) Refresh(storage *Storage, ipfs *ipfsapi.Shell) error {
 	// if f.Own {
 	// 	return nil
 	// }

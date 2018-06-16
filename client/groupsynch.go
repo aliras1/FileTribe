@@ -1,19 +1,19 @@
 package client
 
 import (
+	"encoding/base64"
 	"bytes"
 	"encoding/json"
 	"fmt"
 
 	"github.com/golang/glog"
-
-	"ipfs-share/ipfs"
+	// ipfsapi "github.com/ipfs/go-ipfs-api"
 )
 
 type Synchronizer struct {
 	groupCtx *GroupContext
 
-	channelPubSub chan ipfs.PubsubMessage
+	// channelPubSub chan ipfs.PubsubMessage
 	channelState  chan []byte
 	channelStop   chan int
 }
@@ -23,9 +23,9 @@ func NewSynchronizer(groupCtx *GroupContext) *Synchronizer {
 	var synch Synchronizer
 	synch.groupCtx = groupCtx
 	synch.channelStop = make(chan int)
-	synch.channelPubSub = make(chan ipfs.PubsubMessage)
+	// synch.channelPubSub = make(chan ipfs.PubsubMessage)
 
-	go synch.groupCtx.IPFS.PubsubSubscribe(synch.groupCtx.User.Name, synch.groupCtx.Group.Name, synch.channelPubSub)
+	// go synch.groupCtx.IPFS.PubsubSubscribe(synch.groupCtx.User.Name, synch.groupCtx.Group.Name, synch.channelPubSub)
 	go synch.MessageProcessor()
 	go synch.StateListener()
 	//go synch.heartBeat()
@@ -77,34 +77,34 @@ func (synch *Synchronizer) StateListener() {
 }
 
 func (s *Synchronizer) MessageProcessor() {
-	glog.Infof("Synchronizer for user '%s' group '%s' is running...\n", s.groupCtx.User.Name, s.groupCtx.Group.Name)
-	for pubsubMessage := range s.channelPubSub {
-		glog.Infof("--> user '%s' in group '%s' recieved a message", s.groupCtx.User.Name, s.groupCtx.Group.Name)
-		groupMessageBytes, ok := pubsubMessage.Decrypt(s.groupCtx.Group.Boxer)
-		if !ok {
-			glog.Error("could not decrypt group message: Synchronizer: MessageProcessor")
-			continue
-		}
+	// glog.Infof("Synchronizer for user '%s' group '%s' is running...\n", s.groupCtx.User.Name, s.groupCtx.Group.Name)
+	// for pubsubMessage := range s.channelPubSub {
+	// 	glog.Infof("--> user '%s' in group '%s' recieved a message", s.groupCtx.User.Name, s.groupCtx.Group.Name)
+	// 	groupMessageBytes, ok := pubsubMessage.Decrypt(s.groupCtx.Group.Boxer)
+	// 	if !ok {
+	// 		glog.Error("could not decrypt group message: Synchronizer: MessageProcessor")
+	// 		continue
+	// 	}
 
-		var groupMessage GroupMessage
-		if err := json.Unmarshal(groupMessageBytes, &groupMessage); err != nil {
-			glog.Error("could not unmarshal group message: Synchronizer, MessageProzessor: %s", err)
-			continue
-		}
+	// 	var groupMessage GroupMessage
+	// 	if err := json.Unmarshal(groupMessageBytes, &groupMessage); err != nil {
+	// 		glog.Error("could not unmarshal group message: Synchronizer, MessageProzessor: %s", err)
+	// 		continue
+	// 	}
 
-		switch groupMessage.Type {
-		case "HB":
-			if err := s.processHeartBeat(groupMessage); err != nil {
-				glog.Error("could not process heart beat: Synchronizer.MessageProcessor: %s", err)
-				continue
-			}
-		case "PROPOSAL":
-			if err := s.processProposal(groupMessage); err != nil {
-				glog.Error("error while processing PROPOSAL: Synchronizer.MessageProcessor: %s", err)
-				continue
-			}
-		}
-	}
+	// 	switch groupMessage.Type {
+	// 	case "HB":
+	// 		if err := s.processHeartBeat(groupMessage); err != nil {
+	// 			glog.Error("could not process heart beat: Synchronizer.MessageProcessor: %s", err)
+	// 			continue
+	// 		}
+	// 	case "PROPOSAL":
+	// 		if err := s.processProposal(groupMessage); err != nil {
+	// 			glog.Error("error while processing PROPOSAL: Synchronizer.MessageProcessor: %s", err)
+	// 			continue
+	// 		}
+	// 	}
+	// }
 }
 
 func (s *Synchronizer) processHeartBeat(message GroupMessage) error {
@@ -183,7 +183,7 @@ func (s *Synchronizer) approveTransaction(proposer string, transaction *Transact
 		return fmt.Errorf("could not marshal approval: Synchronizer.approveTransaction: %s", err)
 	}
 	groupEncApproval := s.groupCtx.Group.Boxer.BoxSeal(approvalBytes)
-	if err := s.groupCtx.IPFS.PubsubPublish(channelName, groupEncApproval); err != nil {
+	if err := s.groupCtx.IPFS.PubSubPublish(channelName, base64.StdEncoding.EncodeToString(groupEncApproval)); err != nil {
 		return fmt.Errorf("could not send approval: Synchronizer.approveTransaction: %s", err)
 	}
 	return nil
@@ -284,8 +284,8 @@ func (synch *Synchronizer) CollectApprovals(transaction *Transaction) {
 }
 
 func (synch *Synchronizer) Kill() {
-	collectingChannel := synch.groupCtx.Group.Name + synch.groupCtx.User.Name
-	synch.groupCtx.IPFS.Kill(synch.groupCtx.Group.Name)
-	synch.groupCtx.IPFS.Kill(collectingChannel)
+	// collectingChannel := synch.groupCtx.Group.Name + synch.groupCtx.User.Name
+	// synch.groupCtx.IPFS.Kill(synch.groupCtx.Group.Name)
+	// synch.groupCtx.IPFS.Kill(collectingChannel)
 	synch.channelStop <- 1
 }

@@ -5,12 +5,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"encoding/base64"
 
 	// "github.com/golang/glog"
+	ipfsapi "github.com/ipfs/go-ipfs-api"
 
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
-	"ipfs-share/ipfs"
 	nw "ipfs-share/networketh"
 )
 
@@ -69,11 +70,11 @@ type GroupContext struct {
 	Members      *MemberList
 	Synchronizer *Synchronizer
 	Network      *nw.Network
-	IPFS         *ipfs.IPFS
+	IPFS         *ipfsapi.Shell
 	Storage      *fs.Storage
 }
 
-func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
+func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfsapi.Shell, storage *fs.Storage) (*GroupContext, error) {
 	// members := NewMemberList()
 	// memberStrings, err := network.GetGroupMembers(group.Name)
 	// if err != nil {
@@ -100,7 +101,7 @@ func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfs.I
 	return nil, nil
 }
 
-func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfs.IPFS, storage *fs.Storage) (*GroupContext, error) {
+func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfsapi.Shell, storage *fs.Storage) (*GroupContext, error) {
 	group := &Group{
 		Name:  cap.GroupName,
 		Boxer: cap.Boxer,
@@ -213,7 +214,7 @@ func (gc *GroupContext) Save() error {
 // Sends pubsub messages to all members of the group
 func (gc *GroupContext) sendToAll(data []byte) error {
 	encGroupMsg := gc.Group.Boxer.BoxSeal(data)
-	if err := gc.IPFS.PubsubPublish(gc.Group.Name, encGroupMsg); err != nil {
+	if err := gc.IPFS.PubSubPublish(gc.Group.Name, base64.StdEncoding.EncodeToString(encGroupMsg)); err != nil {
 		return fmt.Errorf("could not pubsub publish: GroupContext.sendToAll: %s", err)
 	}
 	return nil

@@ -10,23 +10,24 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-
+	"github.com/pkg/errors"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 
-	ipfsapi "ipfs-share/ipfs"
 	nw "ipfs-share/networketh"
+
+	ipfsapi "github.com/ipfs/go-ipfs-api"
 )
 
 func Alice(signup bool, ethKeyPath string, network *nw.Network) (*UserContext, error) {
-	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
-	if err != nil {
-		return nil, fmt.Errorf("could not create new ipfs api conn: Alice: %s", err)
-	}
+	t := time.Now()
+	ipfs := ipfsapi.NewShell("http://127.0.0.1:5001")
+	glog.Info("ipfs inst: ", time.Since(t))
 
 	username := "alice"
 	password := "pwd"
 	homeDir := "./alice/"
 	var alice *UserContext
+	var err error
 
 	if signup {
 		alice, err = NewUserContextFromSignUp(username, password, ethKeyPath, homeDir, network, ipfs)
@@ -54,15 +55,13 @@ func Alice(signup bool, ethKeyPath string, network *nw.Network) (*UserContext, e
 }
 
 func Bob(signup bool, ethKeyPath string, network *nw.Network) (*UserContext, error) {
-	ipfs, err := ipfsapi.NewIPFS("http://127.0.0.1", 5001)
-	if err != nil {
-		return nil, fmt.Errorf("could not create new ipfs api conn: Bob: %s", err)
-	}
+	ipfs := ipfsapi.NewShell("http://127.0.0.1:5001")
 
 	username := "bob"
 	password := "pwd"
 	homeDir := "./bob/"
 	var bob *UserContext
+	var err error
 
 	if signup {
 		bob, err = NewUserContextFromSignUp(username, password, ethKeyPath, homeDir, network, ipfs)
@@ -108,6 +107,26 @@ func GetIPAddress() (string, error) {
 		return "", fmt.Errorf("no ip addresses found: GetIPAddress")
 	}
 	return addrs[0], nil
+}
+
+func C() error {
+	return errors.New("shit happend")
+}
+
+func B() error {
+	return errors.Wrap(C(), "B shit")
+}
+
+func A() error {
+	return errors.Wrap(B(), "A shit")
+}
+
+func TestCucc(t *testing.T) {
+	err := A()
+	
+	fmt.Println(err)
+	fmt.Println(errors.Cause(err))
+	fmt.Printf("%v", err)
 }
 
 func TestBigScenario(t *testing.T) {
@@ -158,7 +177,7 @@ func TestBigScenario(t *testing.T) {
 	bob.WaitingFriends[0].Confirm(bob)
 	networkBob.Simulator.Commit()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(125 * time.Second)
 
 	if len(alice.Friends) < 1 {
 		t.Fatal("alice has no friend")
@@ -173,6 +192,7 @@ func TestBigScenario(t *testing.T) {
 	if strings.Compare(alice.Friends[0].HisDirectory, bob.Friends[0].MyDirectory) != 0 {
 		t.Fatal("bobs dir mismatch")
 	}
+
 }
 
 func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {

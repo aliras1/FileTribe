@@ -10,9 +10,9 @@ import (
 	"path"
 
 	// "github.com/golang/glog"
+	ipfsapi "github.com/ipfs/go-ipfs-api"
 
 	"ipfs-share/crypto"
-	"ipfs-share/ipfs"
 	nw "ipfs-share/networketh"
 )
 
@@ -53,11 +53,11 @@ func (cap *ReadCAP) Store(storage *Storage) error {
 	return nil
 }
 
-func (cap *ReadCAP) Refresh(username string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (bool, error) {
+func (cap *ReadCAP) Refresh(username string, boxer *crypto.BoxingKeyPair, storage *Storage, network *nw.Network, ipfs *ipfsapi.Shell) (bool, error) {
 	return false, fmt.Errorf("not implemented: ReadCAP.Refresh")
 }
 
-func DownloadReadCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) (*ReadCAP, error) {
+func DownloadReadCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfsapi.Shell) (*ReadCAP, error) {
 	capBytes, err := downloadCAP(fromUserID, userID, capName, boxer, storage, network, ipfs)
 	if err != nil {
 		return nil, fmt.Errorf("could not download ReadCAP '%s': DownloadReadCAP: %s", capName, err)
@@ -71,7 +71,7 @@ func DownloadReadCAP(fromUserID, userID common.Address, capName string, boxer *c
 
 // Downloads the capability identified by capName from
 // /ipns/from/for/username/capName
-func downloadCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfs.IPFS) ([]byte, error) {
+func downloadCAP(fromUserID, userID common.Address, capName string, boxer *crypto.AnonymBoxer, storage *Storage, network *nw.Network, ipfs *ipfsapi.Shell) ([]byte, error) {
 	// glog.Info("Downloading CAP...")
 	// // get address and key
 	// _, _, _, ipfsAddr, err := network.GetUser(fromUserID)

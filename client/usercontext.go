@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"crypto/rand"
+	"time"
 	// "io/ioutil"
 	"encoding/base64"
 	// "encoding/json"
@@ -13,12 +14,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/glog"
+	ipfsapi "github.com/ipfs/go-ipfs-api"
 	"golang.org/x/crypto/sha3"
 
 	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
 	"ipfs-share/eth"
-	"ipfs-share/ipfs"
+
 	nw "ipfs-share/networketh"
 )
 
@@ -46,9 +48,8 @@ func (wfr *WaitingFriendRequest) Confirm(ctx *UserContext) error {
 	if err != nil {
 		return fmt.Errorf("could not read random dir: UserContext.AddFriend: %s", err)
 	}
-
 	dirEnc, err := crypto.AuthSeal(
-		[]byte(base64.StdEncoding.EncodeToString(dir[:])),
+		[]byte(base64.URLEncoding.EncodeToString(dir[:])),
 		&wfr.Friend.Contact.Boxer,
 		&ctx.User.Boxer.SecretKey,
 	)
@@ -56,9 +57,13 @@ func (wfr *WaitingFriendRequest) Confirm(ctx *UserContext) error {
 		return fmt.Errorf("could not encrypt directory name: UserContext.AddFriend: %s", err)
 	}
 
-	if _, err := ctx.Network.Session.ConfirmFriendship(wfr.Friend.FriendshipID, sig, dirEnc); err != nil {
+	tx, err := ctx.Network.Session.ConfirmFriendship(wfr.Friend.FriendshipID, sig, dirEnc)
+	if err != nil {
 		return fmt.Errorf("could not confirm friendship: WaitingFriendRequest:Confirm: %s", err)
 	}
+
+	glog.Info("confirm cost: ", tx.Cost().String())
+
 	return nil
 }
 
@@ -71,19 +76,22 @@ type UserContext struct {
 	Repo           []*fs.FilePTP
 	IPNSAddr       string
 	Network        *nw.Network
-	IPFS           *ipfs.IPFS
+	IPFS           *ipfsapi.Shell
 	Storage        *fs.Storage // TODO lock
 
 	channelStop chan int
 }
 
-func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, error) {
 	fmt.Printf("[*] User '%s' signing up...\n", username)
 
+	t := time.Now()
 	ipfsID, err := ipfs.ID()
 	if err != nil {
 		return nil, fmt.Errorf("could not get ipfs id: NewUserContextFromSignUp: %s", err)
 	}
+	glog.Info("ipfs get id: ", time.Since(t))
+
 	glog.Info("IPFS ID of ", username, " : ", ipfsID.ID)
 	user, err := SignUp(username, password, ethKeyPath, ipfsID.ID, network)
 	if err != nil {
@@ -99,7 +107,7 @@ func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, n
 	return uc, nil
 }
 
-func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, error) {
 	fmt.Printf("[*] User '%s' signing in...\n", username)
 
 	user, err := SignIn(username, password, ethKeyPath, network)
@@ -116,7 +124,7 @@ func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, n
 	return uc, nil
 }
 
-func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfsapi.Shell) (*UserContext, error) {
 	var err error
 	var uc UserContext
 	uc.User = user
@@ -223,7 +231,7 @@ func (uc *UserContext) AddFriend(address common.Address) error {
 		return fmt.Errorf("could not read random dir: UserContext.AddFriend: %s", err)
 	}
 	dirEnc, err := crypto.AuthSeal(
-		[]byte(base64.StdEncoding.EncodeToString(r[:])),
+		[]byte(base64.URLEncoding.EncodeToString(r[:])),
 		&toUser.Boxer,
 		&uc.User.Boxer.SecretKey,
 	)
@@ -239,9 +247,13 @@ func (uc *UserContext) AddFriend(address common.Address) error {
 
 	verifyAddress := ethcrypto.PubkeyToAddress(key.PublicKey)
 
-	if _, err := uc.Network.Session.AddFriend(id, fromEnc, toEnc, keyEnc, dirEnc, r, verifyAddress); err != nil {
+	tx, err := uc.Network.Session.AddFriend(id, fromEnc, toEnc, keyEnc, dirEnc, r, verifyAddress)
+	if err != nil {
 		return fmt.Errorf("could not send transaction: UserContext.AddFriend: %s", err)
 	}
+	
+	glog.Info("addfriend cost: ", tx.Cost().String())
+	
 	return nil
 }
 
@@ -345,6 +357,9 @@ func FriendshipConfirmedHandler(ctx *UserContext) {
 				pending.HisDirectory = string(hisDir)
 
 				ctx.Friends = append(ctx.Friends, pending)
+				if err := ctx.Storage.MakeForDirectory(pending.HisDirectory, ctx.IPFS); err != nil {
+					glog.Error("could not create for directory")
+				}
 				break
 			}
 		}
