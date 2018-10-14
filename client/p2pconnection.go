@@ -129,9 +129,7 @@ func (p2p *P2PServer) handleConnection(addressBook *ConcurrentCollection, conn *
 				}
 
 				session = sessionInterface.(ISession)
-				if err := session.NextState(contact, msg.Payload); err != nil {
-					glog.Warningf("error in session %d next state: %s", session.Id().Data().(uint32), err)
-				}
+				go session.NextState(contact, msg.Payload)
 			}
 		}
 	}

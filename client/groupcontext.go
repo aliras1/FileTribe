@@ -14,6 +14,7 @@ import (
 	"github.com/golang/glog"
 
 	. "ipfs-share/collections"
+	"sync"
 )
 
 type Member struct {
@@ -76,6 +77,7 @@ type GroupContext struct {
 	Ipfs             ipfsapi.IIpfs
 	Storage          *Storage
 	broadcastChannel *ipfsapi.PubSubSubscription
+	lock sync.Mutex
 }
 
 func (groupCtx *GroupContext) Id() IIdentifier {
@@ -124,6 +126,9 @@ func NewGroupContextFromCAP(cap *GroupAccessCAP, user *User, sessions *Concurren
 }
 
 func (groupCtx *GroupContext) Update() error {
+	groupCtx.lock.Lock()
+	defer groupCtx.lock.Unlock()
+
 	name, members, ipfsPath, err := groupCtx.Network.GetGroup(groupCtx.Group.Id.Data().([32]byte))
 	if err != nil {
 		return errors.Wrapf(err, "could not get group %v", groupCtx.Group.Id.Data())

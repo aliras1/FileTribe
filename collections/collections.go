@@ -2,7 +2,7 @@ package collections
 
 import (
 	"sync"
-	"reflect"
+	"github.com/golang/glog"
 )
 
 
@@ -25,12 +25,14 @@ func (c *ConcurrentCollection) Append(item ICollectionItem) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if (len(c.list) > 0) && (reflect.TypeOf(item) != reflect.TypeOf(c.list[0])) {
-		return
-	}
+	//if (len(c.list) > 0) && (reflect.TypeOf(item) != reflect.TypeOf(c.list[0])) {
+	//	glog.Error("could not append to concurrent collection: invalid type")
+	//	return
+	//}
 
 	for _, elem := range c.list {
 		if elem.Id().Equal(item.Id()) {
+			glog.Error("could not append to concurrent collection: item already exists")
 			return
 		}
 	}

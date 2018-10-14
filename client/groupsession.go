@@ -217,9 +217,6 @@ func (session *AddFileServerGroupSession) Run() {
 	if err := session.contact.Send(encMsg); err != nil {
 		glog.Errorf("could not send message: %s", err)
 	}
-	if err := session.contact.Send(encMsg); err != nil {
-		glog.Errorf("could not send message: %s", err)
-	}
 }
 
 func (session *AddFileServerGroupSession) NextState(contact *Contact, data []byte) error {
