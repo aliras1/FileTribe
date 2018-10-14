@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/ethereum/go-ethereum/common"
-
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/glog"
@@ -18,7 +17,7 @@ import (
 )
 
 type User struct {
-	Address common.Address
+	Address ethcommon.Address
 	Name    string
 	Signer  *crypto.Signer
 	Boxer   crypto.AnonymBoxer
@@ -56,15 +55,15 @@ func NewUser(username, password, ethKeyPath string) (*User, error) {
 	return &User{
 		Address: key.Address,
 		Name:    username,
-		Signer:  &crypto.Signer{key.PrivateKey},
+		Signer:  &crypto.Signer{PrivateKey: key.PrivateKey},
 		Boxer: crypto.AnonymBoxer{
-			PublicKey: crypto.AnonymPublicKey{Value: &publicBoxerBytes},
-			SecretKey: crypto.AnonymSecretKey{Value: &secretBoxerBytes},
+			PublicKey:  crypto.AnonymPublicKey{Value: &publicBoxerBytes},
+			PrivateKey: crypto.AnonymPrivateKey{Value: &secretBoxerBytes},
 		},
 	}, nil
 }
 
-func SignUp(username, password, ethKeyPath, ipfsAddr string, network *nw.Network) (*User, error) {
+func SignUp(username, password, ipfsPeerId, ethKeyPath string, network nw.INetwork) (*User, error) {
 	user, err := NewUser(username, password, ethKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not generate user: SignUp: %s", err)
@@ -79,14 +78,14 @@ func SignUp(username, password, ethKeyPath, ipfsAddr string, network *nw.Network
 	}
 
 	pk := ethcrypto.CompressPubkey(&user.Signer.PrivateKey.PublicKey)
-	if err = network.RegisterUser(username, *user.Boxer.PublicKey.Value, pk, ipfsAddr); err != nil {
+	if err = network.RegisterUser(username, ipfsPeerId, *user.Boxer.PublicKey.Value, pk); err != nil {
 		return nil, fmt.Errorf("could not register username '%s': SignUp: %s", username, err)
 	}
 
 	return user, nil
 }
 
-func SignIn(username, password, keyStore string, network *nw.Network) (*User, error) {
+func SignIn(username, password, keyStore string, network nw.INetwork) (*User, error) {
 	user, err := NewUser(username, password, keyStore)
 	if err != nil {
 		return nil, fmt.Errorf("could not generate user: SignIn")

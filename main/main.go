@@ -1,83 +1,295 @@
 package main
 
 import (
-	"fmt"
-	"net"
-	"os"
-	"ipfs-share/client"
-	"ipfs-share/ipfs"
-	nw "ipfs-share/network"
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
+	"net/http"
+
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
+	"github.com/gorilla/mux"
+	ipfsapi "github.com/ipfs/go-ipfs-api"
+
+	"ipfs-share/client"
+	nw "ipfs-share/networketh"
 )
 
 const (
-	CONN_HOST = "0.0.0.0"
-	CONN_PORT = "3333"
-	CONN_TYPE = "tcp"
+	host           = "0.0.0.0"
+	port           = "3333"
+	ipfsAPIAddress = "http://127.0.0.1:5001"
+	// ethWSAddress   = "ws://127.0.0.1:8001"
+	ethWSAddress   = "ws://172.18.0.2:8001"
+	// ethKeyPath = "../misc/eth/ethkeystore/UTC--2018-05-19T19-06-19.498239404Z--c4f45f1822b614116ea5b68d4020f3ae1a0179e5"
+	contractAddress = "0x41cf9ed28c99cc5ebd531bd1929a7e99c122fed8"
 )
+
+var userContext *client.UserContext
+var network *nw.Network
+var ipfs *ipfsapi.Shell
+
+func stringToAddress(addressString string) ethcommon.Address {
+	addressBytes := ethcommon.FromHex(addressString)
+	address := ethcommon.BytesToAddress(addressBytes)
+
+	return address
+}
+
+func addressToFriend(address ethcommon.Address) *client.Friend {
+	for _, friend := range userContext.Friends {
+		if bytes.Equal(friend.Contact.Address.Bytes(), address.Bytes()) {
+			return friend
+		}
+	}
+
+	return nil
+}
+
+func signUp(w http.ResponseWriter, r *http.Request) {
+	if userContext != nil {
+		userContext.SignOut()
+		userContext = nil
+	}
+
+	params := mux.Vars(r)
+	var err error
+
+	var ethKeyPath string
+	json.NewDecoder(r.Body).Decode(&ethKeyPath)
+	
+	network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
+	if err != nil {
+		glog.Fatalf("could not connect to ethereum network: %s", err)
+	}
+
+	userContext, err = client.NewUserContextFromSignUp(
+		params["username"],
+		params["password"],
+		ethKeyPath,
+		params["username"], // data directory
+		network,
+		ipfs,
+	)
+	if err != nil {
+		glog.Errorf("could not signup: %s", err)
+	}
+}
+
+func signIn(w http.ResponseWriter, r *http.Request) {
+	if userContext != nil {
+		userContext.SignOut()
+		userContext = nil
+	}
+
+	params := mux.Vars(r)
+	var err error
+
+	var ethKeyPath string
+	json.NewDecoder(r.Body).Decode(&ethKeyPath)
+	
+	network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
+	if err != nil {
+		glog.Fatalf("could not connect to ethereum network: %s", err)
+	}
+
+	userContext, err = client.NewUserContextFromSignIn(
+		params["username"],
+		params["password"],
+		ethKeyPath,
+		params["username"], // data directory
+		network,
+		ipfs,
+	)
+	if err != nil {
+		glog.Error(err)
+	}
+}
+
+func signOut(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	userContext.SignOut()
+	userContext = nil
+}
+
+func addFriend(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	params := mux.Vars(r)
+	address := stringToAddress(params["address"])
+
+	if err := userContext.AddFriend(address); err != nil {
+		glog.Errorf("could not add friend: '%s': %s", address.String(), err)
+	}
+}
+
+func addFile(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	var path string
+	json.NewDecoder(r.Body).Decode(&path)
+
+	id, err := userContext.AddFile(path)
+	if err != nil {
+		glog.Errorf("could not add file: '%s': %s", path, err)
+	}
+
+	idURLEnc := base64.URLEncoding.EncodeToString(id[:])
+	if err := json.NewEncoder(w).Encode(idURLEnc); err != nil {
+		glog.Error(err)
+	}
+}
+
+func sharePTP(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	params := mux.Vars(r)
+	address := stringToAddress(params["address"])
+	friend := addressToFriend(address)
+
+	if friend == nil {
+		glog.Errorf("friend not found '%s'", address)
+		return
+	}
+
+	glog.Info("Id: ", string(params["id"]))
+
+	idBytes, err := base64.URLEncoding.DecodeString(params["id"])
+	if err != nil {
+		glog.Error(err)
+		
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	var id [32]byte
+	copy(id[:], idBytes)
+
+	
+	if err := userContext.Repo[userContext.User.Address][id].Share(friend, userContext); err != nil {
+		glog.Errorf("could not share file '%s' with '%s': %s", params["id"], address.String(), err)
+
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+}
+
+func ls(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	list := userContext.List()
+	if err := json.NewEncoder(w).Encode(list); err != nil {
+		glog.Error(err)
+	}
+}
+
+func getPendingFriends(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(userContext.PendingFriends); err != nil {
+		glog.Error(err)
+	}
+}
+
+func getWaitingFriends(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	list := []client.Friend{}
+	for _, waiting := range userContext.WaitingFriends {
+		list = append(list, *waiting.Friend)
+	}
+
+	if err := json.NewEncoder(w).Encode(list); err != nil {
+		glog.Error(err)
+	}
+}
+
+func getFriends(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(userContext.Friends); err != nil {
+		glog.Error(err)
+	}
+}
+
+func confirmFriend(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	params := mux.Vars(r)
+	address := stringToAddress(params["address"])
+
+	for _, waiting := range userContext.WaitingFriends {
+		if bytes.Equal(waiting.Friend.Contact.Address.Bytes(), address.Bytes()) {
+			if err := waiting.Confirm(userContext); err != nil {
+				glog.Error(err)
+
+				w.WriteHeader(http.StatusNotFound)
+			}
+			return
+		}
+	}
+
+	glog.Warningf("no waiting friend found with '%s'", address.String())
+	
+	w.WriteHeader(http.StatusNotFound)
+	return
+}
+
 
 func main() {
 	flag.Parse()
 
-	ipfs, err := ipfs.NewIPFS("http://127.0.0.1", 5001)
-	if err != nil {
-		glog.Fatalf("could not connect to ipfs daemon: %s", err)
-	}
-	network := &nw.Network{"http://172.18.0.2:6000"}
-	var userContext *client.UserContext
-	userContext = nil
+	ipfs = ipfsapi.NewShell(ipfsAPIAddress)
 
-	// Listen for incoming connections.
-	l, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
-	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		os.Exit(1)
-	}
-	// Close the listener when the application closes.
-	defer l.Close()
-	fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
-	for {
-		// Listen for an incoming connection.
-		conn, err := l.Accept()
-		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
-			os.Exit(1)
-		}
-		// Handle connections in a new goroutine.
-		go handleRequest(&userContext, network, ipfs, conn)
-	}
-}
+	router := mux.NewRouter()
+	
+	
+	router.HandleFunc("/signup/{username}/{password}", signUp).Methods("POST")
+	router.HandleFunc("/signin/{username}/{password}", signIn).Methods("POST")
+	router.HandleFunc("/signout", signOut).Methods("GET")
+	
+	router.HandleFunc("/get/friends", getFriends).Methods("GET")
+	router.HandleFunc("/get/friends/pending", getPendingFriends).Methods("GET")
+	router.HandleFunc("/get/friends/waiting", getWaitingFriends).Methods("GET")
+	
+	router.HandleFunc("/confirm/friend/{address}", confirmFriend).Methods("POST")
 
-// Handles incoming requests.
-func handleRequest(ctx **client.UserContext, netwrok *nw.Network, ipfs *ipfs.IPFS, conn net.Conn) {
-	// Make a buffer to hold incoming data.
-	buf := make([]byte, 1024)
-	// Read the incoming connection into the buffer.
-	_, err := conn.Read(buf)
-	if err != nil {
-		fmt.Printf("error reading: handleRequest: %s", err)
-	}
-	// Send a response back to person contacting us.
-	conn.Write([]byte("Message received.\n"))
-	cmd, err := client.NewCommand(string(buf))
-	if err != nil {
-		fmt.Printf("could not create new command handleRequest: %s\n", err)
-		conn.Write([]byte(err.Error()))
-		conn.Close()
-		return
-	}
-	glog.Info("[*] Executing api command...")
-	uc, message, err := cmd.Execute(*ctx, netwrok, ipfs)
-	glog.Info("[*] Api command executed")
-	if err != nil {
-		fmt.Printf("[ERROR]: could not execute command: handleRequest: %s\n", err)
-		conn.Write([]byte("could not execute command\n"))
-		conn.Close()
-		return
-	}
-	*ctx = uc
+	router.HandleFunc("/add/friend/{address}", addFriend).Methods("POST")
+	router.HandleFunc("/add/file", addFile).Methods("POST")
+	
+	router.HandleFunc("/share/ptp/{id}/{address}", sharePTP).Methods("POST")
+	
+	router.HandleFunc("/ls", ls).Methods("GET")
 
-	conn.Write([]byte(message))
-	conn.Close()
+	
+	glog.Fatal(http.ListenAndServe(host+":"+port, router))
 }

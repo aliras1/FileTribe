@@ -193,7 +193,7 @@ func TestSendMessage(t *testing.T) {
 	}()
 
 	// message := []byte("Hello friend!")
-	// if err := network.SendMessage(message); err != nil {
+	// if err := network.DialP2PConn(message); err != nil {
 	// 	t.Fatal(err)
 	// }
 
@@ -299,7 +299,7 @@ func TestTheTest(t *testing.T) {
 	// // for _, b := range message {
 	// // 	msg = append(msg, [1]byte{b})
 	// // }
-	// // if _, err := session.SendMessage(msg); err != nil {
+	// // if _, err := session.DialP2PConn(msg); err != nil {
 	// // 	t.Fatal(err)
 	// // }
 

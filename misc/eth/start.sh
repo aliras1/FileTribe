@@ -10,8 +10,12 @@ nohup geth --datadir /devnet --keystore /ethnet/ethkeystore/ --networkid 15 --ws
 
 echo "[*] Network is up"
 
+echo "[*] Deyploying contract..."
+
 cd /ethcode
 truffle compile
 truffle migrate --network development
+
+echo "[*] Contract deployed"
 
 bash

@@ -3,20 +3,21 @@ package client
 import (
 	"github.com/ethereum/go-ethereum/common"
 	"bytes"
-	"crypto/sha256"
 	"fmt"
-	"encoding/base64"
-
 	// "github.com/golang/glog"
-	ipfsapi "github.com/ipfs/go-ipfs-api"
+	ipfsapi "ipfs-share/ipfs"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 
-	fs "ipfs-share/client/filestorage"
 	"ipfs-share/crypto"
 	nw "ipfs-share/networketh"
+	"github.com/pkg/errors"
+	"github.com/golang/glog"
+
+	. "ipfs-share/collections"
 )
 
 type Member struct {
-	ID        common.Address         `json:"id"`
+	ID        common.Address         `json:"sessionId"`
 	VerifyKey crypto.VerifyKey `json:"-"`
 }
 
@@ -64,113 +65,100 @@ func (ml *MemberList) Get(userID [32]byte) *Member {
 }
 
 type GroupContext struct {
-	User         *User
-	Group        *Group
-	Repo         *fs.GroupRepo
-	Members      *MemberList
-	Synchronizer *Synchronizer
-	Network      *nw.Network
-	IPFS         *ipfsapi.Shell
-	Storage      *fs.Storage
+	User             *User
+	Group            *Group
+	Sessions         *ConcurrentCollection
+	Repo             *GroupRepo
+	Members          *MemberList
+	GroupConnection  *GroupConnection
+	AddressBook *ConcurrentCollection
+	Network          nw.INetwork
+	Ipfs             ipfsapi.IIpfs
+	Storage          *Storage
+	broadcastChannel *ipfsapi.PubSubSubscription
 }
 
-func NewGroupContext(group *Group, user *User, network *nw.Network, ipfs *ipfsapi.Shell, storage *fs.Storage) (*GroupContext, error) {
-	// members := NewMemberList()
-	// memberStrings, err := network.GetGroupMembers(group.Name)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("could not get group members of '%s': NewGroupContext: %s", group.Name, err)
-	// }
-	// for _, member := range memberStrings {
-	// 	members = members.Append(member, network)
-	// }
-	// repo := &fs.GroupRepo{
-	// 	Files: []*fs.FileGroup{},
-	// }
-	// groupContext := &GroupContext{
-	// 	User:         user,
-	// 	Group:        group,
-	// 	Repo:         repo,
-	// 	Members:      members,
-	// 	Synchronizer: nil,
-	// 	Network:      network,
-	// 	IPFS:         ipfs,
-	// 	Storage:      storage,
-	// }
-	// groupContext.Synchronizer = NewSynchronizer(groupContext)
-	// return groupContext, nil
-	return nil, nil
+func (groupCtx *GroupContext) Id() IIdentifier {
+	return groupCtx.Group.Id
 }
 
-func NewGroupContextFromCAP(cap *fs.GroupAccessCAP, user *User, network *nw.Network, ipfs *ipfsapi.Shell, storage *fs.Storage) (*GroupContext, error) {
+func NewGroupContext(group *Group, user *User, sessions *ConcurrentCollection, addressBook *ConcurrentCollection, network nw.INetwork, ipfs ipfsapi.IIpfs, storage *Storage) (*GroupContext, error) {
+	repo := &GroupRepo{
+		Files: []*FileGroup{},
+	}
+	groupContext := &GroupContext{
+		User:            user,
+		Group:           group,
+		Sessions: sessions,
+		Repo:            repo,
+		GroupConnection: nil,
+		AddressBook:     addressBook,
+		Network:         network,
+		Ipfs:            ipfs,
+		Storage:         storage,
+	}
+
+	if err := groupContext.Update(); err != nil {
+		glog.Errorf("could not update group %v", groupContext.Group.Id.Data())
+	}
+
+	groupContext.GroupConnection = NewGroupConnection(groupContext)
+
+	return groupContext, nil
+}
+
+func NewGroupContextFromCAP(cap *GroupAccessCAP, user *User, sessions *ConcurrentCollection, addressBook *ConcurrentCollection, network nw.INetwork, ipfs ipfsapi.IIpfs, storage *Storage) (*GroupContext, error) {
 	group := &Group{
-		Name:  cap.GroupName,
+		Id:  NewBytesId(cap.GroupID),
 		Boxer: cap.Boxer,
 	}
-	gc, err := NewGroupContext(group, user, network, ipfs, storage)
+
+	gc, err := NewGroupContext(group, user, sessions, addressBook, network, ipfs, storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create group context: NewGroupContextFromCAP: %s", err)
 	}
+
 	return gc, nil
+
+	return nil, fmt.Errorf("not implemented NewGroupContextFromCAP")
 }
 
-func (gc *GroupContext) Stop() {
-	gc.Synchronizer.Kill()
-}
+func (groupCtx *GroupContext) Update() error {
+	name, members, ipfsPath, err := groupCtx.Network.GetGroup(groupCtx.Group.Id.Data().([32]byte))
+	if err != nil {
+		return errors.Wrapf(err, "could not get group %v", groupCtx.Group.Id.Data())
+	}
 
-func (gc *GroupContext) CalculateState(members *MemberList, repo *fs.GroupRepo) []byte {
-	digest := append(members.Bytes(), repo.Bytes()...)
-	hash := sha256.Sum256(digest)
-	return hash[:]
-}
+	// TODO: send updated event
+	groupCtx.Group.Name = name
+	groupCtx.Group.Members = members
+	groupCtx.Group.IPFSPath = ipfsPath
 
-func (gc *GroupContext) GetState() ([]byte, error) {
-	// state, err := gc.Network.GetGroupState(gc.Group.Name)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("could not retrieve state from network: GroupContext.GetState: %s", err)
-	// }
-	// return state, nil
-	return nil, nil
-}
-
-func (gc *GroupContext) AddAndShareFile(filePath string) error {
-	// file, err := fs.NewSharedFileGroup(filePath, gc.Group.Name, gc.Group.Boxer, gc.Storage, gc.IPFS)
-	// if err != nil {
-	// 	return fmt.Errorf("could not create new shared file group: GroupContext.AddAndShareFile: %s", err)
-	// }
-
-	// newRepo := &fs.GroupRepo{
-	// 	Files: append(gc.Repo.Files, file),
-	// }
-	// newState := gc.CalculateState(gc.Members, newRepo)
-	// operation := NewShareFileOperation(gc.User.Name, file.Name, file.IPFSHash)
-	// transaction := &Transaction{
-	// 	PrevState: gc.CalculateState(gc.Members, gc.Repo),
-	// 	State:     newState,
-	// 	Operation: operation.RawOperation(),
-	// 	SignedBy:  []SignedBy{},
-	// }
-	// signature := gc.User.SignTransaction(transaction)
-	// transaction.SignedBy = []SignedBy{
-	// 	{
-	// 		Username:  gc.User.Name,
-	// 		Signature: signature,
-	// 	},
-	// }
-	// transactionJSON, err := json.Marshal(transaction)
-	// if err != nil {
-	// 	return fmt.Errorf("could not marshal transaction: GroupContext.AddAndShareFile: %s", err)
-	// }
-	// if err := gc.Network.GroupShare(gc.Group.Name, transactionJSON); err != nil {
-	// 	return fmt.Errorf("error while network call: GroupContext.AddANdShareFile: %s", err)
-	// }
-
-	// fmt.Printf("[*] file '%s' shared with group '%s'\n", filePath, gc.Group.Name)
+	if err := groupCtx.Group.Save(groupCtx.Storage); err != nil {
+		return errors.Wrapf(err, "could not save group")
+	}
 
 	return nil
 }
 
-func (gc *GroupContext) Invite(newMember string) error {
-	// fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, gc.Group.Name)
+func (groupCtx *GroupContext) Stop() {
+	groupCtx.GroupConnection.Kill()
+}
+
+func (groupCtx *GroupContext) AddFile(filePath string) error {
+	session := NewAddFileClientGroupSession("newPath", "oldPath", groupCtx)
+	groupCtx.Sessions.Append(session)
+	go session.Run()
+
+	return nil
+}
+
+func (groupCtx *GroupContext) Invite(newMember ethcommon.Address) error {
+	fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, groupCtx.Group.Name)
+
+	if err := groupCtx.Network.InviteUser(groupCtx.Group.Id.Data().([32]byte), newMember); err != nil {
+		return fmt.Errorf("could not invite user: GroupContext::Invite(): %s", err)
+	}
 
 	// prevHash := gc.CalculateState(gc.Members, gc.Repo)
 	// newMembers := gc.Members.Append(newMember, gc.Network)
@@ -184,7 +172,7 @@ func (gc *GroupContext) Invite(newMember string) error {
 	// 	SignedBy:  []SignedBy{},
 	// }
 	// // fork down the collection of signatures for the operation
-	// go gc.Synchronizer.CollectApprovals(&transaction)
+	// go gc.GroupConnection.CollectApprovals(&transaction)
 
 	// // send out the proposed transaction to be signed
 	// transactionBytes, err := json.Marshal(transaction)
@@ -201,32 +189,33 @@ func (gc *GroupContext) Invite(newMember string) error {
 	// if err != nil {
 	// 	return fmt.Errorf("could not marshal group message: GroupContext.Invite: %s", err)
 	// }
-	// if err := gc.sendToAll(groupMsgBytes); err != nil {
+	// if err := gc.SendToAll(groupMsgBytes); err != nil {
 	// 	return fmt.Errorf("could not send group message: GroupContext.Invite: %s", err)
 	// }
 	return nil
 }
 
-func (gc *GroupContext) Save() error {
+func (groupCtx *GroupContext) Save() error {
 	return fmt.Errorf("not implemented: GroupContext.Save")
 }
 
 // Sends pubsub messages to all members of the group
-func (gc *GroupContext) sendToAll(data []byte) error {
-	encGroupMsg := gc.Group.Boxer.BoxSeal(data)
-	if err := gc.IPFS.PubSubPublish(gc.Group.Name, base64.StdEncoding.EncodeToString(encGroupMsg)); err != nil {
-		return fmt.Errorf("could not pubsub publish: GroupContext.sendToAll: %s", err)
-	}
-	return nil
-}
+//func (groupCtx *GroupContext) SendToAll(data []byte) error {
+//	encGroupMsg := groupCtx.Group.Boxer.BoxSeal(data)
+//
+//	if err := groupCtx.Ipfs.PubSubPublish(groupCtx.Group.Name, base64.StdEncoding.EncodeToString(encGroupMsg)); err != nil {
+//		return fmt.Errorf("could not pubsub publish: GroupContext.SendToAll: %s", err)
+//	}
+//	return nil
+//}
 
 // Pulls from others the given group meta data
-func (gc *GroupContext) PullGroupData(data string) error {
+func (groupCtx *GroupContext) PullGroupData(data string) error {
 	return fmt.Errorf("not implemented: GroupContext.PullGroupData")
 }
 
 // Loads the locally available group meta data (stored in the
 // data/public/for/GROUP/ directory).
-func (gc *GroupContext) LoadGroupData(data string) error {
+func (groupCtx *GroupContext) LoadGroupData(data string) error {
 	return fmt.Errorf("not implemented GroupContext.LoadGroupData")
 }

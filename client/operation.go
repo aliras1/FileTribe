@@ -3,8 +3,6 @@ package client
 import (
 	"fmt"
 	"strings"
-
-	"ipfs-share/client/filestorage"
 )
 
 type SignedBy struct {
@@ -39,11 +37,6 @@ type IOperation interface {
 	Validate(state []byte, groupCtx *GroupContext) error
 }
 
-type InviteOperation struct {
-	From      string
-	NewMember string
-}
-
 func NewOperation(operation *RawOperation) (IOperation, error) {
 	switch operation.Type {
 	case "INVITE":
@@ -72,6 +65,11 @@ func NewOperation(operation *RawOperation) (IOperation, error) {
 	}
 }
 
+type InviteOperation struct {
+	From      string
+	NewMember string
+}
+
 func NewInviteOperation(from string, newMember string) IOperation {
 	inviteOperation := InviteOperation{
 		From:      from,
@@ -84,7 +82,7 @@ func (i *InviteOperation) Validate(state []byte, groupCtx *GroupContext) error {
 	// newMembers := groupCtx.Members.Append(i.NewMember, groupCtx.Network)
 	// newState := groupCtx.CalculateState(newMembers, groupCtx.Repo)
 	// if !bytes.Equal(newState[:], state) {
-	// 	return fmt.Errorf("invalid new state in transaction proposal: Synchronizer.validateTransaction")
+	// 	return fmt.Errorf("invalid new state in transaction proposal: GroupConnection.validateTransaction")
 	// }
 	return nil
 }
@@ -110,13 +108,13 @@ func (i *InviteOperation) Execute(groupCtx *GroupContext) error {
 	// ); err != nil {
 	// 	return fmt.Errorf("could not create ga cap for user '%s': InviteOperation.Execute: %s", i.NewMember, err)
 	// }
-	// if err := groupCtx.Storage.PublishPublicDir(groupCtx.IPFS); err != nil {
+	// if err := groupCtx.Storage.PublishPublicDir(groupCtx.Ipfs); err != nil {
 	// 	return fmt.Errorf("could not publish public dir: InviteOperation.Execute: %s", err)
 	// }
 	// // the proposer invites the new member
 	// if strings.Compare(i.From, groupCtx.User.Name) == 0 {
 	// 	glog.Info("\t--> Invite proposer sending chain message...")
-	// 	if err := groupCtx.Network.SendMessage(
+	// 	if err := groupCtx.Network.DialP2PConn(
 	// 		i.From,
 	// 		i.NewMember,
 	// 		"GROUP INVITE",
@@ -157,14 +155,14 @@ func (share *ShareFileOperation) Validate(state []byte, groupCtx *GroupContext) 
 }
 
 func (share *ShareFileOperation) Execute(groupCtx *GroupContext) error {
-	file := &filestorage.FileGroup{
+	file := &FileGroup{
 		Name:     share.FileName,
 		IPFSHash: share.IPFSHash,
 	}
 	if err := groupCtx.Storage.DownloadGroupFile(file,
 		groupCtx.Group.Name,
 		&groupCtx.Group.Boxer,
-		groupCtx.IPFS,
+		groupCtx.Ipfs,
 	); err != nil {
 		return fmt.Errorf("could not download group share file: ShareFileOperation: %s", err)
 	}

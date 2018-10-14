@@ -1,92 +1,15 @@
 package client
 
 import (
-	"flag"
+	//"flag"
 	"fmt"
 	"net"
 	"os"
-	"strings"
+	//"strings"
 	"testing"
-	"time"
-
-	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
-
-	nw "ipfs-share/networketh"
-
-	ipfsapi "github.com/ipfs/go-ipfs-api"
 )
 
-func Alice(signup bool, ethKeyPath string, network *nw.Network) (*UserContext, error) {
-	t := time.Now()
-	ipfs := ipfsapi.NewShell("http://127.0.0.1:5001")
-	glog.Info("ipfs inst: ", time.Since(t))
-
-	username := "alice"
-	password := "pwd"
-	homeDir := "./alice/"
-	var alice *UserContext
-	var err error
-
-	if signup {
-		alice, err = NewUserContextFromSignUp(username, password, ethKeyPath, homeDir, network, ipfs)
-		if err != nil {
-			return nil, fmt.Errorf("could not sign up: Alice: %s", err)
-		}
-	} else {
-		alice, err = NewUserContextFromSignIn(username, password, ethKeyPath, homeDir, network, ipfs)
-		if err != nil {
-			return nil, fmt.Errorf("could not sign in: Alice: %s", err)
-		}
-	}
-
-	network.Simulator.Commit()
-
-	reg, err := network.IsUserRegistered(alice.User.Address)
-	if err != nil {
-		return nil, err
-	}
-	if !reg {
-		return nil, fmt.Errorf("bob not regged")
-	}
-
-	return alice, nil
-}
-
-func Bob(signup bool, ethKeyPath string, network *nw.Network) (*UserContext, error) {
-	ipfs := ipfsapi.NewShell("http://127.0.0.1:5001")
-
-	username := "bob"
-	password := "pwd"
-	homeDir := "./bob/"
-	var bob *UserContext
-	var err error
-
-	if signup {
-		bob, err = NewUserContextFromSignUp(username, password, ethKeyPath, homeDir, network, ipfs)
-		if err != nil {
-			return nil, fmt.Errorf("could not sign up: Bob: %s", err)
-		}
-	} else {
-		bob, err = NewUserContextFromSignIn(username, password, ethKeyPath, homeDir, network, ipfs)
-		if err != nil {
-			return nil, fmt.Errorf("could not sign in: Bob: %s", err)
-		}
-	}
-
-	network.Simulator.Commit()
-
-	reg, err := network.IsUserRegistered(bob.User.Address)
-	if err != nil {
-		return nil, err
-	}
-	if !reg {
-		return nil, fmt.Errorf("bob not regged")
-	}
-
-	return bob, nil
-}
 
 func CleanUp() {
 	os.RemoveAll("./alice")
@@ -123,76 +46,167 @@ func A() error {
 
 func TestCucc(t *testing.T) {
 	err := A()
-	
+
 	fmt.Println(err)
 	fmt.Println(errors.Cause(err))
 	fmt.Printf("%v", err)
 }
 
 func TestBigScenario(t *testing.T) {
-	flag.Set("alsologtostderr", fmt.Sprintf("%t", true))
-	var logLevel string
-	flag.StringVar(&logLevel, "-stderrthreshold", "INFO", "test")
-
-	CleanUp()
-
-	password := "pwd"
-	dir := "../test/keystore"
-	ks := keystore.NewKeyStore(dir, keystore.StandardScryptN, keystore.StandardScryptP)
-	keyAlice, ethKeyAlicePath, err := nw.NewAccount(ks, dir, password)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyBob, ethKeyBobPath, err := nw.NewAccount(ks, dir, password)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	networkAlice, networkBob, err := nw.NewTestNetwork(keyAlice, keyBob)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	alice, err := Alice(true, ethKeyAlicePath, networkAlice)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bob, err := Bob(true, ethKeyBobPath, networkBob)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	glog.Info("----- fun begins -----")
-
-	if err := alice.AddFriend(bob.User.Address); err != nil {
-		t.Fatal(err)
-	}
-	networkAlice.Simulator.Commit()
-
-	time.Sleep(2 * time.Second)
-
-	if len(bob.WaitingFriends) < 1 {
-		t.Fatal("no friend request")
-	}
-	bob.WaitingFriends[0].Confirm(bob)
-	networkBob.Simulator.Commit()
-
-	time.Sleep(125 * time.Second)
-
-	if len(alice.Friends) < 1 {
-		t.Fatal("alice has no friend")
-	}
-	if len(bob.Friends) < 1 {
-		t.Fatal("bob has no friend")
-	}
-
-	if strings.Compare(alice.Friends[0].MyDirectory, bob.Friends[0].HisDirectory) != 0 {
-		t.Fatal("alices dir mismatch")
-	}
-	if strings.Compare(alice.Friends[0].HisDirectory, bob.Friends[0].MyDirectory) != 0 {
-		t.Fatal("bobs dir mismatch")
-	}
-
+	//flag.Set("alsologtostderr", fmt.Sprintf("%t", true))
+	//var logLevel string
+	//flag.StringVar(&logLevel, "-stderrthreshold", "INFO", "test")
+	//
+	//CleanUp()
+	//
+	//password := "pwd"
+	//dir := "../test/keystore"
+	//ks := keystore.NewKeyStore(dir, keystore.StandardScryptN, keystore.StandardScryptP)
+	//
+	//ti := time.Now()
+	//keyAlice, ethKeyAlicePath, err := nw.NewAccount(ks, dir, password)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//keyBob, ethKeyBobPath, err := nw.NewAccount(ks, dir, password)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//keyCharlie, ethKeyCharliePath, err := nw.NewAccount(ks, dir, password)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//
+	//glog.Info("0: ", time.Since(ti))
+	//ti = time.Now()
+	//testNetwork, err := nw.NewTestNetwork(keyAlice, keyBob, keyCharlie)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//glog.Info("1: ", time.Since(ti))
+	//
+	//ti = time.Now()
+	//testNetwork.SetAuthAlice()
+	//alice, err := NewTestUser("alice", true, ethKeyAlicePath, testNetwork)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//glog.Info("2: ", time.Since(ti))
+	//
+	//ti = time.Now()
+	//testNetwork.SetAuthBob()
+	//bob, err := NewTestUser("bob", true, ethKeyBobPath, testNetwork)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//glog.Info("3: ", time.Since(ti))
+	//
+	//testNetwork.SetAuthCharlie()
+	//charlie, err := NewTestUser("charlie", true, ethKeyCharliePath, testNetwork)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//
+	//glog.Info("----- fun begins -----")
+	//
+	//ti = time.Now()
+	//if err := alice.AddFriend(bob.User.Address); err != nil {
+	//	t.Fatal(err)
+	//}
+	//testNetwork.Simulator.Commit()
+	//glog.Info("4: ", time.Since(ti))
+	//
+	//time.Sleep(2 * time.Second)
+	//
+	//if len(bob.WaitingFriends) < 1 {
+	//	t.Fatal("no friend request")
+	//}
+	//
+	//ti = time.Now()
+	//bob.WaitingFriends[0].Confirm(bob)
+	//
+	//glog.Info("5: ", time.Since(ti))
+	//
+	//time.Sleep(3 * time.Second)
+	//
+	//if len(alice.Friends) < 1 {
+	//	t.Fatal("alice has no friend")
+	//}
+	//if len(bob.Friends) < 1 {
+	//	t.Fatal("bob has no friend")
+	//}
+	//
+	//if strings.Compare(alice.Friends[0].MyDirectory, bob.Friends[0].HisDirectory) != 0 {
+	//	t.Fatal("alices dir mismatch")
+	//}
+	//if strings.Compare(alice.Friends[0].HisDirectory, bob.Friends[0].MyDirectory) != 0 {
+	//	t.Fatal("bobs dir mismatch")
+	//}
+	//
+	//fileID1, err := alice.AddFile("./user.go")
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//fileID2, err := alice.AddFile("./user_test.go")
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//fileID3, err := bob.AddFile("./storage.go")
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//if len(alice.Repo[alice.User.Address]) < 2 {
+	//	t.Fatal("no files by Alice")
+	//}
+	//if len(bob.Repo[bob.User.Address]) < 1 {
+	//	t.Fatal("no files by Bob")
+	//}
+	//
+	//if err := alice.Repo[alice.User.Address][fileID1].Share(alice.Friends[0], alice); err != nil {
+	//	t.Fatal(err)
+	//}
+	//if err := alice.Repo[alice.User.Address][fileID2].Share(alice.Friends[0], alice); err != nil {
+	//	t.Fatal(err)
+	//}
+	//if err := bob.Repo[bob.User.Address][fileID3].Share(bob.Friends[0], bob); err != nil {
+	//	t.Fatal(err)
+	//}
+	//
+	//testNetwork.Simulator.Commit()
+	//// networkBob.Simulator.Commit()
+	//
+	//time.Sleep(10 * time.Second)
+	//
+	//alice.List()
+	//bob.List()
+	//
+	//if len(bob.Repo[alice.User.Address]) < 2 {
+	//	t.Fatal("no files by Bob2")
+	//}
+	//if len(alice.Repo[bob.User.Address]) < 1 {
+	//	t.Fatal("no files by Alice2")
+	//}
+	//
+	//alice.SignOut()
+	//
+	//fileID4, err := bob.AddFile("./cap.go")
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//if err := bob.Repo[bob.User.Address][fileID4].Share(bob.Friends[0], bob); err != nil {
+	//	t.Fatal(err)
+	//}
+	//
+	//networkBob.Simulator.Commit()
+	//
+	//alice, err = Alice(false, ethKeyAlicePath, testNetwork)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//
+	//time.Sleep(10 * time.Second)
+	//
+	//alice.List()
 }
 
 func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
@@ -215,7 +229,7 @@ func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
 	// fmt.Println(uc1)
 	// fmt.Println(uc2)
 	// if len(uc1.Groups) < 1 || len(uc2.Groups) < 1 {
-	// 	t.Fatal("did not built any groups")
+	// 	t.Fatal("did not built any Groups")
 	// }
 	// fmt.Println("----- members -----")
 	// fmt.Println(uc1.Groups[0].Members)
@@ -262,7 +276,7 @@ func TestGroupInviteWithMoreMembers(t *testing.T) {
 	// }
 	// time.Sleep(130 * time.Second)
 	// if len(uc1.Groups) != len(uc3.Groups) && len(uc2.Groups) != len(uc3.Groups) {
-	// 	t.Fatal("#groups do not match")
+	// 	t.Fatal("#Groups do not match")
 	// }
 	// if len(uc1.Groups[0].Members.List) != len(uc2.Groups[0].Members.List) {
 	// 	t.Fatal("members do not match")
@@ -286,7 +300,7 @@ func TestMessages(t *testing.T) {
 	// 	t.Fatal(err)
 	// }
 
-	// // if err := network.SendMessage(
+	// // if err := network.DialP2PConn(
 	// // 	&bob.User.Boxer.PublicKey,
 	// // 	&alice.User.Signer,
 	// // 	alice.User.EthKey.Address,
@@ -319,10 +333,10 @@ func TestSharingFromUserContext(t *testing.T) {
 	// if err != nil {
 	// 	t.Fatal(err)
 	// }
-	// if err := uc1.AddAndShareFile("usercontext.go", []string{uc2.User.Name}); err != nil {
+	// if err := uc1.AddFile("usercontext.go", []string{uc2.User.Name}); err != nil {
 	// 	t.Fatal(err)
 	// }
-	// if err := uc1.AddAndShareFile("usercontext_test.go", []string{uc2.User.Name}); err != nil {
+	// if err := uc1.AddFile("usercontext_test.go", []string{uc2.User.Name}); err != nil {
 	// 	t.Fatal(err)
 	// }
 	// time.Sleep(3 * time.Second)
