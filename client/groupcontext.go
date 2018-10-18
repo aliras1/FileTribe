@@ -68,7 +68,7 @@ func (ml *MemberList) Get(userID [32]byte) *Member {
 type GroupContext struct {
 	User             *User
 	Group            *Group
-	Sessions         *ConcurrentCollection
+	P2P *P2PServer
 	Repo             *GroupRepo
 	Members          *MemberList
 	GroupConnection  *GroupConnection
@@ -84,14 +84,22 @@ func (groupCtx *GroupContext) Id() IIdentifier {
 	return groupCtx.Group.Id
 }
 
-func NewGroupContext(group *Group, user *User, sessions *ConcurrentCollection, addressBook *ConcurrentCollection, network nw.INetwork, ipfs ipfsapi.IIpfs, storage *Storage) (*GroupContext, error) {
+func NewGroupContext(
+	group *Group,
+	user *User,
+	p2p *P2PServer,
+	addressBook *ConcurrentCollection,
+	network nw.INetwork,
+	ipfs ipfsapi.IIpfs,
+	storage *Storage,
+) (*GroupContext, error) {
 	repo := &GroupRepo{
 		Files: []*FileGroup{},
 	}
 	groupContext := &GroupContext{
 		User:            user,
 		Group:           group,
-		Sessions: sessions,
+		P2P: p2p,
 		Repo:            repo,
 		GroupConnection: nil,
 		AddressBook:     addressBook,
@@ -109,13 +117,21 @@ func NewGroupContext(group *Group, user *User, sessions *ConcurrentCollection, a
 	return groupContext, nil
 }
 
-func NewGroupContextFromCAP(cap *GroupAccessCAP, user *User, sessions *ConcurrentCollection, addressBook *ConcurrentCollection, network nw.INetwork, ipfs ipfsapi.IIpfs, storage *Storage) (*GroupContext, error) {
+func NewGroupContextFromCAP(
+	cap *GroupAccessCAP,
+	user *User,
+	p2p *P2PServer,
+	addressBook *ConcurrentCollection,
+	network nw.INetwork,
+	ipfs ipfsapi.IIpfs,
+	storage *Storage,
+) (*GroupContext, error) {
 	group := &Group{
 		Id:  NewBytesId(cap.GroupID),
 		Boxer: cap.Boxer,
 	}
 
-	gc, err := NewGroupContext(group, user, sessions, addressBook, network, ipfs, storage)
+	gc, err := NewGroupContext(group, user, p2p, addressBook, network, ipfs, storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create group context: NewGroupContextFromCAP: %s", err)
 	}
@@ -151,8 +167,8 @@ func (groupCtx *GroupContext) Stop() {
 }
 
 func (groupCtx *GroupContext) AddFile(filePath string) error {
-	session := NewAddFileClientGroupSession("newPath", "oldPath", groupCtx)
-	groupCtx.Sessions.Append(session)
+	session := NewAddFileClientGroupSession("newPath", groupCtx)
+	groupCtx.P2P.AddSession(session)
 	go session.Run()
 
 	return nil

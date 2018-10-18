@@ -21,6 +21,7 @@ type P2PConn net.TCPConn
 
 type P2PServer struct {
 	sessions *ConcurrentCollection
+	SessionClosedChan chan IIdentifier
 	p2pListener *ipfs.P2PListener
 	ctx *UserContext
 	stop chan bool
@@ -29,28 +30,44 @@ type P2PServer struct {
 
 func NewP2PConnection(port string, ctx *UserContext) (*P2PServer, error) {
 	stop := make(chan bool)
+	closedSession := make(chan IIdentifier)
 
 	p2pListener, err := ctx.Ipfs.P2PListen(context.Background(), p2pProtocolName, "/ip4/127.0.0.1/tcp/" + port)
 	if err != nil {
-		return nil, errors.New("could not create p2p listener")
+		return nil, errors.New("could not create P2P listener")
 	}
 
 	sessions := NewConcurrentCollection()
 
 	p2p := &P2PServer{
+		SessionClosedChan: closedSession,
 		sessions: sessions,
 		p2pListener: p2pListener,
 		ctx: ctx,
 		stop: stop,
 	}
 
+	go p2p.closedSessionListener()
 	go p2p.connectionListener(port)
 
 	return p2p, nil
 }
 
+func (p2p *P2PServer) AddSession(session ISession) {
+	if err := p2p.sessions.Append(session); err != nil {
+		glog.Warningf("could not append elem: %s", err)
+	}
+}
+
 func (p2p *P2PServer) Stop() {
 	p2p.stop <- true
+}
+
+func (p2p *P2PServer) closedSessionListener() {
+	for sessionId := range p2p.SessionClosedChan {
+		//p2p.sessions.DeleteWithId(sessionId)
+		glog.Infof("session %d closed", sessionId.Data().(uint32))
+	}
 }
 
 func (p2p *P2PServer) connectionListener(port string) {
@@ -73,7 +90,7 @@ func (p2p *P2PServer) connectionListener(port string) {
 		select {
 		case <- p2p.stop:
 			{
-				glog.Infof("stopping p2p connection")
+				glog.Infof("stopping P2P connection")
 				for _, stopConnectionChannel := range p2p.stopConnectionChannels {
 					stopConnectionChannel <- true
 				}
@@ -123,7 +140,9 @@ func (p2p *P2PServer) handleConnection(addressBook *ConcurrentCollection, conn *
 				sessionInterface := p2p.sessions.Get(sessionId)
 				if sessionInterface == nil {
 					session = NewServerSession(msg, contact, p2p.ctx)
-					p2p.sessions.Append(session)
+					if err := p2p.sessions.Append(session); err != nil {
+						glog.Warningf("could not append elem: %s", err)
+					}
 					go session.Run()
 					continue
 				}
@@ -155,10 +174,10 @@ func (conn *P2PConn) ReadMessage(addressBook *ConcurrentCollection, network netw
 		return nil, nil, errors.Wrapf(err, "invalid message")
 	}
 
-	addressBook.Append(contact)
+	if err := addressBook.Append(contact); err != nil {
+		glog.Warningf("could not append elem: %s", err)
+	}
 	contact = addressBook.Get(contact.Id()).(*Contact)
-
-	glog.Infof("got p2p msg: %s", string(data))
 
 	return msg, contact, nil
 }

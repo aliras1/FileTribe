@@ -18,7 +18,6 @@ import (
 	"ipfs-share/crypto"
 	"ipfs-share/eth"
 	"github.com/pkg/errors"
-	. "ipfs-share/collections"
 )
 
 // const key = `{"address":"c4f45f1822b614116ea5b68d4020f3ae1a0179e5","crypto":{"cipher":"aes-128-ctr","ciphertext":"c47565906c488c5122c805a31a3e241d0839cda984903ec28aa07c8892deb5b0","cipherparams":{"iv":"d7814d0dc15a383630c0439c6ad2fea8"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"78d74296f7796969b5764bcfda6cf1cd2cd5bfc423fc0897313b9d23e7e0f219"},"mac":"d852362f275a61fd32acdf040a136a08dc0dc25ab69ddc3d54404b17e9f85826"},"id":"ce2a2147-38d2-4d99-95c1-4968ff6b7a0e","version":3}`
@@ -51,10 +50,17 @@ type INetwork interface {
 	CreateGroup(id [32]byte, name string, ipfsPath string) error
 	InviteUser(groupId [32]byte, newMember common.Address) error
 	GetGroup(groupId [32]byte) (string, []common.Address, string, error)
-	UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string, approvals *ConcurrentCollection) error
+	UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string, approvals []*Approval) error
 
+	// contract events
 	GetGroupInvitationSub() *event.Subscription
 	GetGroupInvitationChannel() chan *eth.EthGroupInvitation
+
+	GetGroupUpdateIpfsSub() *event.Subscription
+	GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsPath
+
+	GetDebugSub() *event.Subscription
+	GetDebugChannel() chan *eth.EthDebug
 }
 
 type Network struct {
@@ -66,11 +72,15 @@ type Network struct {
 	MessageSentSub     event.Subscription
 	MessageSentChannel chan *eth.EthMessageSent
 
-	DebugSub     event.Subscription
-	DebugChannel chan *eth.EthDebug
-
+	// contract events
 	groupInvitationSub     event.Subscription
 	groupInvitationChannel chan *eth.EthGroupInvitation
+
+	groupUpdateIpfsSub     event.Subscription
+	groupUpdateIpfsChannel chan *eth.EthGroupUpdateIpfsPath
+
+	debugSub     event.Subscription
+	debugChannel chan *eth.EthDebug
 }
 
 func NewAccount(ks *keystore.KeyStore, ethKeyPath, password string) (*ecdsa.PrivateKey, error) {
@@ -135,6 +145,7 @@ func NewNetwork(wsAddress, ethKeyPath, contractAddress, password string) (INetwo
 	channelMessageSent := make(chan *eth.EthMessageSent)
 	channelDebug := make(chan *eth.EthDebug)
 	channelGroupInvitation := make(chan *eth.EthGroupInvitation)
+	channelGroupUpdateIpfs := make(chan *eth.EthGroupUpdateIpfsPath)
 
 	network := Network{
 		Client: conn,
@@ -143,9 +154,10 @@ func NewNetwork(wsAddress, ethKeyPath, contractAddress, password string) (INetwo
 		Auth:    auth,
 		
 		MessageSentChannel: channelMessageSent,
-		DebugChannel: channelDebug,
+		debugChannel:       channelDebug,
 
 		groupInvitationChannel: channelGroupInvitation,
+		groupUpdateIpfsChannel: channelGroupUpdateIpfs,
 	}
 
 	if err := network.SubscribeToEvents(0); err != nil {
@@ -175,7 +187,7 @@ func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 	if err != nil {
 		return err
 	}
-	subDebug, err := network.Session.Contract.WatchDebug(opts, network.DebugChannel)
+	subDebug, err := network.Session.Contract.WatchDebug(opts, network.debugChannel)
 	if err != nil {
 		return err
 	}
@@ -183,10 +195,15 @@ func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 	if err != nil {
 		return err
 	}
+	subGroupUpdateIpfs, err := network.Session.Contract.WatchGroupUpdateIpfsPath(opts, network.groupUpdateIpfsChannel)
+	if err != nil {
+		return err
+	}
 
 	network.MessageSentSub = subMessageSent
-	network.DebugSub = subDebug
+	network.debugSub = subDebug
 	network.groupInvitationSub = subGroupInvitation
+	network.groupUpdateIpfsSub = subGroupUpdateIpfs
 
 	return nil
 }
@@ -199,14 +216,29 @@ func (network *Network) GetGroupInvitationChannel() chan *eth.EthGroupInvitation
 	return network.groupInvitationChannel
 }
 
-func (network *Network) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string, approvals *ConcurrentCollection) error {
+func (network *Network) GetGroupUpdateIpfsSub() *event.Subscription {
+	return &network.groupUpdateIpfsSub
+}
+
+func (network *Network) GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsPath {
+	return network.groupUpdateIpfsChannel
+}
+
+func (network *Network) GetDebugSub() *event.Subscription {
+	return &network.debugSub
+}
+
+func (network *Network) GetDebugChannel() chan *eth.EthDebug {
+	return network.debugChannel
+}
+
+func (network *Network) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string, approvals []*Approval) error {
 	var members []common.Address
 	var rs [][32]byte
 	var ss [][32]byte
 	var vs []uint8
 
-	for approvalInterface := range approvals.Iterator() {
-		approval := approvalInterface.(*Approval)
+	for _, approval := range approvals {
 		if len(approval.Signature) != 65 {
 			return errors.New("signature length must be 65")
 		}
@@ -221,7 +253,11 @@ func (network *Network) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string
 		copy(s[:], approval.Signature[32:64])
 		ss = append(ss, s)
 
-		vs = append(vs, approval.Signature[65])
+		v := approval.Signature[64]
+		if v < 27 {
+			v = v + 27;
+		}
+		vs = append(vs, v)
 	}
 
 	_, err := network.Session.UpdateGroupIpfsPath(groupId, newIpfsPath, members, rs, ss, vs)

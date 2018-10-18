@@ -31,17 +31,17 @@ type WaitingFriendRequest struct {
 }
 
 func (wfr *WaitingFriendRequest) Confirm(ctx *UserContext) error {
-	//ipfsHash, err := ctx.Storage.MakeForDirectory(wfr.Friend.Contact.Address.String(), ctx.Ipfs)
+	//ipfsHash, err := groupCtx.Storage.MakeForDirectory(wfr.Friend.Contact.Address.String(), groupCtx.Ipfs)
 	//if err != nil {
 	//	return fmt.Errorf("could not create for directory: WaitingFriendRequest:Confirm: %s", err)
 	//}
 	//
-	//message, err := NewFriendConfirmation(ctx.User.Address, wfr.Friend.Contact.Address, ipfsHash, ctx.User.Signer)
+	//message, err := NewFriendConfirmation(groupCtx.User.Address, wfr.Friend.Contact.Address, ipfsHash, groupCtx.User.Signer)
 	//if err != nil {
 	//	return fmt.Errorf("could not create new friend confirmation: WaitingFriendRequest:Confirm: %s", err)
 	//}
 	//
-	//if err := message.DialP2PConn(&wfr.Friend.Contact.Boxer, &ctx.User.Boxer.PublicKey, ctx.User.Address, ctx.Network); err != nil {
+	//if err := message.DialP2PConn(&wfr.Friend.Contact.Boxer, &groupCtx.User.Boxer.PublicKey, groupCtx.User.Address, groupCtx.Network); err != nil {
 	//	return fmt.Errorf("could not send message confirmation: WaitingFriendRequest:Confirm: %s", err)
 	//}
 
@@ -56,12 +56,12 @@ type UserContext struct {
 	WaitingFriends []*WaitingFriendRequest
 	Repo           map[ethcommon.Address]map[[32]byte]*PTPFile
 	IPNSAddr       string
-	AddressBook   *ConcurrentCollection
+	AddressBook    *ConcurrentCollection
 	Network        nw.INetwork
 	Ipfs           ipfsapi.IIpfs
 	Storage        *Storage // TODO lock
 	LatestBlock    uint64
-	p2pConnection  *P2PServer
+	P2P            *P2PServer
 
 	channelStop chan int
 }
@@ -116,9 +116,9 @@ func NewUserContext(dataPath string, user *User, network nw.INetwork, ipfs ipfsa
 	uc.AddressBook = NewConcurrentCollection()
 	p2p, err := NewP2PConnection(p2pPort, &uc)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create p2p connection")
+		return nil, errors.Wrap(err, "could not create P2P connection")
 	}
-	uc.p2pConnection = p2p
+	uc.P2P = p2p
 
 	if err := uc.Storage.LoadContextData(&uc); err != nil {
 		glog.Warningf("could not load context data: %s", err)
@@ -148,8 +148,9 @@ func NewUserContext(dataPath string, user *User, network nw.INetwork, ipfs ipfsa
 	//}
 
 	//go HandleMessageEventChannel(&uc)
-	//go DebugHandler(&uc)
+	go HandleDebugEvents(&uc)
 	go HandleGroupInvitationEvents(&uc)
+	go HandleGroupUpdateIpfsEvents(&uc)
 
 	if err := uc.BuildGroups(); err != nil {
 		return nil, fmt.Errorf("could not build Groups: NewUserContext: %s", err)
@@ -192,7 +193,7 @@ func (ctx *UserContext) SignOut() {
 		groupCtx.(*GroupContext).Stop()
 	}
 
-	//uc.Network.DebugSub.Unsubscribe()
+	//uc.Network.debugSub.Unsubscribe()
 	//uc.Network.MessageSentSub.Unsubscribe()
 
 	if err := ctx.SaveState(); err != nil {
@@ -232,7 +233,7 @@ func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Me
 	// 	messageEnc = append(messageEnc, b[0])
 	// }
 
-	// messageSigned, err := ctx.User.Boxer.Open(messageEnc)
+	// messageSigned, err := groupCtx.User.Boxer.Open(messageEnc)
 	// if err != nil {
 	// 	return nil, fmt.Errorf("could not decrypt event: connectionListener: %s", err)
 	// }
@@ -244,7 +245,7 @@ func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Me
 	// 	return nil, fmt.Errorf("could not unmarshal message: connectionListener: %s", err)
 	// }
 
-	// _, _, verifyKeyBytes, _, err := ctx.Network.GetUser(message.From)
+	// _, _, verifyKeyBytes, _, err := groupCtx.Network.GetUser(message.From)
 	// if err != nil {
 	// 	return nil, fmt.Errorf(
 	// 		"could not get user '%s': connectionListener: %s",
@@ -271,11 +272,21 @@ func (ctx *UserContext) BuildGroups() error {
 		return fmt.Errorf("[ERROR]: could not get group caps: UserContext.BuildGroups: %s", err)
 	}
 	for _, cap := range caps {
-		groupCtx, err := NewGroupContextFromCAP(&cap, ctx.User, ctx.p2pConnection.sessions, ctx.AddressBook, ctx.Network, ctx.Ipfs, ctx.Storage)
+		groupCtx, err := NewGroupContextFromCAP(
+			&cap,
+			ctx.User,
+			ctx.P2P,
+			ctx.AddressBook,
+			ctx.Network,
+			ctx.Ipfs,
+			ctx.Storage,
+		)
 		if err != nil {
 			return fmt.Errorf("could not create new group context: UserContext.BuildGroups: %s", err)
 		}
-		ctx.Groups.Append(groupCtx)
+		if err := ctx.Groups.Append(groupCtx); err != nil {
+			glog.Warningf("could not append elem: %s", err)
+		}
 	}
 	glog.Infof("Building Groups ended")
 	return nil
@@ -289,11 +300,21 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 	if err := group.Save(ctx.Storage); err != nil {
 		return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
 	}
-	groupCtx, err := NewGroupContext(group, ctx.User, ctx.p2pConnection.sessions, ctx.AddressBook, ctx.Network, ctx.Ipfs, ctx.Storage)
+	groupCtx, err := NewGroupContext(
+		group,
+		ctx.User,
+		ctx.P2P,
+		ctx.AddressBook,
+		ctx.Network,
+		ctx.Ipfs,
+		ctx.Storage,
+	)
 	if err != nil {
 		return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
 	}
-	ctx.Groups.Append(groupCtx)
+	if err := ctx.Groups.Append(groupCtx); err != nil {
+		glog.Warningf("could not append elem: %s", err)
+	}
 
 	return nil
 }

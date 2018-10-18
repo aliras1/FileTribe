@@ -34,12 +34,12 @@ func (contact *Contact) Send(data []byte) error {
 	if contact.conn == nil {
 		conn, err := contact.dialP2PConn(contact.ipfs)
 		if err != nil {
-			return errors.Wrap(err, "could not dial p2p connection")
+			return errors.Wrap(err, "could not dial P2P connection")
 		}
 		contact.conn = conn
 	}
 
-	glog.Infof("sending p2p msg from %s to %s", contact.conn.RemoteAddr().String(), contact.conn.LocalAddr().String())
+	glog.Infof("sending P2P msg from %s to %s", contact.conn.RemoteAddr().String(), contact.conn.LocalAddr().String())
 
 	if _, err := contact.conn.Write(data); err != nil {
 		return errors.Wrap(err, "could not send data")
@@ -50,7 +50,7 @@ func (contact *Contact) Send(data []byte) error {
 
 func (contact *Contact) dialP2PConn(ipfs ipfs.IIpfs) (*P2PConn, error) {
 	id, _ := ipfs.ID()
-	glog.Infof("user with ipfs %s is p2p dialing to %s", id.ID, contact.IpfsPeerId)
+	glog.Infof("user with ipfs %s is P2P dialing to %s", id.ID, contact.IpfsPeerId)
 
 	if contact.conn != nil {
 		return contact.conn, nil

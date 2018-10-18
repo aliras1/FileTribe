@@ -1,6 +1,7 @@
 pragma solidity ^0.4.23;
 
 import "./openzeppelin-solidity/contracts/ECRecovery.sol";
+import "./HeapSortLib.sol";
 
 contract Dipfshare {
     struct User {
@@ -57,7 +58,7 @@ contract Dipfshare {
     event GroupInvitation(address from, address to, bytes32 groupId);
     event GroupUpdateIpfsPath(bytes32 groupId, string ipfsPath);
     event MessageSent(bytes message);
-    event Debug(address addr);
+    event Debug(bytes msg);
 
     constructor () public {
         owner = msg.sender;
@@ -83,9 +84,7 @@ contract Dipfshare {
     }
 
     function isUserRegistered(address id) public view returns(bool) {
-        if (users[id].exists)
-            return true;
-        return false;
+        return users[id].exists;
     }
 
     function getUser(address id) public view returns(string, string, bytes32, bytes) {
@@ -141,9 +140,7 @@ contract Dipfshare {
     }
 
     function verify(address user, bytes32 hash, uint8 v, bytes32 r, bytes32 s) internal constant returns(bool) {
-        bytes memory prefix = "\x19Ethereum Signed Message:\n32";
-        bytes32 prefixedHash = keccak256(prefix, hash);
-        return ecrecover(prefixedHash, v, r, s) == user;
+        return ecrecover(hash, v, r, s) == user;
     }
 
     function updateGroupIpfsPath(
@@ -157,18 +154,34 @@ contract Dipfshare {
         public
     {
         require(groups[groupId].exists, "group does not exist");
-        require(members.length == rs.length);
-        require(members.length == ss.length);
-        require(members.length == vs.length);
+
+        uint length = members.length;
+        require(rs.length == length);
+        require(ss.length == length);
+        require(vs.length == length);
+        require(length > groups[groupId].members.length / 2);
+
+        bytes32 digest = keccak256(groups[groupId].ipfsPath, newIpfsPath);
+
+        HeapSortLib.heapSort(members);
 
         for (uint i = 0; i < members.length; i++) {
             require(isUserInGroup(groupId, members[i]), "invalid approval: user is not a group member");
-            bytes32 digest = keccak256(groups[groupId].ipfsPath, newIpfsPath);
             require(verify(members[i], digest, vs[i], rs[i], ss[i]), "invalid approval: invalid signature");
+            if (i == 0) {
+                continue;
+            }
+
+            // in a sorted array we can be sure, that
+            // if there is no matching addresses next
+            // to each other than there is not any in
+            // the whole array
+            require(members[i] != members[i - 1]);
         }
 
         // TODO: re-entrance danger
         groups[groupId].ipfsPath = newIpfsPath;
+
         emit GroupUpdateIpfsPath(groupId, newIpfsPath);
     }
 

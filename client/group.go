@@ -39,6 +39,7 @@ func NewGroup(groupName string) *Group {
 			Key: secretKeyBytes,
 			RNG: rand.Reader,
 		},
+		IPFSPath: "init_ipfs",
 	}
 }
 
@@ -58,11 +59,15 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 			continue
 		}
 
-		ctx.AddressBook.Append(NewContact(c, ctx.Ipfs))
+		if err := ctx.AddressBook.Append(NewContact(c, ctx.Ipfs)); err != nil {
+			glog.Warningf("could not append elem: %s", err)
+		}
 		contact := ctx.AddressBook.Get(NewAddressId(&c.Address)).(*Contact)
 
 		session := NewGetGroupKeyClientSession(groupId, contact, ctx)
-		ctx.p2pConnection.sessions.Append(session)
+		if err := ctx.P2P.sessions.Append(session); err != nil {
+			glog.Warningf("could not append elem: %s", err)
+		}
 
 		go session.Run()
 	}

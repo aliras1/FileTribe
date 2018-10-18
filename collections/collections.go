@@ -2,7 +2,7 @@ package collections
 
 import (
 	"sync"
-	"github.com/golang/glog"
+	"github.com/pkg/errors"
 )
 
 
@@ -21,7 +21,7 @@ func NewConcurrentCollection() *ConcurrentCollection {
 	}
 }
 
-func (c *ConcurrentCollection) Append(item ICollectionItem) {
+func (c *ConcurrentCollection) Append(item ICollectionItem) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -32,12 +32,13 @@ func (c *ConcurrentCollection) Append(item ICollectionItem) {
 
 	for _, elem := range c.list {
 		if elem.Id().Equal(item.Id()) {
-			glog.Error("could not append to concurrent collection: item already exists")
-			return
+			return errors.New("could not append to concurrent collection: item already exists")
 		}
 	}
 
 	c.list = append(c.list, item)
+
+	return nil
 }
 
 func (c *ConcurrentCollection) Iterator() <- chan interface{} {

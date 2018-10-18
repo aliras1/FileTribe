@@ -172,7 +172,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	group.Invite(bob.User.Address)
 	group.Invite(charlie.User.Address)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	if bob.Groups.Count() != 1 {
 		t.Fatal("no group found by bob")

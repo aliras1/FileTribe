@@ -168,13 +168,15 @@ func (conn *GroupConnection) connectionListener() {
 				}
 
 				// append new contact to address book. if one already exists, therefore
-				// it's p2p connection is not null, we will not try to create a new one
+				// it's P2P connection is not null, we will not try to create a new one
 				// later
-				conn.groupCtx.AddressBook.Append(contact)
+				if err := conn.groupCtx.AddressBook.Append(contact); err != nil {
+					glog.Warningf("could not append elem: %s", err)
+				}
 				contact = conn.groupCtx.AddressBook.Get(contact.Id()).(*Contact)
 
-				session := NewServerGroupSession(conn.groupCtx.Group.Id.Data().([32]byte), msg, contact, conn.groupCtx)
-				conn.groupCtx.Sessions.Append(session)
+				session := NewServerGroupSession(msg, contact, conn.groupCtx)
+				conn.groupCtx.P2P.AddSession(session)
 				go session.Run()
 			}
 		}
