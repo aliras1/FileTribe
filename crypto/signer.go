@@ -22,7 +22,6 @@ func (s *Signer) Verify(digest, signature []byte) bool {
 	return ethcrypto.VerifySignature(pk, digest, signature[:len(signature) - 1])
 }
 
-
 type VerifyKey []byte
 
 func (vk *VerifyKey) Verify(digest, signature []byte) bool {

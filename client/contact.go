@@ -9,8 +9,10 @@ import (
 	"github.com/pkg/errors"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/golang/glog"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 
 	. "ipfs-share/collections"
+	"bytes"
 )
 
 type Contact struct {
@@ -46,6 +48,16 @@ func (contact *Contact) Send(data []byte) error {
 	}
 
 	return nil
+}
+
+func (contact *Contact) VerifySignature(digest, signature []byte) bool {
+	pk, err := ethcrypto.SigToPub(digest, signature)
+	if err != nil {
+		glog.Warningf("could not get pk from sig: %s", err)
+	}
+
+	otherAddress := ethcrypto.PubkeyToAddress(*pk)
+	return bytes.Equal(contact.Address.Bytes(), otherAddress.Bytes())
 }
 
 func (contact *Contact) dialP2PConn(ipfs ipfs.IIpfs) (*P2PConn, error) {

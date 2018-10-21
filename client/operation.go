@@ -155,18 +155,18 @@ func (share *ShareFileOperation) Validate(state []byte, groupCtx *GroupContext) 
 }
 
 func (share *ShareFileOperation) Execute(groupCtx *GroupContext) error {
-	file := &FileGroup{
-		Name:     share.FileName,
-		IPFSHash: share.IPFSHash,
-	}
-	if err := groupCtx.Storage.DownloadGroupFile(file,
-		groupCtx.Group.Name,
-		&groupCtx.Group.Boxer,
-		groupCtx.Ipfs,
-	); err != nil {
-		return fmt.Errorf("could not download group share file: ShareFileOperation: %s", err)
-	}
-
-	groupCtx.Repo.Append(file)
+	//file := &FileGroup{
+	//	Name:     share.FileName,
+	//	IPFSHash: share.IPFSHash,
+	//}
+	//if err := groupCtx.Storage.DownloadGroupFile(file,
+	//	groupCtx.Group.Name,
+	//	&groupCtx.Group.Boxer,
+	//	groupCtx.Ipfs,
+	//); err != nil {
+	//	return fmt.Errorf("could not download group share file: ShareFileOperation: %s", err)
+	//}
+	//
+	//groupCtx.Repo.Append(file)
 	return nil
 }

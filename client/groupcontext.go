@@ -93,14 +93,11 @@ func NewGroupContext(
 	ipfs ipfsapi.IIpfs,
 	storage *Storage,
 ) (*GroupContext, error) {
-	repo := &GroupRepo{
-		Files: []*FileGroup{},
-	}
+
 	groupContext := &GroupContext{
 		User:            user,
 		Group:           group,
 		P2P: p2p,
-		Repo:            repo,
 		GroupConnection: nil,
 		AddressBook:     addressBook,
 		Network:         network,
@@ -108,10 +105,16 @@ func NewGroupContext(
 		Storage:         storage,
 	}
 
+	repo, err := NewGroupRepo(groupContext)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create group repo")
+	}
+
 	if err := groupContext.Update(); err != nil {
 		glog.Errorf("could not update group %v", groupContext.Group.Id.Data())
 	}
 
+	groupContext.Repo = repo
 	groupContext.GroupConnection = NewGroupConnection(groupContext)
 
 	return groupContext, nil
@@ -167,7 +170,17 @@ func (groupCtx *GroupContext) Stop() {
 }
 
 func (groupCtx *GroupContext) AddFile(filePath string) error {
-	session := NewAddFileClientGroupSession("newPath", groupCtx)
+	file, err := NewGroupFile(filePath, groupCtx)
+	if err != nil {
+		return errors.Wrap(err, "could not create new group file")
+	}
+
+	hash, err := groupCtx.Repo.QueueAddFile(file)
+	if err != nil {
+		return errors.Wrap(err, "could not queue add file operation into group repo")
+	}
+
+	session := NewAddFileGroupSessionClient(hash, groupCtx)
 	groupCtx.P2P.AddSession(session)
 	go session.Run()
 

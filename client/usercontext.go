@@ -54,7 +54,7 @@ type UserContext struct {
 	Friends        []*Friend
 	PendingFriends []*Friend
 	WaitingFriends []*WaitingFriendRequest
-	Repo           map[ethcommon.Address]map[[32]byte]*PTPFile
+	Repo           map[ethcommon.Address]map[[32]byte]*File
 	IPNSAddr       string
 	AddressBook    *ConcurrentCollection
 	Network        nw.INetwork
@@ -294,12 +294,6 @@ func (ctx *UserContext) BuildGroups() error {
 
 func (ctx *UserContext) CreateGroup(groupname string) error {
 	group := NewGroup(groupname)
-	if err := group.CreateOnNetwork(ctx.User.Name, ctx.Network); err != nil {
-		return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
-	}
-	if err := group.Save(ctx.Storage); err != nil {
-		return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
-	}
 	groupCtx, err := NewGroupContext(
 		group,
 		ctx.User,
@@ -312,6 +306,15 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 	if err != nil {
 		return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
 	}
+
+	groupCtx.Group.IPFSPath = groupCtx.Repo.ipfsHash
+	if err := group.Save(ctx.Storage); err != nil {
+		return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
+	}
+	if err := groupCtx.Group.CreateOnNetwork(ctx.User.Name, ctx.Network); err != nil {
+		return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
+	}
+
 	if err := ctx.Groups.Append(groupCtx); err != nil {
 		glog.Warningf("could not append elem: %s", err)
 	}
@@ -320,21 +323,22 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 }
 
 func (ctx *UserContext) AddFile(filePath string) ([32]byte, error) {
-	file, err := NewPTPFile(filePath, ctx)
-	if err != nil {
-		return [32]byte{}, fmt.Errorf("could not create new file ptp'%s': UserContext.AddFile: %s", filePath, err)
-	}
-
-	// file is user's, add to under his address
-	ctx.addFileToRepo(ctx.User.Address, file)
-
-	return file.CAP.ID, nil
+	//file, err := NewFile(filePath, ctx)
+	//if err != nil {
+	//	return [32]byte{}, fmt.Errorf("could not create new file ptp'%s': UserContext.AddFile: %s", filePath, err)
+	//}
+	//
+	//// file is user's, add to under his address
+	//ctx.addFileToRepo(ctx.User.Address, file)
+	//
+	//return file.Cap.Id, nil
+	return [32]byte{}, nil
 }
 
 func (ctx *UserContext) isFileInRepo(ipfsHash string) bool {
 	for _, friendFiles := range ctx.Repo {
 		for _, file := range friendFiles {
-			if strings.Compare(file.CAP.IPFSHash, ipfsHash) == 0 {
+			if strings.Compare(file.Cap.IpfsHash, ipfsHash) == 0 {
 				return true
 			}
 		}
@@ -342,14 +346,14 @@ func (ctx *UserContext) isFileInRepo(ipfsHash string) bool {
 	return false
 }
 
-func (ctx *UserContext) addFileToRepo(address ethcommon.Address, file *PTPFile) {
-	ctx.Repo[address][file.CAP.ID] = file
+func (ctx *UserContext) addFileToRepo(address ethcommon.Address, file *File) {
+	ctx.Repo[address][file.Cap.Id] = file
 }
 
-func (ctx *UserContext) getFileFromRepo(id [32]byte) *PTPFile {
+func (ctx *UserContext) getFileFromRepo(id [32]byte) *File {
 	for _, friendFiles := range ctx.Repo {
 		for _, file := range friendFiles {
-			if bytes.Equal(file.CAP.ID[:], id[:]) {
+			if bytes.Equal(file.Cap.Id[:], id[:]) {
 				return file
 			}
 		}
@@ -367,8 +371,8 @@ func (ctx *UserContext) List() map[string][]string {
 		glog.Info(address.String())
 
 		for _, file := range files {
-			glog.Info("\t--> " + file.CAP.FileName)
-			fileList = append(fileList, file.CAP.FileName)
+			glog.Info("\t--> " + file.Cap.FileName)
+			fileList = append(fileList, file.Cap.FileName)
 		}
 
 		list[address.String()] = fileList

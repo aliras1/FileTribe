@@ -59,16 +59,18 @@ func DecodeGroupMessage(data []byte) (*GroupMessage, error) {
 }
 
 func (m *GroupMessage) Validate(network networketh.INetwork, ipfs ipfs.IIpfs) (*Contact, error) {
-	contact, err := network.GetUser(m.From)
+	netContact, err := network.GetUser(m.From)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not get user %s", m.From.String())
 	}
 
-	if !contact.VerifyKey.Verify(m.Digest(), m.Sig) {
+	contact := NewContact(netContact, ipfs)
+
+	if !contact.VerifySignature(m.Digest(), m.Sig) {
 		return nil, errors.New("invalid message")
 	}
 
-	return NewContact(contact, ipfs), nil
+	return contact, nil
 }
 
 func (m *GroupMessage) Digest() []byte {

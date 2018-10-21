@@ -34,7 +34,6 @@ type Contact struct {
 	Name      string
 	IpfsPeerId string
 	Boxer     crypto.AnonymPublicKey
-	VerifyKey crypto.VerifyKey
 }
 
 type Approval struct {
@@ -45,7 +44,7 @@ type Approval struct {
 
 type INetwork interface {
 	GetUser(address common.Address) (*Contact, error)
-	RegisterUser(username, ipfsPeerId string, boxingKey [32]byte, verifyKey []byte) error
+	RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) error
 	IsUserRegistered(common.Address) (bool, error)
 	CreateGroup(id [32]byte, name string, ipfsPath string) error
 	InviteUser(groupId [32]byte, newMember common.Address) error
@@ -268,8 +267,8 @@ func (network *Network) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string
 	return nil
 }
 
-func (network *Network) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte, verifyKey []byte) error {
-	_, err := network.Session.RegisterUser(username, ipfsPeerId, boxingKey, verifyKey)
+func (network *Network) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) error {
+	_, err := network.Session.RegisterUser(username, ipfsPeerId, boxingKey)
 	if err != nil {
 		return fmt.Errorf("error while Network.RegisterUser(): %s", err)
 	}
@@ -285,7 +284,7 @@ func (network *Network) IsUserRegistered(id common.Address) (bool, error) {
 }
 
 func (network *Network) GetUser(address common.Address) (*Contact, error) {
-	username, ipfsPeerId, boxingKey, verifyKey, err := network.Session.GetUser(address)
+	username, ipfsPeerId, boxingKey, err := network.Session.GetUser(address)
 	if err != nil {
 		return &Contact{}, fmt.Errorf("error while Network-GetUser(): %s", err)
 	}
@@ -294,7 +293,6 @@ func (network *Network) GetUser(address common.Address) (*Contact, error) {
 		Name:      username,
 		IpfsPeerId: ipfsPeerId,
 		Boxer:     crypto.AnonymPublicKey{&boxingKey},
-		VerifyKey: crypto.VerifyKey(verifyKey),
 	}, nil
 }
 

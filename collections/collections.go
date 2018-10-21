@@ -5,6 +5,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+type Compare func(interface{}, interface{}) bool
 
 type ICollectionItem interface {
 	Id() IIdentifier
@@ -114,6 +115,7 @@ func (c *ConcurrentCollection) FirstOrDefault(id IIdentifier) interface{} {
 
 	return c.list[0]
 }
+
 
 func (c *ConcurrentCollection) Count() int {
 	c.lock.RLock()

@@ -14,7 +14,7 @@ func NewServerGroupSession(msg *GroupMessage, contact *Contact, ctx *GroupContex
 	switch msg.Type {
 	case AddFile:
 		{
-			return NewAddFileServerGroupSession(msg, contact, ctx)
+			return NewAddFileGroupSessionServer(msg, contact, ctx)
 		}
 	default:
 		{
@@ -23,7 +23,7 @@ func NewServerGroupSession(msg *GroupMessage, contact *Contact, ctx *GroupContex
 	}
 }
 
-type AddFileClientGroupSession struct {
+type AddFileGroupSessionClient struct {
 	sessionId            IIdentifier
 	newIpfsPath          string
 	approvals            []*networketh.Approval
@@ -34,11 +34,11 @@ type AddFileClientGroupSession struct {
 	approvalsCountChan   chan int
 }
 
-func NewAddFileClientGroupSession(newIpfsPath string, groupCtx *GroupContext) ISession {
+func NewAddFileGroupSessionClient(newIpfsPath string, groupCtx *GroupContext) ISession {
 	sessionId := rand.Uint32()
 	hasher := crypto.NewKeccak256Hasher()
 
-	session := &AddFileClientGroupSession{
+	session := &AddFileGroupSessionClient{
 		sessionId: NewUint32Id(sessionId),
 		groupCtx: groupCtx,
 		newIpfsPath: newIpfsPath,
@@ -53,12 +53,12 @@ func NewAddFileClientGroupSession(newIpfsPath string, groupCtx *GroupContext) IS
 	return session
 }
 
-func (session *AddFileClientGroupSession) close() {
+func (session *AddFileGroupSessionClient) close() {
 	session.state = EndOfSession
 	session.groupCtx.P2P.SessionClosedChan <- session.Id()
 }
 
-func (session *AddFileClientGroupSession) Abort() {
+func (session *AddFileGroupSessionClient) Abort() {
 	session.lock.Lock()
 	defer session.lock.Unlock()
 
@@ -69,25 +69,25 @@ func (session *AddFileClientGroupSession) Abort() {
 	session.close()
 }
 
-func (session *AddFileClientGroupSession) GetState() uint8 {
+func (session *AddFileGroupSessionClient) GetState() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
 	return session.state
 }
 
-func (session *AddFileClientGroupSession) Id() IIdentifier {
+func (session *AddFileGroupSessionClient) Id() IIdentifier {
 	return session.sessionId
 }
 
-func (session *AddFileClientGroupSession) IsAlive() bool {
+func (session *AddFileGroupSessionClient) IsAlive() bool {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
 	return session.state == EndOfSession
 }
 
-func (session *AddFileClientGroupSession) Run() {
+func (session *AddFileGroupSessionClient) Run() {
 	addFileGroupMsg := AddFileGroupMessage{
 		NewGroupIpfsPath: session.newIpfsPath,
 		NewFileCapIpfsHash: "",
@@ -126,7 +126,7 @@ func (session *AddFileClientGroupSession) Run() {
 	}
 }
 
-func (session *AddFileClientGroupSession) NextState(contact *Contact, data []byte) {
+func (session *AddFileGroupSessionClient) NextState(contact *Contact, data []byte) {
 	session.lock.Lock()
 	defer session.lock.Unlock()
 
@@ -135,7 +135,7 @@ func (session *AddFileClientGroupSession) NextState(contact *Contact, data []byt
 	}
 
 	sig := data
-	if !contact.VerifyKey.Verify(session.digest, sig) {
+	if !contact.VerifySignature(session.digest, sig) {
 		glog.Errorf("invalid approval")
 		return
 	}
@@ -158,7 +158,7 @@ func (session *AddFileClientGroupSession) NextState(contact *Contact, data []byt
 	}
 }
 
-type AddFileServerGroupSession struct {
+type AddFileGroupSessionServer struct {
 	sessionId          IIdentifier
 	newFileCapIpfsHash string
 	newIpfsPath        string
@@ -168,12 +168,12 @@ type AddFileServerGroupSession struct {
 	contact            *Contact
 }
 
-func (session *AddFileServerGroupSession) close() {
+func (session *AddFileGroupSessionServer) close() {
 	session.state = EndOfSession
 	session.groupCtx.P2P.SessionClosedChan <- session.Id()
 }
 
-func (session *AddFileServerGroupSession) Abort() {
+func (session *AddFileGroupSessionServer) Abort() {
 	session.lock.Lock()
 	defer session.lock.Unlock()
 
@@ -184,28 +184,31 @@ func (session *AddFileServerGroupSession) Abort() {
 	session.close()
 }
 
-func (session *AddFileServerGroupSession) GetState() uint8 {
+func (session *AddFileGroupSessionServer) GetState() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
 	return session.state
 }
 
-func (session *AddFileServerGroupSession) Id() IIdentifier {
+func (session *AddFileGroupSessionServer) Id() IIdentifier {
 	return session.sessionId
 }
 
-func (session *AddFileServerGroupSession) IsAlive() bool {
+func (session *AddFileGroupSessionServer) IsAlive() bool {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
 	return session.state == EndOfSession
 }
 
-func (session *AddFileServerGroupSession) Run() {
+func (session *AddFileGroupSessionServer) Run() {
 	defer session.close()
 
-	// TODO: check if valid
+	if err := session.groupCtx.Repo.IsValidAddFile(session.newIpfsPath); err != nil {
+		glog.Errorf("add file operation is invalid: %s", err)
+		return
+	}
 
 	hasher := crypto.NewKeccak256Hasher()
 	digest := hasher.Sum([]byte(session.groupCtx.Group.IPFSPath), []byte(session.newIpfsPath))
@@ -238,16 +241,16 @@ func (session *AddFileServerGroupSession) Run() {
 	}
 }
 
-func (session *AddFileServerGroupSession) NextState(contact *Contact, data []byte) { }
+func (session *AddFileGroupSessionServer) NextState(contact *Contact, data []byte) { }
 
-func NewAddFileServerGroupSession(msg *GroupMessage, contact *Contact, ctx *GroupContext) *AddFileServerGroupSession {
+func NewAddFileGroupSessionServer(msg *GroupMessage, contact *Contact, ctx *GroupContext) *AddFileGroupSessionServer {
 	addFileMsg, err := DecodeAddFileGroupMessage(msg.Payload)
 	if err != nil {
-		glog.Errorf("could not create AddFileServerGroupSession: %s", err)
+		glog.Errorf("could not create AddFileGroupSessionServer: %s", err)
 		return nil
 	}
 
-	session := &AddFileServerGroupSession{
+	session := &AddFileGroupSessionServer{
 		groupCtx:    ctx,
 		sessionId:   NewUint32Id(msg.SessionId),
 		newIpfsPath: addFileMsg.NewGroupIpfsPath,

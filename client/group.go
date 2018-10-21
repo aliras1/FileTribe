@@ -64,7 +64,7 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 		}
 		contact := ctx.AddressBook.Get(NewAddressId(&c.Address)).(*Contact)
 
-		session := NewGetGroupKeyClientSession(groupId, contact, ctx)
+		session := NewGetGroupKeySessionClient(groupId, contact, ctx)
 		if err := ctx.P2P.sessions.Append(session); err != nil {
 			glog.Warningf("could not append elem: %s", err)
 		}

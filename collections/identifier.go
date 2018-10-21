@@ -3,11 +3,13 @@ package collections
 import (
 	"bytes"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"encoding/base64"
 )
 
 type IIdentifier interface {
 	Equal(other IIdentifier) bool
 	Data() interface{}
+	ToString() string
 }
 
 type Uint32Id struct {
@@ -16,6 +18,10 @@ type Uint32Id struct {
 
 func NewUint32Id(id uint32) *Uint32Id {
 	return &Uint32Id{data: id}
+}
+
+func (id *Uint32Id) ToString() string {
+	return string(id.data)
 }
 
 func (id *Uint32Id) Equal(other IIdentifier) bool {
@@ -29,6 +35,10 @@ func (id *Uint32Id) Data() interface{} {
 
 type BytesId struct {
 	data [32]byte
+}
+
+func (id *BytesId) ToString() string {
+	return base64.URLEncoding.EncodeToString(id.data[:])
 }
 
 func NewBytesId(id [32]byte) *BytesId {
@@ -46,6 +56,10 @@ func (id *BytesId) Data() interface{} {
 
 type AddressId struct {
 	data *ethcommon.Address
+}
+
+func (id *AddressId) ToString() string {
+	return id.data.String()
 }
 
 func NewAddressId(address *ethcommon.Address) *AddressId {

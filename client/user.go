@@ -6,7 +6,6 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/glog"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/scrypt"
@@ -77,8 +76,7 @@ func SignUp(username, password, ipfsPeerId, ethKeyPath string, network nw.INetwo
 		return nil, fmt.Errorf("username '%s' already exists: SignUp", username)
 	}
 
-	pk := ethcrypto.CompressPubkey(&user.Signer.PrivateKey.PublicKey)
-	if err = network.RegisterUser(username, ipfsPeerId, *user.Boxer.PublicKey.Value, pk); err != nil {
+	if err = network.RegisterUser(username, ipfsPeerId, *user.Boxer.PublicKey.Value); err != nil {
 		return nil, fmt.Errorf("could not register username '%s': SignUp: %s", username, err)
 	}
 

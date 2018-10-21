@@ -191,7 +191,9 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal("charlie's group has not got enough members")
 	}
 
-	group.AddFile("new ipfs")
+	if err := group.AddFile("./group.go"); err != nil {
+		t.Fatal(err)
+	}
 
 	time.Sleep(3 * time.Second)
 
