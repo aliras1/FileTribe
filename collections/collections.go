@@ -116,6 +116,20 @@ func (c *ConcurrentCollection) FirstOrDefault(id IIdentifier) interface{} {
 	return c.list[0]
 }
 
+func (c *ConcurrentCollection) Update(item ICollectionItem) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	for i, elem := range c.list {
+		if elem.Id().Equal(item.Id()) {
+			c.list[i] = item
+			return nil
+		}
+	}
+
+	return errors.New("item not found")
+}
+
 
 func (c *ConcurrentCollection) Count() int {
 	c.lock.RLock()

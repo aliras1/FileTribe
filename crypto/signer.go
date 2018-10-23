@@ -7,7 +7,6 @@ import (
 	"github.com/golang/glog"
 )
 
-//https://github.com/golang/crypto/blob/master/nacl/sign/sign.go
 
 type Signer struct {
 	PrivateKey *ecdsa.PrivateKey

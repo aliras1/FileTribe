@@ -2,7 +2,7 @@ package client
 
 import (
 	"context"
-	"ipfs-share/networketh"
+	"ipfs-share/network"
 	"ipfs-share/ipfs"
 	"strings"
 	"net"
@@ -16,12 +16,12 @@ import (
 )
 
 type Contact struct {
-	*networketh.Contact
+	*network.Contact
 	conn *P2PConn
 	ipfs ipfs.IIpfs
 }
 
-func NewContact(contact *networketh.Contact, ipfs ipfs.IIpfs) *Contact {
+func NewContact(contact *network.Contact, ipfs ipfs.IIpfs) *Contact {
 	return &Contact{
 		Contact:contact,
 		ipfs:ipfs,

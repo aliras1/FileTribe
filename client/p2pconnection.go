@@ -7,14 +7,12 @@ import (
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
 	"time"
-	"ipfs-share/networketh"
+	"ipfs-share/network"
 	. "ipfs-share/collections"
 )
 
 const (
 	p2pProtocolName = "ipfsShareP2P"
-	p2pListenPort   = "13001"
-	//p2pAddress = "/ip4/127.0.0.1/tcp/13001"
 )
 
 type P2PConn net.TCPConn
@@ -154,7 +152,7 @@ func (p2p *P2PServer) handleConnection(addressBook *ConcurrentCollection, conn *
 	}
 }
 
-func (conn *P2PConn) ReadMessage(addressBook *ConcurrentCollection, network networketh.INetwork, ipfs ipfs.IIpfs) (*Message, *Contact, error) {
+func (conn *P2PConn) ReadMessage(addressBook *ConcurrentCollection, network network.INetwork, ipfs ipfs.IIpfs) (*Message, *Contact, error) {
 	data := make([]byte, 4096)
 
 	length, err := conn.Read(data)

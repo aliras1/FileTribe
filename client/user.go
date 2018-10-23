@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/sha3"
 
 	"ipfs-share/crypto"
-	nw "ipfs-share/networketh"
+	nw "ipfs-share/network"
 )
 
 type User struct {
@@ -42,11 +42,11 @@ func NewUser(username, password, ethKeyPath string) (*User, error) {
 	copy(secretBoxerBytes[:], keySeeds)
 	curve25519.ScalarBaseMult(&publicBoxerBytes, &secretBoxerBytes)
 
-	json, err := ioutil.ReadFile(ethKeyPath)
+	ethKeyData, err := ioutil.ReadFile(ethKeyPath)
 	if err != nil {
 		return nil, err
 	}
-	key, err := keystore.DecryptKey(json, password)
+	key, err := keystore.DecryptKey(ethKeyData, password)
 	if err != nil {
 		return nil, err
 	}
@@ -98,9 +98,4 @@ func SignIn(username, password, keyStore string, network nw.INetwork) (*User, er
 	}
 
 	return user, nil
-}
-
-func (u *User) SignTransaction(transaction *Transaction) []byte {
-	// return u.Signer.VerifyKey.Sign(transaction.Bytes())[:64]
-	return nil
 }

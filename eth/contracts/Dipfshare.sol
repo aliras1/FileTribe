@@ -1,7 +1,6 @@
 pragma solidity ^0.4.23;
 
-//import "./openzeppelin-solidity/contracts/ECRecovery.sol";
-//import "./HeapSortLib.sol";
+//import "../HeapSortLib.sol";
 
 contract Dipfshare {
     struct User {
@@ -16,20 +15,19 @@ contract Dipfshare {
         address owner;
         string name;
         address[] members;
-        string ipfsPath; // TODO: encrypted with group key
+        string ipfsPath; // encrypted with group key
         mapping(address => bool) canInvite;
         bool exists;
     }
 
     address public owner;
-    mapping(address => User) private users; // user.verify_key = key
+    mapping(address => User) private users;
     mapping(bytes32 => Group) private groups;
 
     event UserRegistered(address addr);
     event GroupRegistered(bytes32 id);
     event GroupInvitation(address from, address to, bytes32 groupId);
     event GroupUpdateIpfsPath(bytes32 groupId, string ipfsPath);
-    event MessageSent(bytes message);
     event Debug(bytes msg);
 
     constructor () public {
@@ -155,9 +153,6 @@ contract Dipfshare {
         emit GroupUpdateIpfsPath(groupId, newIpfsPath);
     }
 
-    function sendMessage(bytes message) public {
-        emit MessageSent(message);
-    }
 
     /// @dev Utility function for heapSort
     /// @param index The index of child node

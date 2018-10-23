@@ -13,7 +13,7 @@ import (
 	ipfsapi "github.com/ipfs/go-ipfs-api"
 
 	"ipfs-share/client"
-	nw "ipfs-share/networketh"
+	nw "ipfs-share/network"
 )
 
 const (

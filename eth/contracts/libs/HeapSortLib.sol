@@ -1,5 +1,4 @@
-pragma solidity ^0.4.18;
-
+pragma solidity ^0.4.23;
 
 library HeapSortLib {
     /// @dev Utility function for heapSort

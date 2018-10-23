@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"ipfs-share/crypto"
-	nw "ipfs-share/networketh"
+	nw "ipfs-share/network"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
@@ -16,11 +16,12 @@ import (
 )
 
 type Group struct {
-	Id       IIdentifier
-	Name     string
-	IPFSPath string
-	Members  []ethcommon.Address
-	Boxer    crypto.SymmetricKey
+	Id                IIdentifier
+	Name              string
+	IpfsHash          string
+	EncryptedIpfsHash string
+	Members           []ethcommon.Address
+	Boxer             crypto.SymmetricKey
 }
 
 func NewGroup(groupName string) *Group {
@@ -39,7 +40,8 @@ func NewGroup(groupName string) *Group {
 			Key: secretKeyBytes,
 			RNG: rand.Reader,
 		},
-		IPFSPath: "init_ipfs",
+		IpfsHash: "init_ipfs",
+		EncryptedIpfsHash: "init_enc",
 	}
 }
 
@@ -76,8 +78,11 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 }
 
 func (g *Group) Save(storage *Storage) error {
-	cap := GroupAccessCAP{g.Id.Data().([32]byte), g.Boxer}
-	if err := cap.Store(storage); err != nil {
+	cap := GroupAccessCap{
+		GroupId: g.Id.Data().([32]byte),
+		Boxer:   g.Boxer,
+	}
+	if err := cap.Save(storage); err != nil {
 		return fmt.Errorf("could not store ga cap: Group.Save: %s", err)
 	}
 	return nil
@@ -86,7 +91,9 @@ func (g *Group) Save(storage *Storage) error {
 func (g *Group) CreateOnNetwork(owner string, network nw.INetwork) error {
 	glog.Infof("Registering group '%s'", g.Name)
 
-	if err := network.CreateGroup(g.Id.Data().([32]byte), g.Name, g.IPFSPath); err != nil {
+	encIpfsPath := base64.URLEncoding.EncodeToString(g.Boxer.BoxSeal([]byte(g.IpfsHash)))
+	g.EncryptedIpfsHash = encIpfsPath
+	if err := network.CreateGroup(g.Id.Data().([32]byte), g.Name, encIpfsPath); err != nil {
 		// TODO: check error message
 		return fmt.Errorf("could not register group: Group.CreateOnNetwork: %s", err)
 	}

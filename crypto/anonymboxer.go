@@ -10,27 +10,6 @@ import (
 	//"ipfs-share/crypto/blslib"
 )
 
-// import "github.com/chai2010/cgo"
-
-// func x() {
-
-
-// 	seed := cgo.UInt8(2)
-
-// 	sk := blslib.BLSPrivateKeyFromBytes(seed)
-// 	pk := sk.GetPublicKey()
-
-// 	msg := cgo.NewUInt8(100, 2, 254, 88, 90, 45, 23)
-
-// 	sig := sk.Sign(*msg, cgo.UInt64(7))
-
-
-// 	sig.SetAggregationInfo(blslib.AggregationInfoFromMsg(pk, *msg, 7))
-
-// 	ok := blslib.BLSVerify(sig)
-
-// 	fmt.Println(ok)
-// }
 
 type AnonymPublicKey struct {
 	Value *[32]byte
@@ -44,15 +23,6 @@ type AnonymBoxer struct {
 	PublicKey  AnonymPublicKey
 	PrivateKey AnonymPrivateKey
 }
-
-// func cucc() {
-// 	seed := []uint8{0, 50, 6, 244, 24, 199, 1, 25, 52, 88, 192,
-// 		19, 18, 12, 89, 6, 220, 18, 102, 58, 209,
-// 		82, 12, 62, 89, 110, 182, 9, 44, 20, 254, 22};
-
-// 	sk := C.bls.FromSeed(seed, sizeof(seed));
-// 	fmt.Println(sk)
-// }
 
 func getNonce(pk1, pk2 *[32]byte) *[24]byte {
 	var nonce [24]byte

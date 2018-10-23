@@ -3,7 +3,7 @@ package client
 import (
 	"testing"
 
-	nw "ipfs-share/networketh"
+	nw "ipfs-share/network"
 
 	"github.com/golang/glog"
 	"fmt"
@@ -180,6 +180,10 @@ func TestGroupContext_Invite(t *testing.T) {
 	if charlie.Groups.Count() != 1 {
 		t.Fatal("no group found by charlie")
 	}
+
+	fmt.Println(alice.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
+	fmt.Println(bob.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
+	fmt.Println(charlie.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
 
 	if len(alice.Groups.FirstOrDefault(nil).(*GroupContext).Group.Members) != 3 {
 		t.Fatal("alice's group has not got enough members")

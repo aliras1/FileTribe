@@ -6,11 +6,12 @@ import (
 	. "ipfs-share/collections"
 	"ipfs-share/crypto"
 	"math/rand"
-	"ipfs-share/networketh"
+	"ipfs-share/network"
 	"encoding/hex"
+	"encoding/base64"
 )
 
-func NewServerGroupSession(msg *GroupMessage, contact *Contact, ctx *GroupContext) ISession {
+func NewServerGroupSession(msg *Message, contact *Contact, ctx *GroupContext) ISession {
 	switch msg.Type {
 	case AddFile:
 		{
@@ -25,11 +26,11 @@ func NewServerGroupSession(msg *GroupMessage, contact *Contact, ctx *GroupContex
 
 type AddFileGroupSessionClient struct {
 	sessionId            IIdentifier
-	newIpfsPath          string
-	approvals            []*networketh.Approval
+	encNewIpfsPathBase64 string
+	approvals            []*network.Approval
 	digest               []byte // the original message digest which is signed by the group members
 	state                uint8
-	groupCtx *GroupContext
+	groupCtx             *GroupContext
 	lock                 sync.RWMutex
 	approvalsCountChan   chan int
 }
@@ -38,17 +39,23 @@ func NewAddFileGroupSessionClient(newIpfsPath string, groupCtx *GroupContext) IS
 	sessionId := rand.Uint32()
 	hasher := crypto.NewKeccak256Hasher()
 
+	encNewIpfsPathBase64 := base64.URLEncoding.EncodeToString(groupCtx.Group.Boxer.BoxSeal([]byte(newIpfsPath)))
+	glog.Errorf("master enc base64: %v", encNewIpfsPathBase64)
+
+	digest := hasher.Sum([]byte(groupCtx.Group.EncryptedIpfsHash), []byte(encNewIpfsPathBase64))
+	glog.Errorf("verif digest: %v", digest)
+
 	session := &AddFileGroupSessionClient{
-		sessionId: NewUint32Id(sessionId),
-		groupCtx: groupCtx,
-		newIpfsPath: newIpfsPath,
-		approvals: []*networketh.Approval{},
-		digest: hasher.Sum([]byte(groupCtx.Group.IPFSPath), []byte(newIpfsPath)),
-		state: 0,
-		approvalsCountChan: make(chan int),
+		sessionId:            NewUint32Id(sessionId),
+		groupCtx:             groupCtx,
+		encNewIpfsPathBase64: string(encNewIpfsPathBase64),
+		approvals:            []*network.Approval{},
+		digest:               digest,
+		state:                0,
+		approvalsCountChan:   make(chan int),
 	}
 
-	glog.Infof("----> Digest: %s, old: %s, new: %s", hex.EncodeToString(session.digest), groupCtx.Group.IPFSPath, newIpfsPath)
+	glog.Infof("----> Digest: %s, old: %s, new: %s", hex.EncodeToString(session.digest), groupCtx.Group.IpfsHash, encNewIpfsPathBase64)
 
 	return session
 }
@@ -89,7 +96,7 @@ func (session *AddFileGroupSessionClient) IsAlive() bool {
 
 func (session *AddFileGroupSessionClient) Run() {
 	addFileGroupMsg := AddFileGroupMessage{
-		NewGroupIpfsPath: session.newIpfsPath,
+		NewGroupIpfsPath: session.encNewIpfsPathBase64,
 		NewFileCapIpfsHash: "",
 	}
 	payload, err := addFileGroupMsg.Encode()
@@ -99,7 +106,7 @@ func (session *AddFileGroupSessionClient) Run() {
 		return
 	}
 
-	msg, err := NewGroupMessage(
+	msg, err := NewMessage(
 		session.groupCtx.User.Address,
 		AddFile,
 		session.sessionId.Data().(uint32),
@@ -140,7 +147,7 @@ func (session *AddFileGroupSessionClient) NextState(contact *Contact, data []byt
 		return
 	}
 
-	approval := &networketh.Approval{
+	approval := &network.Approval{
 		From: contact.Address,
 		Signature: sig,
 	}
@@ -151,7 +158,7 @@ func (session *AddFileGroupSessionClient) NextState(contact *Contact, data []byt
 	}
 
 	groupId := session.groupCtx.Group.Id.Data().([32]byte)
-	if err := session.groupCtx.Network.UpdateGroupIpfsPath(groupId, session.newIpfsPath, session.approvals); err != nil {
+	if err := session.groupCtx.Network.UpdateGroupIpfsPath(groupId, session.encNewIpfsPathBase64, session.approvals); err != nil {
 		session.close()
 		glog.Errorf("could not send update group ipfs path transaction: %s", err)
 		return
@@ -159,13 +166,13 @@ func (session *AddFileGroupSessionClient) NextState(contact *Contact, data []byt
 }
 
 type AddFileGroupSessionServer struct {
-	sessionId          IIdentifier
-	newFileCapIpfsHash string
-	newIpfsPath        string
-	groupCtx           *GroupContext
-	state              uint8
-	lock               sync.RWMutex
-	contact            *Contact
+	sessionId            IIdentifier
+	newFileCapIpfsHash   string
+	encNewIpfsPathBase64 string
+	groupCtx             *GroupContext
+	state                uint8
+	lock                 sync.RWMutex
+	contact              *Contact
 }
 
 func (session *AddFileGroupSessionServer) close() {
@@ -205,13 +212,25 @@ func (session *AddFileGroupSessionServer) IsAlive() bool {
 func (session *AddFileGroupSessionServer) Run() {
 	defer session.close()
 
-	if err := session.groupCtx.Repo.IsValidAddFile(session.newIpfsPath); err != nil {
+	glog.Errorf("verif enc: %v", session.encNewIpfsPathBase64)
+	encIpfsPath, err := base64.URLEncoding.DecodeString(session.encNewIpfsPathBase64)
+	if err != nil {
+		glog.Errorf("could not base64 decode encrypted new ipfs path")
+	}
+
+	newIpfsPath, ok := session.groupCtx.Group.Boxer.BoxOpen([]byte(encIpfsPath))
+	if !ok {
+		glog.Errorf("could not decrypt new ipfs path")
+		return
+	}
+	if err := session.groupCtx.Repo.IsValidAddFile(string(newIpfsPath)); err != nil {
 		glog.Errorf("add file operation is invalid: %s", err)
 		return
 	}
 
 	hasher := crypto.NewKeccak256Hasher()
-	digest := hasher.Sum([]byte(session.groupCtx.Group.IPFSPath), []byte(session.newIpfsPath))
+	digest := hasher.Sum([]byte(session.groupCtx.Group.EncryptedIpfsHash), []byte(session.encNewIpfsPathBase64))
+	glog.Errorf("signer digest: %v", digest)
 	sig, err := session.groupCtx.User.Signer.Sign(digest)
 	if err != nil {
 		glog.Errorf("could not sign approval: %s", err)
@@ -243,7 +262,7 @@ func (session *AddFileGroupSessionServer) Run() {
 
 func (session *AddFileGroupSessionServer) NextState(contact *Contact, data []byte) { }
 
-func NewAddFileGroupSessionServer(msg *GroupMessage, contact *Contact, ctx *GroupContext) *AddFileGroupSessionServer {
+func NewAddFileGroupSessionServer(msg *Message, contact *Contact, ctx *GroupContext) *AddFileGroupSessionServer {
 	addFileMsg, err := DecodeAddFileGroupMessage(msg.Payload)
 	if err != nil {
 		glog.Errorf("could not create AddFileGroupSessionServer: %s", err)
@@ -251,11 +270,11 @@ func NewAddFileGroupSessionServer(msg *GroupMessage, contact *Contact, ctx *Grou
 	}
 
 	session := &AddFileGroupSessionServer{
-		groupCtx:    ctx,
-		sessionId:   NewUint32Id(msg.SessionId),
-		newIpfsPath: addFileMsg.NewGroupIpfsPath,
-		contact:     contact,
-		state:       0,
+		groupCtx:             ctx,
+		sessionId:            NewUint32Id(msg.SessionId),
+		encNewIpfsPathBase64: addFileMsg.NewGroupIpfsPath,
+		contact:              contact,
+		state:                0,
 	}
 
 	return session
