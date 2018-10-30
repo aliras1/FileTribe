@@ -37,6 +37,7 @@ type Storage struct {
 	publicForPath   string
 	userDataPath    string
 	capsPath        string
+	pendingPath     string
 	capsGAPath      string // group access caps
 	fileRootPath    string
 	sharedPath      string
@@ -55,6 +56,7 @@ func NewStorage(dataPath string) *Storage {
 	storage.publicForPath = storage.dataPath + "public/for/"
 	storage.userDataPath = storage.dataPath + "userdata/"
 	storage.capsPath = storage.dataPath + "userdata/caps/"
+	storage.pendingPath = storage.dataPath + "userdata/pending_changes/"
 	storage.capsGAPath = storage.dataPath + "userdata/caps/GA/"
 	storage.fileRootPath = storage.dataPath + "userdata/root/"
 	storage.myFilesPath = storage.dataPath + "userdata/root/MyFiles/"
@@ -66,6 +68,7 @@ func NewStorage(dataPath string) *Storage {
 	os.MkdirAll(storage.publicFilesPath, 0770)
 	os.MkdirAll(storage.publicForPath, 0770)
 	os.MkdirAll(storage.capsPath, 0770)
+	os.MkdirAll(storage.pendingPath, 0770)
 	os.MkdirAll(storage.capsGAPath, 0770)
 	os.MkdirAll(storage.fileRootPath, 0770)
 	os.MkdirAll(storage.myFilesPath, 0770)
@@ -169,6 +172,10 @@ func (storage *Storage) GetGroupFileCapDir(id string) string {
 	return storage.capsPath + id + "/"
 }
 
+func (storage *Storage) GetGroupFilePendingDir(id string) string {
+	return storage.pendingPath + id + "/"
+}
+
 func (storage *Storage) GetGroupFileDataDir(id string) string {
 	return storage.fileRootPath + id + "/"
 }
@@ -177,6 +184,7 @@ func (storage *Storage) GetGroupFileDataDir(id string) string {
 func (storage *Storage) MakeGroupDir(id string) {
 	os.MkdirAll(storage.capsPath + id, 0770)
 	os.MkdirAll(storage.fileRootPath + id, 0770)
+	os.MkdirAll(storage.pendingPath + id, 0770)
 }
 
 

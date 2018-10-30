@@ -17,225 +17,162 @@ import (
 )
 
 type FakeNetwork struct {
+	accCount int
+	currentAcc int
+
 	Client *eth.Eth
-	Auth    *bind.TransactOpts
 	Simulator *backends.SimulatedBackend
 
-	aliceAuth    *bind.TransactOpts
-	bobAuth    *bind.TransactOpts
-	charlieAuth    *bind.TransactOpts
-
-	groupInvitationSub     event.Subscription
-	groupInvitationChannel chan *eth.EthGroupInvitation
-	groupUpdateIpfsSub     event.Subscription
-	groupUpdateIpfsChannel chan *eth.EthGroupUpdateIpfsPath
-	debugSub event.Subscription
-	debugChannel chan *eth.EthDebug
+	auths    []*bind.TransactOpts
 
 	// GroupInvitationEvent for users
-	groupInvitationSubAlice     event.Subscription
-	groupInvitationChannelAlice chan *eth.EthGroupInvitation
-	groupInvitationSubBob     event.Subscription
-	groupInvitationChannelBob chan *eth.EthGroupInvitation
-	groupInvitationSubCharlie     event.Subscription
-	groupInvitationChannelCharlie chan *eth.EthGroupInvitation
+	groupInvitationSubs     []event.Subscription
+	groupInvitationChannels []chan *eth.EthGroupInvitation
 
 	// GroupUpdateIpfs events for users
-	groupUpdateIpfsSubAlice     event.Subscription
-	groupUpdateIpfsChannelAlice chan *eth.EthGroupUpdateIpfsPath
-	groupUpdateIpfsSubBob     event.Subscription
-	groupUpdateIpfsChannelBob chan *eth.EthGroupUpdateIpfsPath
-	groupUpdateIpfsSubCharlie     event.Subscription
-	groupUpdateIpfsChannelCharlie chan *eth.EthGroupUpdateIpfsPath
+	groupUpdateIpfsSubs     []event.Subscription
+	groupUpdateIpfsChannels []chan *eth.EthGroupUpdateIpfsPath
+
+	groupRegisteredSubs     []event.Subscription
+	groupRegisteredChannels []chan *eth.EthGroupRegistered
 
 	// Debug event
-	debugSubAlice     event.Subscription
-	debugChannelAlice chan *eth.EthDebug
-	debugSubBob     event.Subscription
-	debugChannelBob chan *eth.EthDebug
-	debugSubCharlie     event.Subscription
-	debugChannelCharlie chan *eth.EthDebug
+	debugSubs     []event.Subscription
+	debugChannels []chan *eth.EthDebug
 }
 
-func (network *FakeNetwork) SetAuthAlice() {
-	network.Auth = network.aliceAuth
+func (network *FakeNetwork) SetAuth(accNum int) {
+	if accNum >= len (network.auths) {
+		glog.Error("invalid accNum: out of range")
+	}
 
-	network.groupInvitationSub = network.groupInvitationSubAlice
-	network.groupInvitationChannel = network.groupInvitationChannelAlice
-
-	network.groupUpdateIpfsSub = network.groupUpdateIpfsSubAlice
-	network.groupUpdateIpfsChannel = network.groupUpdateIpfsChannelAlice
-
-	network.debugSub = network.debugSubAlice
-	network.debugChannel = network.debugChannelAlice
+	network.currentAcc = accNum
 }
 
-func (network *FakeNetwork) SetAuthBob() {
-	network.Auth = network.bobAuth
+func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
+	accCount := len(keys)
 
-	network.groupInvitationSub = network.groupInvitationSubBob
-	network.groupInvitationChannel = network.groupInvitationChannelBob
+	var auths []*bind.TransactOpts
+	for _, key := range keys {
+		auth := bind.NewKeyedTransactor(key)
+		auth.GasLimit = 5000000
 
-	network.groupUpdateIpfsSub = network.groupUpdateIpfsSubBob
-	network.groupUpdateIpfsChannel = network.groupUpdateIpfsChannelBob
+		auths = append(auths, auth)
+	}
 
-	network.debugSub = network.debugSubBob
-	network.debugChannel = network.debugChannelBob
-}
+	alloc := make(map[common.Address]core.GenesisAccount)
+	for _, auth := range auths {
+		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(10000000000)}
+	}
 
-func (network *FakeNetwork) SetAuthCharlie() {
-	network.Auth = network.charlieAuth
+	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 7000001)
 
-	network.groupInvitationSub = network.groupInvitationSubCharlie
-	network.groupInvitationChannel = network.groupInvitationChannelCharlie
-
-	network.groupUpdateIpfsSub = network.groupUpdateIpfsSubCharlie
-	network.groupUpdateIpfsChannel = network.groupUpdateIpfsChannelCharlie
-
-	network.debugSub = network.debugSubCharlie
-	network.debugChannel = network.debugChannelCharlie
-}
-
-func NewTestNetwork(keyAlice, keyBob, keyCharlie *ecdsa.PrivateKey) (*FakeNetwork, error) {
-	authAlice := bind.NewKeyedTransactor(keyAlice)
-	//authAlice.GasLimit = 2141592
-
-	authBob := bind.NewKeyedTransactor(keyBob)
-	//authBob.GasLimit = 2141592
-
-	authCharlie := bind.NewKeyedTransactor(keyCharlie)
-	//authCharlie.GasLimit = 2141592
-
-	simulator := backends.NewSimulatedBackend(core.GenesisAlloc{
-		authAlice.From: core.GenesisAccount{Balance: big.NewInt(10000000000)},
-		authBob.From:   core.GenesisAccount{Balance: big.NewInt(10000000000)},
-		authCharlie.From:   core.GenesisAccount{Balance: big.NewInt(10000000000)},
-
-	}, )
-
-	_, _, ethclient, err := eth.DeployEth(authAlice, simulator)
+	_, _, ethclient, err := eth.DeployEth(auths[0], simulator)
 	if err != nil {
-		return nil, fmt.Errorf("could not deploy contract on simulated chain")
+		return nil, errors.Wrap(err, "could not deploy contract on simulated chain")
 	}
 
 	opts := &bind.WatchOpts{
-		Context: authAlice.Context,
+		Context: auths[0].Context,
 	}
 
-	// Subscribing to events for each user...
+	var channelGroupInvitations []chan *eth.EthGroupInvitation
+	var subGroupInvitations []event.Subscription
+	var channelGroupUpdateIpfss []chan *eth.EthGroupUpdateIpfsPath
+	var subGroupUpdateIpfss []event.Subscription
+	var channelGroupRegistered []chan *eth.EthGroupRegistered
+	var subGroupGroupRegistered []event.Subscription
+	var channelDebugs []chan *eth.EthDebug
+	var subDebugs []event.Subscription
 
-	// GroupInvitation event
-	channelGroupInvitationAlice := make(chan *eth.EthGroupInvitation)
-	subGroupInvitationAlice, err := ethclient.WatchGroupInvitation(opts, channelGroupInvitationAlice)
-	if err != nil {
-		return nil, err
-	}
+	for i := 0; i < accCount; i++ {
+		// Subscribing to events for each user...
+		chGroupInv := make(chan *eth.EthGroupInvitation)
+		subGroupInv, err := ethclient.WatchGroupInvitation(opts, chGroupInv)
+		if err != nil {
+			return nil, err
+		}
+		channelGroupInvitations = append(channelGroupInvitations, chGroupInv)
+		subGroupInvitations = append(subGroupInvitations, subGroupInv)
 
-	channelGroupInvitationBob := make(chan *eth.EthGroupInvitation)
-	subGroupInvitationBob, err := ethclient.WatchGroupInvitation(opts, channelGroupInvitationBob)
-	if err != nil {
-		return nil, err
-	}
+		// GroupUpdateIpfs event
+		chUpdtIpfs := make(chan *eth.EthGroupUpdateIpfsPath)
+		subUpdtIpfs, err := ethclient.WatchGroupUpdateIpfsPath(opts, chUpdtIpfs)
+		if err != nil {
+			return nil, err
+		}
+		channelGroupUpdateIpfss = append(channelGroupUpdateIpfss, chUpdtIpfs)
+		subGroupUpdateIpfss = append(subGroupUpdateIpfss, subUpdtIpfs)
 
-	channelGroupInvitationCharlie := make(chan *eth.EthGroupInvitation)
-	subGroupInvitationCharlie, err := ethclient.WatchGroupInvitation(opts, channelGroupInvitationCharlie)
-	if err != nil {
-		return nil, err
-	}
+		// GroupRegistered event
+		chGrpRegistered := make(chan *eth.EthGroupRegistered)
+		subGrpRegistered, err := ethclient.WatchGroupRegistered(opts, chGrpRegistered)
+		if err != nil {
+			return nil, err
+		}
+		channelGroupRegistered = append(channelGroupRegistered, chGrpRegistered)
+		subGroupGroupRegistered = append(subGroupGroupRegistered, subGrpRegistered)
 
-	// GroupUpdateIpfs event
-	channelGroupUpdateIpfsAlice := make(chan *eth.EthGroupUpdateIpfsPath)
-	subGroupUpdateIpfsAlice, err := ethclient.WatchGroupUpdateIpfsPath(opts, channelGroupUpdateIpfsAlice)
-	if err != nil {
-		return nil, err
-	}
-
-	channelGroupUpdateIpfsBob := make(chan *eth.EthGroupUpdateIpfsPath)
-	subGroupUpdateIpfsBob, err := ethclient.WatchGroupUpdateIpfsPath(opts, channelGroupUpdateIpfsBob)
-	if err != nil {
-		return nil, err
-	}
-	channelGroupUpdateIpfsCharlie := make(chan *eth.EthGroupUpdateIpfsPath)
-	subGroupUpdateIpfsCharlie, err := ethclient.WatchGroupUpdateIpfsPath(opts, channelGroupUpdateIpfsCharlie)
-	if err != nil {
-		return nil, err
-	}
-
-	// Debug event
-	channelDebugAlice := make(chan *eth.EthDebug)
-	subGDebugAlice, err := ethclient.WatchDebug(opts, channelDebugAlice)
-	if err != nil {
-		return nil, err
-	}
-
-	channelDebugBob := make(chan *eth.EthDebug)
-	subDebugBob, err := ethclient.WatchDebug(opts, channelDebugBob)
-	if err != nil {
-		return nil, err
-	}
-	channelDebugCharlie := make(chan *eth.EthDebug)
-	subDebugCharlie, err := ethclient.WatchDebug(opts, channelDebugCharlie)
-	if err != nil {
-		return nil, err
+		// Debug event
+		chDebug := make(chan *eth.EthDebug)
+		subDebug, err := ethclient.WatchDebug(opts, chDebug)
+		if err != nil {
+			return nil, err
+		}
+		channelDebugs = append(channelDebugs, chDebug)
+		subDebugs = append(subDebugs, subDebug)
 	}
 
 
 	testNetwork := &FakeNetwork{
 		Client: ethclient,
-		Auth: nil,
 		Simulator: simulator,
 
-		aliceAuth: authAlice,
-		bobAuth: authBob,
-		charlieAuth: authCharlie,
+		auths: auths,
 
-		groupInvitationChannelAlice: channelGroupInvitationAlice,
-		groupInvitationSubAlice:     subGroupInvitationAlice,
-		groupUpdateIpfsChannelAlice: channelGroupUpdateIpfsAlice,
-		groupUpdateIpfsSubAlice: subGroupUpdateIpfsAlice,
-		debugSubAlice: subGDebugAlice,
-		debugChannelAlice: channelDebugAlice,
-
-		groupInvitationChannelBob: channelGroupInvitationBob,
-		groupInvitationSubBob:     subGroupInvitationBob,
-		groupUpdateIpfsChannelBob: channelGroupUpdateIpfsBob,
-		groupUpdateIpfsSubBob: subGroupUpdateIpfsBob,
-		debugSubBob: subDebugBob,
-		debugChannelBob: channelDebugBob,
-
-		groupInvitationChannelCharlie: channelGroupInvitationCharlie,
-		groupInvitationSubCharlie: subGroupInvitationCharlie,
-		groupUpdateIpfsChannelCharlie: channelGroupUpdateIpfsCharlie,
-		groupUpdateIpfsSubCharlie: subGroupUpdateIpfsCharlie,
-		debugSubCharlie: subDebugCharlie,
-		debugChannelCharlie: channelDebugCharlie,
+		groupInvitationChannels: channelGroupInvitations,
+		groupInvitationSubs:     subGroupInvitations,
+		groupUpdateIpfsChannels: channelGroupUpdateIpfss,
+		groupUpdateIpfsSubs:     subGroupUpdateIpfss,
+		groupRegisteredChannels: channelGroupRegistered,
+		groupRegisteredSubs:     subGroupGroupRegistered,
+		debugSubs:               subDebugs,
+		debugChannels:           channelDebugs,
 	}
 
 	return testNetwork, nil
 }
 
 func (network *FakeNetwork) GetGroupInvitationSub() *event.Subscription {
-	return &network.groupInvitationSub
+	return &network.groupInvitationSubs[network.currentAcc]
 }
 
 func (network *FakeNetwork) GetGroupInvitationChannel() chan *eth.EthGroupInvitation {
-	return network.groupInvitationChannel
+	return network.groupInvitationChannels[network.currentAcc]
 }
 
 func (network *FakeNetwork) GetGroupUpdateIpfsSub() *event.Subscription {
-	return &network.groupUpdateIpfsSub
+	return &network.groupUpdateIpfsSubs[network.currentAcc]
 }
 
 func (network *FakeNetwork) GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsPath {
-	return network.groupUpdateIpfsChannel
+	return network.groupUpdateIpfsChannels[network.currentAcc]
+}
+
+func (network *FakeNetwork) GetGroupRegisteredSub() *event.Subscription {
+	return &network.groupRegisteredSubs[network.currentAcc]
+}
+
+func (network *FakeNetwork) GetGroupRegisteredChannel() chan *eth.EthGroupRegistered {
+	return network.groupRegisteredChannels[network.currentAcc]
 }
 
 func (network *FakeNetwork) GetDebugSub() *event.Subscription {
-	return &network.debugSub
+	return &network.debugSubs[network.currentAcc]
 }
 
 func (network *FakeNetwork) GetDebugChannel() chan *eth.EthDebug {
-	return network.debugChannel
+	return network.debugChannels[network.currentAcc]
 }
 
 func (network *FakeNetwork) IsUserRegistered(id common.Address) (bool, error) {
@@ -278,8 +215,8 @@ func (network *FakeNetwork) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath st
 		vs = append(vs, v)
 	}
 
-	auth := network.Auth
-	auth.GasLimit = 2541592
+	auth := network.auths[network.currentAcc]
+	auth.GasLimit = 3000000
 	_, err := network.Client.UpdateGroupIpfsPath(auth, groupId, newIpfsPath, members, rs, ss, vs)
 	if err != nil {
 		return errors.Wrapf(err, "could not send updateGroupIpfsPath transaction")
@@ -293,10 +230,10 @@ func (network *FakeNetwork) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath st
 }
 
 func (network *FakeNetwork) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) error {
-	//auth := network.Auth
-	//auth.GasLimit = 2141592
+	auth := network.auths[network.currentAcc]
+	auth.GasLimit = 3000000
 
-	_, err := network.Client.RegisterUser(network.Auth, username, ipfsPeerId, boxingKey)
+	_, err := network.Client.RegisterUser(auth, username, ipfsPeerId, boxingKey)
 	if err != nil {
 		return fmt.Errorf("error while FakeNetwork.RegisterUser(): %s", err)
 	}
@@ -321,7 +258,7 @@ func (network *FakeNetwork) GetUser(address common.Address) (*Contact, error) {
 }
 
 func (network *FakeNetwork) CreateGroup(id [32]byte, name string, ipfsPath string) error {
-	_, err := network.Client.CreateGroup(network.Auth, id, name, ipfsPath)
+	_, err := network.Client.CreateGroup(network.auths[network.currentAcc], id, name, ipfsPath)
 	if err != nil {
 		return fmt.Errorf("error while FakeNetwork.CreateGroup(): %s", err)
 	}
@@ -335,8 +272,8 @@ func (network *FakeNetwork) GetGroup(groupId [32]byte) (string, []common.Address
 	return network.Client.GetGroup(&bind.CallOpts{Pending: true}, groupId)
 }
 
-func (network *FakeNetwork) InviteUser(groupId [32]byte, newMember common.Address) error {
-	_, err := network.Client.InviteUser(network.Auth, groupId, newMember)
+func (network *FakeNetwork) InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) error {
+	_, err := network.Client.InviteUser(network.auths[network.currentAcc], groupId, newMember, canInvite)
 	if err != nil {
 		return fmt.Errorf("error while FakeNetwork.InviteUser(): %s", err)
 	}

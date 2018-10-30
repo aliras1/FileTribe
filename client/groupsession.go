@@ -11,11 +11,11 @@ import (
 	"encoding/base64"
 )
 
-func NewServerGroupSession(msg *Message, contact *Contact, ctx *GroupContext) ISession {
+func NewGroupSessionServer(msg *Message, contact *Contact, ctx *GroupContext) ISession {
 	switch msg.Type {
 	case AddFile:
 		{
-			return NewAddFileGroupSessionServer(msg, contact, ctx)
+			return NewCommitChangesGroupSessionServer(msg, contact, ctx)
 		}
 	default:
 		{
@@ -24,7 +24,7 @@ func NewServerGroupSession(msg *Message, contact *Contact, ctx *GroupContext) IS
 	}
 }
 
-type AddFileGroupSessionClient struct {
+type CommitChangesGroupSessionClient struct {
 	sessionId            IIdentifier
 	encNewIpfsPathBase64 string
 	approvals            []*network.Approval
@@ -35,7 +35,7 @@ type AddFileGroupSessionClient struct {
 	approvalsCountChan   chan int
 }
 
-func NewAddFileGroupSessionClient(newIpfsPath string, groupCtx *GroupContext) ISession {
+func NewCommitChangesGroupSessionClient(newIpfsPath string, groupCtx *GroupContext) ISession {
 	sessionId := rand.Uint32()
 	hasher := crypto.NewKeccak256Hasher()
 
@@ -45,7 +45,7 @@ func NewAddFileGroupSessionClient(newIpfsPath string, groupCtx *GroupContext) IS
 	digest := hasher.Sum([]byte(groupCtx.Group.EncryptedIpfsHash), []byte(encNewIpfsPathBase64))
 	glog.Errorf("verif digest: %v", digest)
 
-	session := &AddFileGroupSessionClient{
+	session := &CommitChangesGroupSessionClient{
 		sessionId:            NewUint32Id(sessionId),
 		groupCtx:             groupCtx,
 		encNewIpfsPathBase64: string(encNewIpfsPathBase64),
@@ -60,12 +60,12 @@ func NewAddFileGroupSessionClient(newIpfsPath string, groupCtx *GroupContext) IS
 	return session
 }
 
-func (session *AddFileGroupSessionClient) close() {
+func (session *CommitChangesGroupSessionClient) close() {
 	session.state = EndOfSession
 	session.groupCtx.P2P.SessionClosedChan <- session.Id()
 }
 
-func (session *AddFileGroupSessionClient) Abort() {
+func (session *CommitChangesGroupSessionClient) Abort() {
 	session.lock.Lock()
 	defer session.lock.Unlock()
 
@@ -76,25 +76,25 @@ func (session *AddFileGroupSessionClient) Abort() {
 	session.close()
 }
 
-func (session *AddFileGroupSessionClient) GetState() uint8 {
+func (session *CommitChangesGroupSessionClient) GetState() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
 	return session.state
 }
 
-func (session *AddFileGroupSessionClient) Id() IIdentifier {
+func (session *CommitChangesGroupSessionClient) Id() IIdentifier {
 	return session.sessionId
 }
 
-func (session *AddFileGroupSessionClient) IsAlive() bool {
+func (session *CommitChangesGroupSessionClient) IsAlive() bool {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
 	return session.state == EndOfSession
 }
 
-func (session *AddFileGroupSessionClient) Run() {
+func (session *CommitChangesGroupSessionClient) Run() {
 	addFileGroupMsg := AddFileGroupMessage{
 		NewGroupIpfsPath: session.encNewIpfsPathBase64,
 		NewFileCapIpfsHash: "",
@@ -133,7 +133,7 @@ func (session *AddFileGroupSessionClient) Run() {
 	}
 }
 
-func (session *AddFileGroupSessionClient) NextState(contact *Contact, data []byte) {
+func (session *CommitChangesGroupSessionClient) NextState(contact *Contact, data []byte) {
 	session.lock.Lock()
 	defer session.lock.Unlock()
 
@@ -165,7 +165,7 @@ func (session *AddFileGroupSessionClient) NextState(contact *Contact, data []byt
 	}
 }
 
-type AddFileGroupSessionServer struct {
+type CommitChangesGroupSessionServer struct {
 	sessionId            IIdentifier
 	newFileCapIpfsHash   string
 	encNewIpfsPathBase64 string
@@ -175,12 +175,12 @@ type AddFileGroupSessionServer struct {
 	contact              *Contact
 }
 
-func (session *AddFileGroupSessionServer) close() {
+func (session *CommitChangesGroupSessionServer) close() {
 	session.state = EndOfSession
 	session.groupCtx.P2P.SessionClosedChan <- session.Id()
 }
 
-func (session *AddFileGroupSessionServer) Abort() {
+func (session *CommitChangesGroupSessionServer) Abort() {
 	session.lock.Lock()
 	defer session.lock.Unlock()
 
@@ -191,25 +191,25 @@ func (session *AddFileGroupSessionServer) Abort() {
 	session.close()
 }
 
-func (session *AddFileGroupSessionServer) GetState() uint8 {
+func (session *CommitChangesGroupSessionServer) GetState() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
 	return session.state
 }
 
-func (session *AddFileGroupSessionServer) Id() IIdentifier {
+func (session *CommitChangesGroupSessionServer) Id() IIdentifier {
 	return session.sessionId
 }
 
-func (session *AddFileGroupSessionServer) IsAlive() bool {
+func (session *CommitChangesGroupSessionServer) IsAlive() bool {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
 	return session.state == EndOfSession
 }
 
-func (session *AddFileGroupSessionServer) Run() {
+func (session *CommitChangesGroupSessionServer) Run() {
 	defer session.close()
 
 	glog.Errorf("verif enc: %v", session.encNewIpfsPathBase64)
@@ -223,7 +223,7 @@ func (session *AddFileGroupSessionServer) Run() {
 		glog.Errorf("could not decrypt new ipfs path")
 		return
 	}
-	if err := session.groupCtx.Repo.IsValidAddFile(string(newIpfsPath)); err != nil {
+	if err := session.groupCtx.Repo.IsValidChangeSet(string(newIpfsPath), &session.contact.Address); err != nil {
 		glog.Errorf("add file operation is invalid: %s", err)
 		return
 	}
@@ -260,16 +260,16 @@ func (session *AddFileGroupSessionServer) Run() {
 	}
 }
 
-func (session *AddFileGroupSessionServer) NextState(contact *Contact, data []byte) { }
+func (session *CommitChangesGroupSessionServer) NextState(contact *Contact, data []byte) { }
 
-func NewAddFileGroupSessionServer(msg *Message, contact *Contact, ctx *GroupContext) *AddFileGroupSessionServer {
+func NewCommitChangesGroupSessionServer(msg *Message, contact *Contact, ctx *GroupContext) *CommitChangesGroupSessionServer {
 	addFileMsg, err := DecodeAddFileGroupMessage(msg.Payload)
 	if err != nil {
-		glog.Errorf("could not create AddFileGroupSessionServer: %s", err)
+		glog.Errorf("could not create CommitChangesGroupSessionServer: %s", err)
 		return nil
 	}
 
-	session := &AddFileGroupSessionServer{
+	session := &CommitChangesGroupSessionServer{
 		groupCtx:             ctx,
 		sessionId:            NewUint32Id(msg.SessionId),
 		encNewIpfsPathBase64: addFileMsg.NewGroupIpfsPath,

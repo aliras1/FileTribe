@@ -8,6 +8,8 @@ services:
     networks:
       - ipfs-net
     tty: true
+    ports:
+    - "8001:8001"
 
   alice:
     image: ipfs-share

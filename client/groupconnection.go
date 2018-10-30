@@ -26,14 +26,11 @@ func NewGroupConnection(groupCtx *GroupContext) *GroupConnection {
 		channelStop: make(chan bool),
 	}
 
-	id := groupCtx.Group.Id.Data().([32]byte)
-	groupIdString := base64.URLEncoding.EncodeToString(id[:])
+	glog.Infof("%s: subscribing to ipfs pubsub topic %s", groupCtx.User.Name, groupCtx.Group.Id.ToString())
 
-	glog.Infof("%s: subscribing to ipfs pubsub topic %s", groupCtx.User.Name, groupIdString)
-
-	sub, err := groupCtx.Ipfs.PubSubSubscribe(groupIdString)
+	sub, err := groupCtx.Ipfs.PubSubSubscribe(groupCtx.Group.Id.ToString())
 	if err != nil {
-		glog.Errorf("%s: could not ipfs subscribe to topic %s", groupCtx.User.Name, groupIdString)
+		glog.Errorf("%s: could not ipfs subscribe to topic %s", groupCtx.User.Name, groupCtx.Group.Id.ToString())
 		return nil
 	}
 
@@ -60,7 +57,7 @@ func (conn *GroupConnection) SendAll(msg []byte) error {
 }
 
 func (conn *GroupConnection) connectionListener() {
-	glog.Infof("GroupConnection for user '%s' group '%s' is running...\n", conn.groupCtx.User.Name, conn.groupCtx.Group.Name)
+	glog.Infof("GroupConnection for user '%s' group '%s' is running...", conn.groupCtx.User.Name, conn.groupCtx.Group.Id.ToString())
 	for {
 		select {
 		case <- conn.channelStop:
@@ -79,7 +76,7 @@ func (conn *GroupConnection) connectionListener() {
 
 				glog.Infof("%s got a group message", conn.groupCtx.User.Name)
 
-				encMsg, err := base64.URLEncoding.DecodeString((string)(pubsubRecord.Data()))
+				encMsg, err := base64.URLEncoding.DecodeString((string)(pubsubRecord.Data))
 				if err != nil {
 					glog.Warningf("could not url decode group message: %s", err)
 					continue
@@ -129,7 +126,7 @@ func (conn *GroupConnection) connectionListener() {
 				}
 				contact = conn.groupCtx.AddressBook.Get(contact.Id()).(*Contact)
 
-				session := NewServerGroupSession(msg, contact, conn.groupCtx)
+				session := NewGroupSessionServer(msg, contact, conn.groupCtx)
 				conn.groupCtx.P2P.AddSession(session)
 				go session.Run()
 			}

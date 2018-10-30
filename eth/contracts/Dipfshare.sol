@@ -78,7 +78,7 @@ contract Dipfshare {
         groups[id].ipfsPath = ipfsPath;
         groups[id].exists = true;
         groups[id].canInvite[msg.sender] = true;
-        
+
         emit GroupRegistered(id);
     }
 
@@ -88,12 +88,13 @@ contract Dipfshare {
         return (groups[groupId].name, groups[groupId].members, groups[groupId].ipfsPath);
     }
 
-    function inviteUser(bytes32 groupId, address newMember) public {
+    function inviteUser(bytes32 groupId, address newMember, bool hasInviteRight) public {
         require(groups[groupId].canInvite[msg.sender] == true, "User can not invite");
         require(users[newMember].exists, "Can not invite non existent user");
 
         groups[groupId].members.push(newMember);
         users[newMember].groups.push(groupId);
+        groups[groupId].canInvite[newMember] = hasInviteRight;
 
         emit GroupInvitation(msg.sender, newMember, groupId);
     }
@@ -105,6 +106,23 @@ contract Dipfshare {
             }
         }
         return false;
+    }
+
+    function grantInviteRight(bytes32 groupId, address member) public {
+        require(groups[groupId].canInvite[msg.sender] == true, "User can not grant invite right");
+        require(users[member].exists, "Can not grant invite right to non existent user");
+        require(isUserInGroup(groupId, member), "Can not grant invite right to a non member user");
+
+        groups[groupId].canInvite[member] = true;
+    }
+
+    function revokeInviteRight(bytes32 groupId, address member) public {
+        require(groups[groupId].canInvite[msg.sender] == true, "User can not revoke invite right");
+        require(users[member].exists, "Can not revoke invite right from non existent user");
+        require(isUserInGroup(groupId, member), "Can not revoke invite right from a non member user");
+        require(member != groups[groupId].owner, "Can not revoke invite right from the owner");
+
+        groups[groupId].canInvite[member] = false;
     }
 
     function verify(address user, bytes32 hash, uint8 v, bytes32 r, bytes32 s) internal constant returns(bool) {

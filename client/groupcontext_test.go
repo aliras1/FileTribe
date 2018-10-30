@@ -14,6 +14,8 @@ import (
 
 	ipfsapi "ipfs-share/ipfs"
 	"github.com/libp2p/go-libp2p-peer"
+	"crypto/ecdsa"
+	"ipfs-share/utils"
 )
 
 type FakePubSubRecord struct {
@@ -38,7 +40,9 @@ func (r *FakePubSubRecord) TopicIDs() []string {
 }
 
 const (
-	topic = "fake_topic"
+	ALICE = 0
+	BOB = 1
+	CHARLIE = 2
 )
 
 var (
@@ -133,24 +137,24 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fakeNetwork, err := nw.NewTestNetwork(keyAlice, keyBob, keyCharlie)
+	fakeNetwork, err := nw.NewTestNetwork([]*ecdsa.PrivateKey{keyAlice, keyBob, keyCharlie})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fakeNetwork.SetAuthAlice()
+	fakeNetwork.SetAuth(ALICE)
 	alice, err := NewTestUser("alice", true, ethKeyAlicePath, 0, fakeNetwork, "2000")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fakeNetwork.SetAuthBob()
+	fakeNetwork.SetAuth(BOB)
 	bob, err := NewTestUser("bob", true, ethKeyBobPath, 1, fakeNetwork, "2001")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fakeNetwork.SetAuthCharlie()
+	fakeNetwork.SetAuth(CHARLIE)
 	charlie, err := NewTestUser("charlie", true, ethKeyCharliePath, 2, fakeNetwork, "2002")
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +162,7 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	glog.Info("----- fun begins -----")
 
-	fakeNetwork.SetAuthAlice()
+	fakeNetwork.SetAuth(ALICE)
 
 	if err := alice.CreateGroup("GRUPPE"); err != nil {
 		t.Fatal(err)
@@ -169,8 +173,8 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	group := alice.Groups.FirstOrDefault(nil).(*GroupContext)
-	group.Invite(bob.User.Address)
-	group.Invite(charlie.User.Address)
+	group.Invite(bob.User.Address, true)
+	group.Invite(charlie.User.Address, true)
 
 	time.Sleep(5 * time.Second)
 
@@ -195,7 +199,11 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal("charlie's group has not got enough members")
 	}
 
-	if err := group.AddFile("./group.go"); err != nil {
+	dstPath := "./alice/data/userdata/root/" + group.Group.Id.ToString() + "/rrrepo.go"
+	if err := utils.CopyFile("./grouprepo.go", dstPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := group.CommitChanges(); err != nil {
 		t.Fatal(err)
 	}
 

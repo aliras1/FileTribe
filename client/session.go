@@ -367,6 +367,11 @@ func (session *GetGroupKeySessionClient) NextState(contact *Contact, data []byte
 				return
 			}
 
+			if err := groupCtx.Update(); err != nil {
+				glog.Errorf("could not update group")
+				return
+			}
+
 			if err := session.ctx.Groups.Append(groupCtx); err != nil {
 				glog.Warningf("could not append elem: %s", err)
 			}

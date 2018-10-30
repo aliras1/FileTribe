@@ -12,7 +12,7 @@ import (
 
 type IPubSubSubscription interface {
 	Cancel() error
-	Next() (ipfsapi.PubSubRecord, error)
+	Next() (*ipfsapi.Message, error)
 }
 
 type PubSubSubscription ipfsapi.PubSubSubscription
@@ -21,7 +21,7 @@ func (sub *PubSubSubscription) Cancel() error {
 	return (*ipfsapi.PubSubSubscription)(sub).Cancel()
 }
 
-func (sub *PubSubSubscription) Next() (ipfsapi.PubSubRecord, error) {
+func (sub *PubSubSubscription) Next() (*ipfsapi.Message, error) {
 	return ((*ipfsapi.PubSubSubscription)(sub)).Next()
 }
 
@@ -33,6 +33,7 @@ type IIpfs interface {
 	AddDir(dir string) (string, error)
 	Publish(node string, value string) error
 	Add(r io.Reader) (string, error)
+	AddOnlyHash(r io.Reader) (string, error)
 	P2PListen(ctx context.Context, protocol, maddr string) (*P2PListener, error)
 	P2PCloseListener(ctx context.Context, protocol string, closeAll bool) error
 	P2PStreamDial(ctx context.Context, peerID, protocol, listenerMaddr string) (*P2PStream, error)
@@ -69,6 +70,10 @@ func (ipfs *Ipfs) Publish(node string, value string) error {
 
 func (ipfs *Ipfs) Add(r io.Reader) (string, error) {
 	return ipfs.shell.Add(r)
+}
+
+func (ipfs *Ipfs) AddOnlyHash(r io.Reader) (string, error) {
+	return ipfs.shell.AddOnlyHash(r)
 }
 
 func (ipfs *Ipfs) PubSubSubscribe(topic string) (IPubSubSubscription, error) {

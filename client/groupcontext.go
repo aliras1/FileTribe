@@ -11,7 +11,6 @@ import (
 	. "ipfs-share/collections"
 	"sync"
 	"encoding/base64"
-	"github.com/golang/glog"
 )
 
 
@@ -61,10 +60,6 @@ func NewGroupContext(
 
 	groupContext.Repo = repo
 	groupContext.GroupConnection = NewGroupConnection(groupContext)
-
-	if err := groupContext.Update(); err != nil {
-		glog.Errorf("could not update group %v", groupContext.Group.Id.Data())
-	}
 
 	return groupContext, nil
 }
@@ -130,36 +125,32 @@ func (groupCtx *GroupContext) Stop() {
 	groupCtx.GroupConnection.Kill()
 }
 
-func (groupCtx *GroupContext) AddFile(filePath string) error {
-	file, err := NewGroupFile(filePath, groupCtx)
+func (groupCtx *GroupContext) CommitChanges() error {
+	hash, err := groupCtx.Repo.CommitChanges()
 	if err != nil {
-		return errors.Wrap(err, "could not create new group file")
+		return errors.Wrap(err, "could commit group repo's changes")
 	}
 
-	hash, err := groupCtx.Repo.QueueAddFile(file)
-	if err != nil {
-		return errors.Wrap(err, "could not queue add file operation into group repo")
-	}
-
-	session := NewAddFileGroupSessionClient(hash, groupCtx)
+	session := NewCommitChangesGroupSessionClient(hash, groupCtx)
 	groupCtx.P2P.AddSession(session)
 	go session.Run()
 
 	return nil
 }
 
-func (groupCtx *GroupContext) Invite(newMember ethcommon.Address) error {
+func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight bool) error {
 	fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, groupCtx.Group.Name)
 
-	if err := groupCtx.Network.InviteUser(groupCtx.Group.Id.Data().([32]byte), newMember); err != nil {
+	if err := groupCtx.Network.InviteUser(groupCtx.Group.Id.Data().([32]byte), newMember, hasInviteRight); err != nil {
 		return fmt.Errorf("could not invite user: GroupContext::Invite(): %s", err)
 	}
 
 	return nil
 }
 
+
 func (groupCtx *GroupContext) Save() error {
-	return fmt.Errorf("not implemented: GroupContext.Save")
+	return fmt.Errorf("not implemented: GroupContext.SaveMetadata")
 }
 
 

@@ -5,7 +5,7 @@ import (
 	"io"
 	"encoding/json"
 	"github.com/pkg/errors"
-	"github.com/ethereum/go-ethereum/crypto/randentropy"
+	"crypto/rand"
 )
 
 type SymmetricKey struct {
@@ -45,7 +45,7 @@ func DecodeSymmetricKey(data []byte) (*SymmetricKey, error) {
 	if err := json.Unmarshal(data, &k); err != nil {
 		return nil, errors.Wrap(err, "could not decode SymmetricKey")
 	}
-	k.RNG = randentropy.Reader
+	k.RNG = rand.Reader
 
 	return &k, nil
 }

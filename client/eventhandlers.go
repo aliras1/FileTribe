@@ -19,7 +19,7 @@ func HandleDebugEvents(ctx *UserContext) {
 }
 
 func HandleGroupInvitationEvents(ctx *UserContext) {
-	glog.Info("groupInvitation handleing...")
+	glog.Info("groupInvitation handling...")
 
 	for groupInvitation := range ctx.Network.GetGroupInvitationChannel() {
 		go processGroupInvitationEvent(groupInvitation, ctx)
@@ -27,10 +27,18 @@ func HandleGroupInvitationEvents(ctx *UserContext) {
 }
 
 func HandleGroupUpdateIpfsEvents(ctx *UserContext) {
-	glog.Info("groupUpdateIpfs handleing...")
+	glog.Info("groupUpdateIpfs handling...")
 
 	for updateIpfs := range ctx.Network.GetGroupUpdateIpfsChannel() {
 		processGroupUpdateIpfsEvent(updateIpfs, ctx)
+	}
+}
+
+func HandleGroupRegisteredEvents(ctx *UserContext) {
+	glog.Info("group registered handling...")
+
+	for groupRegistered := range ctx.Network.GetGroupRegisteredChannel() {
+		processGroupRegisteredEvent(groupRegistered, ctx)
 	}
 }
 
@@ -56,8 +64,20 @@ func processGroupUpdateIpfsEvent(updateIpfs *eth.EthGroupUpdateIpfsPath, ctx *Us
 	}
 
 	if err := groupCtx.Repo.Update(string(newIpfsHash)); err != nil {
-		glog.Errorf("could not update group %s's repo with ipfs hash %s", groupCtx.Group.Id.ToString(), updateIpfs.IpfsPath)
+		glog.Errorf("could not update group %s's repo with ipfs hash %s: %s", groupCtx.Group.Id.ToString(), updateIpfs.IpfsPath, err)
 	}
+}
+
+func processGroupRegisteredEvent(groupRegistered *eth.EthGroupRegistered, ctx *UserContext) {
+	glog.Info("got group registered event message")
+
+	id := NewBytesId(groupRegistered.Id)
+	groupCtxInterface := ctx.Groups.Get(id)
+	if groupCtxInterface == nil {
+		return
+	}
+
+	glog.Infof("group '%s' registered", id.ToString())
 }
 
 func processGroupInvitationEvent(inv *eth.EthGroupInvitation, ctx *UserContext) {

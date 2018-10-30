@@ -83,7 +83,7 @@ func (g *Group) Save(storage *Storage) error {
 		Boxer:   g.Boxer,
 	}
 	if err := cap.Save(storage); err != nil {
-		return fmt.Errorf("could not store ga cap: Group.Save: %s", err)
+		return fmt.Errorf("could not store ga cap: Group.SaveMetadata: %s", err)
 	}
 	return nil
 }

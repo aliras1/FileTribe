@@ -26,11 +26,6 @@ func (c *ConcurrentCollection) Append(item ICollectionItem) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	//if (len(c.list) > 0) && (reflect.TypeOf(item) != reflect.TypeOf(c.list[0])) {
-	//	glog.Error("could not append to concurrent collection: invalid type")
-	//	return
-	//}
-
 	for _, elem := range c.list {
 		if elem.Id().Equal(item.Id()) {
 			return errors.New("could not append to concurrent collection: item already exists")
@@ -40,6 +35,24 @@ func (c *ConcurrentCollection) Append(item ICollectionItem) error {
 	c.list = append(c.list, item)
 
 	return nil
+}
+
+func (c *ConcurrentCollection) Reset() {
+	c.list = []ICollectionItem{}
+}
+
+func (c *ConcurrentCollection) AppendOrOverride(item ICollectionItem) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	for i, elem := range c.list {
+		if elem.Id().Equal(item.Id()) {
+			c.list[i] = item
+			return
+		}
+	}
+
+	c.list = append(c.list, item)
 }
 
 func (c *ConcurrentCollection) Iterator() <- chan interface{} {
@@ -114,6 +127,18 @@ func (c *ConcurrentCollection) FirstOrDefault(id IIdentifier) interface{} {
 	}
 
 	return c.list[0]
+}
+
+func (c *ConcurrentCollection) ToList() []interface{} {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	var l []interface{}
+	for _, item := range c.list {
+		l = append(l, item)
+	}
+
+	return l
 }
 
 func (c *ConcurrentCollection) Update(item ICollectionItem) error {

@@ -95,6 +95,7 @@ func NewUserContext(dataPath string, user *User, network nw.INetwork, ipfs ipfsa
 	go HandleDebugEvents(&uc)
 	go HandleGroupInvitationEvents(&uc)
 	go HandleGroupUpdateIpfsEvents(&uc)
+	go HandleGroupRegisteredEvents(&uc)
 
 	if err := uc.BuildGroups(); err != nil {
 		return nil, fmt.Errorf("could not build Groups: NewUserContext: %s", err)
