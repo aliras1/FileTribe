@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/golang/glog"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type FakeNetwork struct {
@@ -31,7 +32,7 @@ type FakeNetwork struct {
 
 	// GroupUpdateIpfs events for users
 	groupUpdateIpfsSubs     []event.Subscription
-	groupUpdateIpfsChannels []chan *eth.EthGroupUpdateIpfsPath
+	groupUpdateIpfsChannels []chan *eth.EthGroupUpdateIpfsHash
 
 	groupRegisteredSubs     []event.Subscription
 	groupRegisteredChannels []chan *eth.EthGroupRegistered
@@ -62,7 +63,7 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 
 	alloc := make(map[common.Address]core.GenesisAccount)
 	for _, auth := range auths {
-		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(10000000000)}
+		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(1000000000000)}
 	}
 
 	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 7000001)
@@ -78,7 +79,7 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 
 	var channelGroupInvitations []chan *eth.EthGroupInvitation
 	var subGroupInvitations []event.Subscription
-	var channelGroupUpdateIpfss []chan *eth.EthGroupUpdateIpfsPath
+	var channelGroupUpdateIpfss []chan *eth.EthGroupUpdateIpfsHash
 	var subGroupUpdateIpfss []event.Subscription
 	var channelGroupRegistered []chan *eth.EthGroupRegistered
 	var subGroupGroupRegistered []event.Subscription
@@ -96,8 +97,8 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 		subGroupInvitations = append(subGroupInvitations, subGroupInv)
 
 		// GroupUpdateIpfs event
-		chUpdtIpfs := make(chan *eth.EthGroupUpdateIpfsPath)
-		subUpdtIpfs, err := ethclient.WatchGroupUpdateIpfsPath(opts, chUpdtIpfs)
+		chUpdtIpfs := make(chan *eth.EthGroupUpdateIpfsHash)
+		subUpdtIpfs, err := ethclient.WatchGroupUpdateIpfsHash(opts, chUpdtIpfs)
 		if err != nil {
 			return nil, err
 		}
@@ -143,6 +144,10 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 	return testNetwork, nil
 }
 
+func (network *FakeNetwork) TransactionReceipt(tx *types.Transaction) (*types.Receipt, error) {
+	return network.Simulator.TransactionReceipt(network.auths[network.currentAcc].Context, tx.Hash())
+}
+
 func (network *FakeNetwork) GetGroupInvitationSub() *event.Subscription {
 	return &network.groupInvitationSubs[network.currentAcc]
 }
@@ -155,7 +160,7 @@ func (network *FakeNetwork) GetGroupUpdateIpfsSub() *event.Subscription {
 	return &network.groupUpdateIpfsSubs[network.currentAcc]
 }
 
-func (network *FakeNetwork) GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsPath {
+func (network *FakeNetwork) GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsHash {
 	return network.groupUpdateIpfsChannels[network.currentAcc]
 }
 
@@ -185,7 +190,7 @@ func (network *FakeNetwork) IsUserRegistered(id common.Address) (bool, error) {
 
 
 
-func (network *FakeNetwork) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string, approvals []*Approval) error {
+func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) error {
 	//network.Simulator.EstimateGas(network.Auth.Context, )
 
 	var members []common.Address
@@ -216,15 +221,16 @@ func (network *FakeNetwork) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath st
 	}
 
 	auth := network.auths[network.currentAcc]
-	auth.GasLimit = 3000000
-	_, err := network.Client.UpdateGroupIpfsPath(auth, groupId, newIpfsPath, members, rs, ss, vs)
+	glog.Error("auth: " + auth.From.String())
+	tx, err := network.Client.UpdateGroupIpfsHash(auth, groupId, newIpfsHash, members, rs, ss, vs)
 	if err != nil {
 		return errors.Wrapf(err, "could not send updateGroupIpfsPath transaction")
 	}
+	glog.Error(tx.Nonce())
 
 	network.Simulator.Commit()
 
-	glog.Info("FakeNetwork.UpdateGroupIpfsPath ended")
+	glog.Info("FakeNetwork.UpdateGroupIpfsHash ended")
 
 	return nil
 }
@@ -257,8 +263,8 @@ func (network *FakeNetwork) GetUser(address common.Address) (*Contact, error) {
 	}, nil
 }
 
-func (network *FakeNetwork) CreateGroup(id [32]byte, name string, ipfsPath string) error {
-	_, err := network.Client.CreateGroup(network.auths[network.currentAcc], id, name, ipfsPath)
+func (network *FakeNetwork) CreateGroup(id [32]byte, name string, ipfsHash []byte) error {
+	_, err := network.Client.CreateGroup(network.auths[network.currentAcc], id, name, ipfsHash)
 	if err != nil {
 		return fmt.Errorf("error while FakeNetwork.CreateGroup(): %s", err)
 	}
@@ -268,7 +274,7 @@ func (network *FakeNetwork) CreateGroup(id [32]byte, name string, ipfsPath strin
 	return nil
 }
 
-func (network *FakeNetwork) GetGroup(groupId [32]byte) (string, []common.Address, string, error) {
+func (network *FakeNetwork) GetGroup(groupId [32]byte) (string, []common.Address, []byte, error) {
 	return network.Client.GetGroup(&bind.CallOpts{Pending: true}, groupId)
 }
 

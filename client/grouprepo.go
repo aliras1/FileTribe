@@ -7,24 +7,29 @@ import (
 	"os"
 	"github.com/golang/glog"
 	"bytes"
-	"strings"
 	"github.com/getlantern/deepcopy"
 	"io"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"ipfs-share/utils"
+	"sync"
+	"ipfs-share/ipfs"
 )
 
 type IpfsAddOperation func(reader io.Reader) (string, error)
 
 type GroupRepo struct {
 	files *ConcurrentCollection
-	pendingChanges *ConcurrentCollection
-	groupCtx *GroupContext
+	group IGroup
+	ipfs ipfs.IIpfs
+	storage *Storage
+	user ethcommon.Address
+
 	ipfsHash string
+
+	lock sync.RWMutex
 }
 
-func NewGroupRepo(groupCtx *GroupContext) (*GroupRepo, error) {
-	groupCtx.Storage.MakeGroupDir(groupCtx.Group.Id.ToString())
+func NewGroupRepo(group IGroup, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
+	storage.MakeGroupDir(group.Id().ToString())
 
 	var caps []*FileCap
 
@@ -32,24 +37,31 @@ func NewGroupRepo(groupCtx *GroupContext) (*GroupRepo, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode empty cap list")
 	}
-	encData := groupCtx.Group.Boxer.BoxSeal(data)
-	ipfsHash, err := groupCtx.Ipfs.Add(bytes.NewReader(encData))
+
+	boxer := group.Boxer()
+	encData := boxer.BoxSeal(data)
+	ipfsHash, err := ipfs.Add(bytes.NewReader(encData))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not add empty list to ipfs")
 	}
 
 	return &GroupRepo{
-		groupCtx: groupCtx,
+		group: group,
 		files: NewConcurrentCollection(),
 		ipfsHash: ipfsHash,
-		pendingChanges: NewConcurrentCollection(),
+		storage: storage,
+		ipfs: ipfs,
+		user: user,
 	}, nil
 }
 
-func NewGroupRepoFromIpfs(ipfsHash string, groupCtx *GroupContext) (*GroupRepo, error) {
+func NewGroupRepoFromIpfs(ipfsHash string, group IGroup, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
 	repo := &GroupRepo{
-		groupCtx: groupCtx,
 		ipfsHash: ipfsHash,
+		group: group,
+		storage: storage,
+		ipfs: ipfs,
+		user: user,
 	}
 
 	caps, err := repo.getGroupFileCapsFromIpfs(ipfsHash)
@@ -59,79 +71,77 @@ func NewGroupRepoFromIpfs(ipfsHash string, groupCtx *GroupContext) (*GroupRepo, 
 
 	var files *ConcurrentCollection
 	for _, cap := range caps {
-		files.Append(NewGroupFileFromCap(cap, groupCtx))
+		file, err := NewGroupFileFromCap(cap, group.Id().ToString(), storage)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not create new file from cap")
+		}
+		files.Append(file)
 	}
 	repo.files = files
 
 	return repo, nil
 }
 
-func (repo *GroupRepo) GetFileFromPath(filePath string) *File {
-	for f := range repo.files.Iterator() {
-		if strings.Compare(filePath, f.(*File).DataPath) == 0 {
-			return f.(*File)
-		}
-	}
-	return nil
-}
 
-func (repo *GroupRepo) GetPendingChanges() error {
-	dir := repo.groupCtx.Storage.GetGroupFileDataDir(repo.groupCtx.Group.Id.ToString())
+func (repo *GroupRepo) GetPendingChanges() ([]*FileCap, error) {
+	dir := repo.storage.GroupFileDataDir(repo.group.Id().ToString())
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		return errors.Wrap(err, "could not open group file data dir")
+		return nil, errors.Wrap(err, "could not open group file data dir")
 	}
+	var listPendingChanges []*FileCap
 
 	for _, f := range files {
 		filePath := dir + f.Name()
-		var pendingFile *File
+		var file *File
 
-		pendingInt := repo.pendingChanges.Get(NewStringId(filePath))
-		// file is not in pending changes --> create and add
-		if pendingInt == nil {
-			pendingFile, err = NewGroupFile(filePath, repo.groupCtx, []ethcommon.Address{})
+		fileInt := repo.files.Get(NewStringId(f.Name()))
+
+		// if current file is not in repo --> create new
+		if fileInt == nil {
+			file, err = NewGroupFile(filePath, []ethcommon.Address{repo.user}, repo.group, repo.storage, repo.ipfs)
 			if err != nil {
-				return errors.Wrap(err, "could not create new group file")
+				return nil, errors.Wrap(err, "could not create new group file")
 			}
-			repo.pendingChanges.Append(pendingFile)
+			repo.files.Append(file)
+		} else {
+			file = fileInt.(*File)
 		}
 
-		encData, err := pendingFile.Encrypt()
+		encData, err := file.Encrypt()
 		if err != nil {
-			return errors.Wrap(err, "could not encrypt file data")
+			return nil, errors.Wrap(err, "could not encrypt file data")
 		}
-		newIpfsHash, err := repo.groupCtx.Ipfs.Add(encData)
+		newIpfsHash, err := repo.ipfs.Add(encData)
 		if err != nil {
-			return errors.Wrap(err, "could not ipfs add file")
+			return nil, errors.Wrap(err, "could not ipfs add file")
 		}
-		pendingFile.Cap.IpfsHash = newIpfsHash
+		file.PendingChanges.IpfsHash = newIpfsHash
 
-		if err := (*PendingFile)(pendingFile).SaveMetadata(); err != nil {
-			return errors.Wrap(err, "could not save pending meta data")
+		if err := file.SaveMetadata(); err != nil {
+			return nil, errors.Wrap(err, "could not save pending meta data")
 		}
+
+		listPendingChanges = append(listPendingChanges, file.PendingChanges)
 	}
 
-	return nil
+	return listPendingChanges, nil
 }
 
 func (repo *GroupRepo) CommitChanges() (string, error) {
-	err := repo.GetPendingChanges()
+	pendingChanges, err := repo.GetPendingChanges()
 	if err != nil {
 		return "", errors.Wrap(err, "could not get pending changes")
 	}
 
-	var caps []*FileCap
-	for pendingFileInterface := range repo.pendingChanges.Iterator() {
-		caps = append(caps, pendingFileInterface.(*File).Cap)
-	}
-
-	data, err := EncodeFileCapList(caps)
+	data, err := EncodeFileCapList(pendingChanges)
 	if err != nil {
 		return "", errors.Wrap(err, "could not encode file cap list")
 	}
 
-	encData := repo.groupCtx.Group.Boxer.BoxSeal(data)
-	newIpfsHash, err := repo.groupCtx.Ipfs.Add(bytes.NewReader(encData))
+	boxer := repo.group.Boxer()
+	encData := boxer.BoxSeal(data)
+	newIpfsHash, err := repo.ipfs.Add(bytes.NewReader(encData))
 	if err != nil {
 		return "", errors.Wrap(err, "could not add new file caps to ipfs")
 	}
@@ -158,16 +168,29 @@ func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, address *ethcommon.A
 	}
 
 	for _, newCap := range newCaps {
-		fileInterface := repo.files.Get(NewBytesId(newCap.Id))
-		if fileInterface == nil {
-			// TODO: new file --> check if user can add new files to repo
+		if newCap.WriteAccessList == nil {
+			return errors.New("new write access list can not be nil")
+		}
+
+		fileInt := repo.files.Get(NewStringId(newCap.FileName))
+		if fileInt == nil {
+			// new file, nothing to check
 			continue
 		}
-		file := fileInterface.(*File)
-		if len(file.Cap.WriteAccess) != 0 {
-			if _, inArray := utils.InArray(file.Cap.WriteAccess, address); !inArray {
-				return errors.New("invalid file modification request: member has no write access")
+
+		file := fileInt.(*File)
+
+		// check if user has write access to the current file
+		hasWriteAccess := false
+		for _, hasW := range file.Cap.WriteAccessList {
+			if bytes.Equal(hasW.Bytes(), address.Bytes()) {
+				hasWriteAccess = true
+				break
 			}
+		}
+
+		if !hasWriteAccess {
+			return errors.New("member has no write access")
 		}
 	}
 
@@ -182,33 +205,44 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 
 	for _, cap := range caps {
 		var file *File
-		fileInterface := repo.files.Get(NewBytesId(cap.Id))
+		fileInterface := repo.files.Get(NewStringId(cap.FileName))
 		if fileInterface == nil {
-			file = NewGroupFileFromCap(cap, repo.groupCtx)
+			file, err := NewGroupFileFromCap(cap, repo.group.Id().ToString(), repo.storage)
+			if err != nil {
+				return errors.Wrap(err, "could not create enw group file from cap")
+			}
 			repo.files.Append(file)
+			go file.Download(repo.storage, repo.ipfs)
 		} else {
 			file = fileInterface.(*File)
-		}
-
-		// if hashes do not match or this is a new file
-		if strings.Compare(file.Cap.IpfsHash, cap.IpfsHash) != 0 || fileInterface == nil {
-			if err := file.SaveMetadata(); err != nil {
-				return errors.Wrap(err, "could not save file meta data")
+			if err := file.Update(cap, repo.storage, repo.ipfs); err != nil {
+				return errors.Wrap(err, "could not update group file")
 			}
-
-			go file.Download(repo.groupCtx.Storage, repo.groupCtx.Ipfs)
 		}
+
+		return nil
 	}
 
 	repo.ipfsHash = newIpfsHash
-	repo.pendingChanges.Reset()
+	if err := repo.ResetPendingChanges(); err != nil {
+		return errors.Wrap(err, "could not reset repo pending changes")
+	}
 
 	return nil
 }
 
+func (repo *GroupRepo) ResetPendingChanges() error {
+	for fileInt := range repo.files.Iterator() {
+		if err := fileInt.(*File).ResetPendingChanges(); err != nil {
+			return errors.Wrap(err, "could not reset file pending changes")
+		}
+	}
+	return nil
+}
+
 func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string) ([]*FileCap, error) {
-	path := repo.groupCtx.Storage.tmpPath + ipfsHash
-	if err := repo.groupCtx.Ipfs.Get(ipfsHash, path); err != nil {
+	path := repo.storage.tmpPath + ipfsHash
+	if err := repo.ipfs.Get(ipfsHash, path); err != nil {
 		return nil, errors.Wrapf(err, "could not ipfs get shared group dir: %s", ipfsHash)
 	}
 
@@ -222,7 +256,8 @@ func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string) ([]*FileCap, er
 		}
 	}()
 
-	data, ok := repo.groupCtx.Group.Boxer.BoxOpen(encData)
+	boxer := repo.group.Boxer()
+	data, ok := boxer.BoxOpen(encData)
 	if !ok {
 		return nil, errors.New("could not decrypt shared group dir")
 	}
@@ -241,38 +276,4 @@ func (repo *GroupRepo) List() []string {
 		l = append(l, fileInt.(*File).Id().ToString())
 	}
 	return l
-}
-
-func (repo *GroupRepo) GrantWriteAccessToFile(path string, user ethcommon.Address) error {
-	var pending *PendingFile
-
-	pendingInt := repo.pendingChanges.Get(NewStringId(path))
-	if pendingInt == nil {
-		file, err := NewGroupFile(path, repo.groupCtx, []ethcommon.Address{})
-		if err != nil {
-			return errors.Wrap(err, "could not get pending change")
-		}
-		pending = (*PendingFile)(file)
-	} else {
-		pending = pendingInt.(*PendingFile)
-	}
-
-	for _, hasW := range pending.Cap.WriteAccess {
-		if bytes.Equal(hasW.Bytes(), user.Bytes()) {
-			return errors.New("user already has Write access")
-		}
-	}
-
-	for _, hasW := range pending.Cap.WriteAccess {
-		if bytes.Equal(hasW.Bytes(), repo.groupCtx.User.Address.Bytes()) {
-			return errors.New("can not grant write access: user has no Write access")
-		}
-	}
-
-	pending.Cap.WriteAccess = append(pending.Cap.WriteAccess, user)
-	if err := pending.SaveMetadata(); err != nil {
-		return errors.Wrap(err, "could not save pending meta data")
-	}
-
-	return nil
 }

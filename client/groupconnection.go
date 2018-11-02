@@ -26,11 +26,11 @@ func NewGroupConnection(groupCtx *GroupContext) *GroupConnection {
 		channelStop: make(chan bool),
 	}
 
-	glog.Infof("%s: subscribing to ipfs pubsub topic %s", groupCtx.User.Name, groupCtx.Group.Id.ToString())
+	glog.Infof("%s: subscribing to ipfs pubsub topic %s", groupCtx.User.Name, groupCtx.Group.Id().ToString())
 
-	sub, err := groupCtx.Ipfs.PubSubSubscribe(groupCtx.Group.Id.ToString())
+	sub, err := groupCtx.Ipfs.PubSubSubscribe(groupCtx.Group.Id().ToString())
 	if err != nil {
-		glog.Errorf("%s: could not ipfs subscribe to topic %s", groupCtx.User.Name, groupCtx.Group.Id.ToString())
+		glog.Errorf("%s: could not ipfs subscribe to topic %s", groupCtx.User.Name, groupCtx.Group.Id().ToString())
 		return nil
 	}
 
@@ -43,10 +43,11 @@ func NewGroupConnection(groupCtx *GroupContext) *GroupConnection {
 
 
 func (conn *GroupConnection) SendAll(msg []byte) error {
-	id := conn.groupCtx.Group.Id.Data().([32]byte)
+	id := conn.groupCtx.Group.Id().Data().([32]byte)
 	topic := base64.URLEncoding.EncodeToString(id[:])
 
-	encMsg := conn.groupCtx.Group.Boxer.BoxSeal(msg)
+	boxer := conn.groupCtx.Group.Boxer()
+	encMsg := boxer.BoxSeal(msg)
 	msgString := base64.URLEncoding.EncodeToString(encMsg)
 
 	if err := conn.groupCtx.Ipfs.PubSubPublish(topic, msgString); err != nil {
@@ -57,7 +58,7 @@ func (conn *GroupConnection) SendAll(msg []byte) error {
 }
 
 func (conn *GroupConnection) connectionListener() {
-	glog.Infof("GroupConnection for user '%s' group '%s' is running...", conn.groupCtx.User.Name, conn.groupCtx.Group.Id.ToString())
+	glog.Infof("GroupConnection for user '%s' group '%s' is running...", conn.groupCtx.User.Name, conn.groupCtx.Group.Id().ToString())
 	for {
 		select {
 		case <- conn.channelStop:
@@ -82,7 +83,8 @@ func (conn *GroupConnection) connectionListener() {
 					continue
 				}
 
-				msgData, ok := conn.groupCtx.Group.Boxer.BoxOpen(encMsg)
+				boxer := conn.groupCtx.Group.Boxer()
+				msgData, ok := boxer.BoxOpen(encMsg)
 				if !ok {
 					glog.Warningf("could not decrypt pubsub message")
 					continue
@@ -94,22 +96,14 @@ func (conn *GroupConnection) connectionListener() {
 					continue
 				}
 
-				senderIsInGroup := false
-				for _, member := range conn.groupCtx.Group.Members {
-					if bytes.Equal(member.Bytes(), msg.From.Bytes()) {
-						senderIsInGroup = true
-						break
-					}
-				}
-
-				if !senderIsInGroup {
+				if !conn.groupCtx.Group.IsMember(msg.From) {
 					glog.Warningf("non group member %v has written to the group channel", msg.From.Bytes())
 					continue
 				}
 
 				contact, err := msg.Validate(conn.groupCtx.Network, conn.groupCtx.Ipfs)
 				if err != nil {
-					glog.Warningf("invalid pubsub message to group %v from user %v", conn.groupCtx.Group.Id.Data(), msg.From.Bytes())
+					glog.Warningf("invalid pubsub message to group %v from user %v", conn.groupCtx.Group.Id().Data(), msg.From.Bytes())
 					continue
 				}
 

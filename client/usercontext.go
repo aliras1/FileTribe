@@ -168,11 +168,23 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 		return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
 	}
 
-	groupCtx.Group.IpfsHash = groupCtx.Repo.ipfsHash
+	boxer := groupCtx.Group.Boxer()
+	ipfsHash := groupCtx.Repo.ipfsHash
+	encIpfsHash := boxer.BoxSeal([]byte(ipfsHash))
+
+	if err := group.SetIpfsHash(ipfsHash, encIpfsHash); err != nil {
+		return errors.Wrap(err, "could not set ipfs hash of group")
+	}
+
 	if err := group.Save(ctx.Storage); err != nil {
 		return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
 	}
-	if err := groupCtx.Group.CreateOnNetwork(ctx.User.Name, ctx.Network); err != nil {
+
+	if err := groupCtx.Network.CreateGroup(
+		group.Id().Data().([32]byte),
+		group.Name(),
+		group.EncryptedIpfsHash(),
+		); err != nil {
 		return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
 	}
 

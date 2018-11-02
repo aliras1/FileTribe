@@ -9,7 +9,10 @@ services:
       - ipfs-net
     tty: true
     ports:
-    - "8001:8001"
+      - "8001:8001"
+    volumes:
+      - ./eth:/ethcode
+      - ./misc/eth:/ethnet
 
   alice:
     image: ipfs-share
@@ -25,9 +28,8 @@ services:
       - fullnode
     stdin_open: true
     tty: true
-    # volumes:
-    #   - /:/root/go/src/ipfs-share
-      # - ./ethereumdocker/alice/keystore:/ethnode
+    volumes:
+       - ./test/alice:/mounted
 
   bob:
       image: ipfs-share
@@ -43,8 +45,8 @@ services:
         - fullnode
       stdin_open: true
       tty: true
-      # volumes:
-      #   - ./ethereumdocker/bob/keystore:/ethnode
+      volumes:
+         - ./test/bob:/mounted
 
   charlie:
       image: ipfs-share
@@ -60,7 +62,7 @@ services:
         - fullnode
       stdin_open: true
       tty: true
-      # volumes:
-      #   - ./ethereumdocker/charlie/keystore:/ethnode
+      volumes:
+         - ./test/charlie:/mounted
 networks:
   ipfs-net:

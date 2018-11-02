@@ -15,3 +15,11 @@ func InArray(array interface{}, item interface{}) (int, bool) {
 	}
 	return -1, false
 }
+
+func RemoveFromArray(array []interface{}, idx int) []interface{} {
+	if idx >= len(array) {
+		return array
+	}
+
+	return append(array[:idx], array[idx+1:]...)
+}

@@ -17,6 +17,9 @@ import (
 	"ipfs-share/utils"
 	"io"
 	"bytes"
+	"github.com/getlantern/deepcopy"
+	"sync"
+	"strings"
 )
 
 // IFile is an interface for the files
@@ -25,49 +28,42 @@ type IFile interface {
 	Share()
 }
 
-type PendingFile File
-
-func (pending *PendingFile) Id() collections.IIdentifier {
-	return collections.NewStringId(pending.DataPath)
-}
-
-func (pending *PendingFile) SaveMetadata() error {
-	jsonBytes, err := json.Marshal((*File)(pending))
-	if err != nil {
-		return errors.Wrapf(err, "could not marshal file '%s': File.save", pending.Cap.Id)
-	}
-	if err := utils.WriteFile(pending.PendingPath, jsonBytes); err != nil {
-		return errors.Wrapf(err, "could not write file '%s': File.save", pending.Cap.Id)
-	}
-
-	return nil
-}
-
 // File represents a file that
 // is shared in a peer to peer mode
 type File struct {
 	Cap      *FileCap
+	PendingChanges *FileCap
 	DataPath string
 	CapPath string
 	PendingPath string
+	lock sync.RWMutex
 }
 
 func (f *File) Id() collections.IIdentifier {
-	return collections.NewBytesId(f.Cap.Id)
+	return collections.NewStringId(f.Cap.FileName)
 }
 
-func NewGroupFile(filePath string, groupCtx *GroupContext, hasWriteAccess []ethcommon.Address) (*File, error) {
-	cap, err := NewGroupFileCap(path.Base(filePath), filePath, hasWriteAccess, groupCtx.Ipfs, groupCtx.Storage)
+func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, group IGroup, storage *Storage, ipfs ipfsapi.IIpfs) (*File, error) {
+	if writeAccessList == nil {
+		return nil, errors.New("writeAccessList can not be nil")
+	}
+
+	cap, err := NewGroupFileCap(path.Base(filePath), filePath, writeAccessList, ipfs, storage)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create cap for NewFile")
 	}
+	var pendingChanges *FileCap
+	if err := deepcopy.Copy(&pendingChanges, cap); err != nil {
+		return nil, errors.Wrap(err, "could not deep copy cap")
+	}
 
 	idString := base64.URLEncoding.EncodeToString(cap.Id[:])
-	capPath := groupCtx.Storage.GetGroupFileCapDir(groupCtx.Group.Id.ToString()) + idString
-	pendingPath := groupCtx.Storage.GetGroupFilePendingDir(groupCtx.Group.Id.ToString()) + idString
+	capPath := storage.GroupFileCapDir(group.Id().ToString()) + idString
+	pendingPath := storage.GroupFilePendingDir(group.Id().ToString()) + idString
 
 	file := &File{
 		Cap:      cap,
+		PendingChanges: pendingChanges,
 		DataPath: filePath,
 		CapPath: capPath,
 		PendingPath: pendingPath,
@@ -80,41 +76,28 @@ func NewGroupFile(filePath string, groupCtx *GroupContext, hasWriteAccess []ethc
 	return file, nil
 }
 
-func NewGroupFileFromCap(cap *FileCap, groupCtx *GroupContext) *File {
+func NewGroupFileFromCap(cap *FileCap, groupId string, storage *Storage) (*File, error) {
 	idString := base64.URLEncoding.EncodeToString(cap.Id[:])
-	capPath := groupCtx.Storage.GetGroupFileCapDir(groupCtx.Group.Id.ToString()) + idString
-	dataPath := groupCtx.Storage.GetGroupFileDataDir(groupCtx.Group.Id.ToString()) + cap.FileName
-	pendingPath := groupCtx.Storage.GetGroupFilePendingDir(groupCtx.Group.Id.ToString()) + idString
+	capPath := storage.GroupFileCapDir(groupId) + idString
+	dataPath := storage.GroupFileDataDir(groupId) + cap.FileName
+	pendingPath := storage.GroupFilePendingDir(groupId) + idString
+
+	var pendingChanges *FileCap
+	if err := deepcopy.Copy(&pendingChanges, cap); err != nil {
+		return nil, errors.Wrap(err, "could not deep copy cap")
+	}
 
 	file := &File{
 		Cap:      cap,
+		PendingChanges: pendingChanges,
 		DataPath: dataPath,
 		CapPath:   capPath,
 		PendingPath: pendingPath,
 	}
 
-	return file
+	return file, nil
 }
 
-func NewFile(srcFilePath, dstDir string, ctx *UserContext) (*File, error) {
-	//newPath, err := ctx.Storage.CopyFileIntoMyFiles(srcFilePath)
-	//if err != nil {
-	//	return nil, fmt.Errorf("could not copy file: NewFilePTP: %s", err)
-	//}
-	//
-	//cap, err := NewFileCap(newPath, ctx.Ipfs, ctx.Storage)
-	//if err != nil {
-	//	return nil, fmt.Errorf("could not create cap: NewFilePTP: %s", err)
-	//}
-	//
-	//file := &File{
-	//	Cap:      cap,
-	//	DataPath: newPath,
-	//}
-	//
-	//return file, nil
-	return nil, nil
-}
 
 // LoadPTPFile loads a File from the disk
 func LoadPTPFile(filePath string) (*File, error) {
@@ -151,10 +134,21 @@ func NewFileFromCap(dataDir, capDir string, cap *FileCap, ipfs ipfsapi.IIpfs, st
 	return file, nil
 }
 
+func (f *File) Update(cap *FileCap, storage *Storage, ipfs ipfsapi.IIpfs) error {
+	oldIpfsHash := f.Cap.IpfsHash
+	f.Cap = cap
+	if strings.Compare(oldIpfsHash, cap.IpfsHash) != 0 {
+		if err := f.SaveMetadata(); err != nil {
+			return errors.Wrap(err, "could not save file meta data")
+		}
+
+		go f.Download(storage, ipfs)
+	}
+	return nil
+}
+
 // Downloads, decrypts and verifies the content of file from Ipfs
 func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
-	// TODO: check if current file data's hash does not match with cap's ipfs hash
-
 	tmpFilePath, err := storage.DownloadTmpFile(f.Cap.IpfsHash, ipfs)
 	if err != nil {
 		glog.Errorf("could not ipfs get '%s': File.download: %s", f.Cap.IpfsHash, err)
@@ -224,32 +218,76 @@ func GetCapListFromFileList(files []*File) []*FileCap {
 	return l
 }
 
-// Share file with a set of users, described by shareWith. Encrypted
-// capabilities are made and copied in the corresponding 'public/for/'
-// directories. The 'public' directory is re-published into IPNS. After
-// that, notification messages are sent out.
-func (f *File) Share(ctx *UserContext) error {
+func (f *File) ResetPendingChanges() error {
+	var pendingChanges *FileCap
+	if err := deepcopy.Copy(&pendingChanges, f.Cap); err != nil {
+		return errors.Wrap(err, "could not deep copy file cap")
+	}
+	f.PendingChanges = pendingChanges
 
-	//f.SharedWith = append(f.SharedWith, friend.Contact.Address)
-	//
-	//if err := f.SaveMetadata(groupCtx.Storage); err != nil {
-	//	return fmt.Errorf("could not save file: FilePTP.Share: %s", err)
-	//}
-	//
-	//// make new capability into for_X directory
-	//dirHash, err := groupCtx.Storage.GiveCAPToUser(f.Cap, friend.Contact, groupCtx.Ipfs, groupCtx.Network)
-	//if err != nil {
-	//	return fmt.Errorf("could not give cap to user: FilePTP.Share: %s", err)
-	//}
-	//
-	//message, err := NewUpdateDirectory(groupCtx.User.Address, friend.Contact.Address, dirHash, groupCtx.User.Signer)
-	//if err != nil {
-	//	return fmt.Errorf("could not create new update dir message: FilePTP.Share: %s", err)
-	//}
-	//
-	//if err := message.DialP2PConn(&friend.Contact.Boxer, &groupCtx.User.Boxer.PublicKey, groupCtx.User.Address, groupCtx.Network); err != nil {
-	//	return fmt.Errorf("could not send message: FilePTP.Share: %s", err)
-	//}
+	return nil
+}
+
+func (f *File) GrantWriteAccess(user, target ethcommon.Address) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	hasWriteAccess := false
+	for _, hasW := range f.PendingChanges.WriteAccessList {
+		if bytes.Equal(hasW.Bytes(), user.Bytes()) {
+			hasWriteAccess = true
+		}
+
+		if bytes.Equal(hasW.Bytes(), target.Bytes()) {
+			return errors.New("user already has Write access")
+		}
+	}
+
+	if !hasWriteAccess {
+		return errors.New("user has no Write access")
+	}
+
+	f.PendingChanges.WriteAccessList = append(f.PendingChanges.WriteAccessList, target)
+	if err := f.SaveMetadata(); err != nil {
+		return errors.Wrap(err, "could not save file meta data")
+	}
+
+	return nil
+}
+
+func (f *File) RevokeWriteAccess(user, target ethcommon.Address) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	userHasWriteAccess := false
+	targetHasWriteAccess := false
+	for _, hasW := range f.PendingChanges.WriteAccessList {
+		if bytes.Equal(hasW.Bytes(), user.Bytes()) {
+			userHasWriteAccess = true
+		}
+
+		if bytes.Equal(hasW.Bytes(), target.Bytes()) {
+			targetHasWriteAccess = true
+		}
+
+		if userHasWriteAccess && targetHasWriteAccess {
+			break
+		}
+	}
+
+	if !userHasWriteAccess {
+		return errors.New("user has no Write access")
+	}
+	if !targetHasWriteAccess {
+		return errors.New("target has no Write access")
+	}
+
+	for i, hasW := range f.PendingChanges.WriteAccessList {
+		if bytes.Equal(hasW.Bytes(), target.Bytes()) {
+			f.PendingChanges.WriteAccessList = append(f.PendingChanges.WriteAccessList[:i], f.PendingChanges.WriteAccessList[i+1:]...)
+			break
+		}
+	}
 
 	return nil
 }

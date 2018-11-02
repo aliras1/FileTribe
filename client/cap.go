@@ -13,6 +13,7 @@ import (
 	"crypto/rand"
 	"os"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"ipfs-share/utils"
 )
 
 type GroupAccessCap struct {
@@ -21,14 +22,15 @@ type GroupAccessCap struct {
 }
 
 func (cap *GroupAccessCap) Save(storage *Storage) error {
-	bytesJSON, err := json.Marshal(cap)
+	capJson, err := json.Marshal(cap)
 	if err != nil {
 		return fmt.Errorf("could not marshal group access capability: GroupAccessCap.SaveMetadata: %s", err)
 	}
 
 	groupIdBase64 := base64.URLEncoding.EncodeToString(cap.GroupId[:])
-	if err := storage.SaveGroupCap(groupIdBase64, bytesJSON); err != nil {
-		return fmt.Errorf("could not write group cap file: GroupAccessCapability.SaveMetadata: %s", err)
+	path := storage.GroupAccessCapDir() + groupIdBase64 + CAP_EXT
+	if err := utils.WriteFile(path, capJson); err != nil {
+		return errors.Wrap(err, "could not write group cap file")
 	}
 
 	return nil
@@ -36,11 +38,11 @@ func (cap *GroupAccessCap) Save(storage *Storage) error {
 
 
 type FileCap struct {
-	Id [32]byte
-	FileName string
-	IpfsHash string
-	DataKey  crypto.FileBoxer
-	WriteAccess []ethcommon.Address // if empty --> everyone has write access to it
+	Id              [32]byte
+	FileName        string
+	IpfsHash        string
+	DataKey         crypto.FileBoxer
+	WriteAccessList []ethcommon.Address // if empty --> everyone has write access to it
 }
 
 func (cap *FileCap) Equal(other *FileCap) bool {
@@ -126,10 +128,10 @@ func NewGroupFileCap(fileName string, filePath string, hasWriteAccess []ethcommo
 	}
 
 	return &FileCap{
-		Id: id,
-		DataKey: boxer,
-		IpfsHash: hash,
-		FileName: fileName,
-		WriteAccess: hasWriteAccess,
+		Id:              id,
+		DataKey:         boxer,
+		IpfsHash:        hash,
+		FileName:        fileName,
+		WriteAccessList: hasWriteAccess,
 	}, nil
 }

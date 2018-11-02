@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p-peer"
 	"crypto/ecdsa"
 	"ipfs-share/utils"
+	"io/ioutil"
 )
 
 type FakePubSubRecord struct {
@@ -169,12 +170,12 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	if alice.Groups.Count() != 1 {
-		t.Fatal("no group found by alice")
+		t.Fatal("no groupAtAlice found by alice")
 	}
 
-	group := alice.Groups.FirstOrDefault(nil).(*GroupContext)
-	group.Invite(bob.User.Address, true)
-	group.Invite(charlie.User.Address, true)
+	groupAtAlice := alice.Groups.FirstOrDefault(nil).(*GroupContext)
+	groupAtAlice.Invite(bob.User.Address, true)
+	groupAtAlice.Invite(charlie.User.Address, true)
 
 	time.Sleep(5 * time.Second)
 
@@ -189,25 +190,66 @@ func TestGroupContext_Invite(t *testing.T) {
 	fmt.Println(bob.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
 	fmt.Println(charlie.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
 
-	if len(alice.Groups.FirstOrDefault(nil).(*GroupContext).Group.Members) != 3 {
-		t.Fatal("alice's group has not got enough members")
+	if alice.Groups.FirstOrDefault(nil).(*GroupContext).Group.CountMembers() != 3 {
+		t.Fatal("alice's groupAtAlice has not got enough members")
 	}
-	if len(bob.Groups.FirstOrDefault(nil).(*GroupContext).Group.Members) != 3 {
-		t.Fatal("bob's group has not got enough members")
+	if bob.Groups.FirstOrDefault(nil).(*GroupContext).Group.CountMembers() != 3 {
+		t.Fatal("bob's groupAtAlice has not got enough members")
 	}
-	if len(charlie.Groups.FirstOrDefault(nil).(*GroupContext).Group.Members) != 3 {
-		t.Fatal("charlie's group has not got enough members")
-	}
-
-	dstPath := "./alice/data/userdata/root/" + group.Group.Id.ToString() + "/rrrepo.go"
-	if err := utils.CopyFile("./grouprepo.go", dstPath); err != nil {
-		t.Fatal(err)
-	}
-	if err := group.CommitChanges(); err != nil {
-		t.Fatal(err)
+	if charlie.Groups.FirstOrDefault(nil).(*GroupContext).Group.CountMembers() != 3 {
+		t.Fatal("charlie's groupAtAlice has not got enough members")
 	}
 
-	time.Sleep(3 * time.Second)
+	fileAlice := "./alice/data/userdata/root/" + groupAtAlice.Group.Id().ToString() + "/rrrepo.go"
+	if err := utils.CopyFile("./grouprepo.go", fileAlice); err != nil {
+		t.Fatal(err)
+	}
+	if err := groupAtAlice.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+	fmt.Println("----------- change file ------------")
+
+	groupAtBob := bob.Groups.FirstOrDefault(nil).(*GroupContext)
+	fileBob := "./bob/data/userdata/root/" + groupAtBob.Group.Id().ToString() + "/rrrepo.go"
+	if err := AppendToFile(fileBob, "Bob's modification (should fail)\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := groupAtBob.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+	fmt.Println("----------- Grant W access to only alice  ------------")
+
+	if err := groupAtAlice.GrantWriteAccess(fileAlice, bob.User.Address); err != nil {
+		t.Fatal(err)
+	}
+	if err := groupAtAlice.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+	if err := AppendToFile(fileBob, "Bob's modification\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := groupAtBob.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+	if err := AppendToFile(fileAlice, "Alice's modification\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := groupAtAlice.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+
+
 
 	time.Sleep(500 * time.Second)
 
@@ -227,4 +269,13 @@ func TestGroupContext_Invite(t *testing.T) {
 		cc := c.(*Contact)
 		cc.Send([]byte{2})
 	}
+}
+
+func AppendToFile(path string, data string) error {
+	file, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(path, append(file, []byte(data)...), 644)
 }

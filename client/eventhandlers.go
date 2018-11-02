@@ -7,14 +7,13 @@ import (
 	"ipfs-share/eth"
 	"bytes"
 	. "ipfs-share/collections"
-	"encoding/base64"
 )
 
 func HandleDebugEvents(ctx *UserContext) {
 	glog.Info("hadnling debug events...")
 
 	for debug := range ctx.Network.GetDebugChannel() {
-		glog.Infof("Eth Debug address: %v", debug.Msg)
+		glog.Infof("Eth Debug code: %v", debug.Msg.String())
 	}
 }
 
@@ -42,7 +41,7 @@ func HandleGroupRegisteredEvents(ctx *UserContext) {
 	}
 }
 
-func processGroupUpdateIpfsEvent(updateIpfs *eth.EthGroupUpdateIpfsPath, ctx *UserContext) {
+func processGroupUpdateIpfsEvent(updateIpfs *eth.EthGroupUpdateIpfsHash, ctx *UserContext) {
 	glog.Info("got update ipfs event message")
 
 	groupCtxInterface := ctx.Groups.Get(NewBytesId(updateIpfs.GroupId))
@@ -52,19 +51,19 @@ func processGroupUpdateIpfsEvent(updateIpfs *eth.EthGroupUpdateIpfsPath, ctx *Us
 
 	groupCtx := groupCtxInterface.(*GroupContext)
 
-	encNewIpfsHash, err := base64.URLEncoding.DecodeString(updateIpfs.IpfsPath)
-	if err != nil {
-		glog.Errorf("could not base64 decode new encrypted ipfs path")
-		return
-	}
-	newIpfsHash, ok := groupCtx.Group.Boxer.BoxOpen(encNewIpfsHash)
+	boxer := groupCtx.Group.Boxer()
+	newIpfsHash, ok := boxer.BoxOpen(updateIpfs.IpfsHash)
 	if !ok {
 		glog.Errorf("could not decrpyt new ipfs hash")
 		return
 	}
 
+	if err := groupCtx.Update(); err != nil {
+		glog.Errorf("could not update group context: %s", err)
+	}
+
 	if err := groupCtx.Repo.Update(string(newIpfsHash)); err != nil {
-		glog.Errorf("could not update group %s's repo with ipfs hash %s: %s", groupCtx.Group.Id.ToString(), updateIpfs.IpfsPath, err)
+		glog.Errorf("could not update group %s's repo with ipfs hash %s: %s", groupCtx.Group.Id().ToString(), updateIpfs.IpfsHash, err)
 	}
 }
 
@@ -107,6 +106,6 @@ func processGroupInvitationEvent(inv *eth.EthGroupInvitation, ctx *UserContext) 
 	}
 
 	if err := groupCtx.Update(); err != nil {
-		glog.Warningf("could not update group %v", inv.GroupId)
+		glog.Warningf("could not update group %s", err)
 	}
 }

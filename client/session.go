@@ -8,7 +8,6 @@ import (
 	"github.com/golang/glog"
 
 	. "ipfs-share/collections"
-	"ipfs-share/utils"
 )
 
 
@@ -42,7 +41,7 @@ type GetGroupKeySessionServer struct {
 	groupId [32]byte
 	challenge [32]byte
 	ctx  *UserContext
-	boxer *crypto.SymmetricKey
+	boxer crypto.SymmetricKey
 	lock sync.RWMutex
 	stop chan bool
 }
@@ -105,11 +104,11 @@ func (session *GetGroupKeySessionServer) NextState(contact *Contact, data []byte
 
 			if err := groupCtx.Update(); err != nil {
 				session.close()
-				glog.Errorf("could not update the state of group %v", groupCtx.Group.Id.Data())
+				glog.Errorf("could not update the state of group %s", err)
 				return
 			}
 
-			if _, ok := utils.InArray(groupCtx.Group.Members, session.contact.Address); !ok {
+			if !groupCtx.Group.IsMember(session.contact.Address) {
 				session.close()
 				glog.Errorf("non group member %s asked for key", session.contact.Address.String())
 				return
@@ -139,7 +138,7 @@ func (session *GetGroupKeySessionServer) NextState(contact *Contact, data []byte
 				return
 			}
 
-			session.boxer = &groupCtx.Group.Boxer
+			session.boxer = groupCtx.Group.Boxer()
 			session.state = 1
 
 			return
@@ -368,7 +367,7 @@ func (session *GetGroupKeySessionClient) NextState(contact *Contact, data []byte
 			}
 
 			if err := groupCtx.Update(); err != nil {
-				glog.Errorf("could not update group")
+				glog.Errorf("could not update group: %s", err)
 				return
 			}
 

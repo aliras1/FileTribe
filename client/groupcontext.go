@@ -10,13 +10,13 @@ import (
 	"github.com/pkg/errors"
 	. "ipfs-share/collections"
 	"sync"
-	"encoding/base64"
+	"path"
 )
 
 
 type GroupContext struct {
 	User             *User
-	Group            *Group
+	Group            IGroup
 	P2P *P2PServer
 	Repo             *GroupRepo
 	GroupConnection  *GroupConnection
@@ -29,11 +29,11 @@ type GroupContext struct {
 }
 
 func (groupCtx *GroupContext) Id() IIdentifier {
-	return groupCtx.Group.Id
+	return groupCtx.Group.Id()
 }
 
 func NewGroupContext(
-	group *Group,
+	group IGroup,
 	user *User,
 	p2p *P2PServer,
 	addressBook *ConcurrentCollection,
@@ -53,7 +53,7 @@ func NewGroupContext(
 		Storage:         storage,
 	}
 
-	repo, err := NewGroupRepo(groupContext)
+	repo, err := NewGroupRepo(group, user.Address, storage, ipfs)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create group repo")
 	}
@@ -73,11 +73,7 @@ func NewGroupContextFromCAP(
 	ipfs ipfsapi.IIpfs,
 	storage *Storage,
 ) (*GroupContext, error) {
-	group := &Group{
-		Id:  NewBytesId(cap.GroupId),
-		Boxer: cap.Boxer,
-	}
-
+	group := NewGroupFromCap(cap)
 	gc, err := NewGroupContext(group, user, p2p, addressBook, network, ipfs, storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create group context: NewGroupContextFromCAP: %s", err)
@@ -87,34 +83,20 @@ func NewGroupContextFromCAP(
 }
 
 func (groupCtx *GroupContext) Update() error {
-	groupCtx.lock.Lock()
-	defer groupCtx.lock.Unlock()
-
-	name, members, encIpfsPathBase64, err := groupCtx.Network.GetGroup(groupCtx.Group.Id.Data().([32]byte))
+	name, members, encIpfsHash, err := groupCtx.Network.GetGroup(groupCtx.Group.Id().Data().([32]byte))
 	if err != nil {
-		return errors.Wrapf(err, "could not get group %v", groupCtx.Group.Id.Data())
+		return errors.Wrapf(err, "could not get group %v", groupCtx.Group.Id().Data())
 	}
 
-	encIpfsPath, err := base64.URLEncoding.DecodeString(encIpfsPathBase64)
-	if err != nil {
-		return errors.Wrap(err, "could not base64 decode encrypted ipfs path")
+	if err := groupCtx.Group.Update(name, members, encIpfsHash); err != nil {
+		return errors.Wrap(err, "could not update group")
 	}
-	ipfsPathBytes, ok := groupCtx.Group.Boxer.BoxOpen(encIpfsPath)
-	if !ok {
-		return errors.New("could not decrypt ipfs path")
-	}
-	ipfsPath := string(ipfsPathBytes)
-
-	groupCtx.Group.Name = name
-	groupCtx.Group.Members = members
-	groupCtx.Group.IpfsHash = ipfsPath
-	groupCtx.Group.EncryptedIpfsHash = encIpfsPathBase64
 
 	if err := groupCtx.Group.Save(groupCtx.Storage); err != nil {
 		return errors.Wrapf(err, "could not save group")
 	}
 
-	if err := groupCtx.Repo.Update(ipfsPath); err != nil {
+	if err := groupCtx.Repo.Update(groupCtx.Group.IpfsHash()); err != nil {
 		return errors.Wrap(err, "could not update group repo")
 	}
 
@@ -141,7 +123,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight bool) error {
 	fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, groupCtx.Group.Name)
 
-	if err := groupCtx.Network.InviteUser(groupCtx.Group.Id.Data().([32]byte), newMember, hasInviteRight); err != nil {
+	if err := groupCtx.Network.InviteUser(groupCtx.Group.Id().Data().([32]byte), newMember, hasInviteRight); err != nil {
 		return fmt.Errorf("could not invite user: GroupContext::Invite(): %s", err)
 	}
 
@@ -158,3 +140,33 @@ func (groupCtx *GroupContext) Save() error {
 func (groupCtx *GroupContext) LoadGroupData(data string) error {
 	return fmt.Errorf("not implemented GroupContext.LoadGroupData")
 }
+
+func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.Address) error {
+	if !groupCtx.Group.IsMember(user) {
+		return errors.New("can not grant write access to non group members")
+	}
+
+	var file *File
+	fileInt := groupCtx.Repo.files.Get(NewStringId(path.Base(filePath)))
+	if fileInt == nil {
+		tmpFile, err := NewGroupFile(
+			filePath,
+			[]ethcommon.Address{groupCtx.User.Address},
+			groupCtx.Group,
+			groupCtx.Storage,
+			groupCtx.Ipfs)
+		if err != nil {
+			return errors.Wrap(err, "could not create new group file")
+		}
+		file = tmpFile
+	} else {
+		file = fileInt.(*File)
+	}
+
+	if err := file.GrantWriteAccess(groupCtx.User.Address, user); err != nil {
+		return errors.Wrap(err, "could not grant write access to user")
+	}
+
+	return nil
+}
+

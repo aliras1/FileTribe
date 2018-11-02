@@ -160,12 +160,12 @@ func invite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	groupCtx := groupCtxInterface.(*client.GroupContext)
-	if err := groupCtx.Invite(address); err != nil {
+	if err := groupCtx.Invite(address, true); err != nil {
 		errorHandler(w, r, fmt.Sprintf("could not invite user: %s", err.Error()))
 	}
 }
 
-func addGroupFile(w http.ResponseWriter, r *http.Request) {
+func groupCommitChanges(w http.ResponseWriter, r *http.Request) {
 	if userContext == nil {
 		errorHandler(w, r, "")
 		return
@@ -190,14 +190,14 @@ func addGroupFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	groupCtx := groupCtxInterface.(*client.GroupContext)
-	if err := groupCtx.AddFile(path); err != nil {
+	if err := groupCtx.CommitChanges(); err != nil {
 		errorHandler(w, r, fmt.Sprintf("could not add group file: %s", err.Error()))
 	}
 }
 
-func groupLs(w http.ResponseWriter, r *http.Request) {
+func groupRepoLs(w http.ResponseWriter, r *http.Request) {
 	if userContext == nil {
-		errorHandler(w, r, "")
+		errorHandler(w, r, "usercontext is nil")
 		return
 	}
 
@@ -217,7 +217,9 @@ func groupLs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	groupCtx := groupCtxInterface.(*client.GroupContext)
-	if err := json.NewEncoder(w).Encode(groupCtx.Repo.List()); err != nil {
+	list := groupCtx.Repo.List()
+	fmt.Println(list)
+	if err := json.NewEncoder(w).Encode(list); err != nil {
 		errorHandler(w, r, "could not encode file list")
 	}
 }
@@ -271,8 +273,8 @@ func main() {
 	
 	router.HandleFunc("/group/create", createGroup).Methods("POST")
 	router.HandleFunc("/group/invite/{groupId}", invite).Methods("POST")
-	router.HandleFunc("/group/add/{groupId}", addGroupFile).Methods("POST")
-	router.HandleFunc("/group/ls/{groupId}", groupLs).Methods("POST")
+	router.HandleFunc("/group/commit/{groupId}", groupCommitChanges).Methods("POST")
+	router.HandleFunc("/group/repo/ls/{groupId}", groupRepoLs).Methods("GET")
 	
 	router.HandleFunc("/ls", ls).Methods("GET")
 	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")

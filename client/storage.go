@@ -7,14 +7,10 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"time"
-
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	ipfsapi "ipfs-share/ipfs"
 	"ipfs-share/utils"
 
-	"github.com/pkg/errors"
 )
 
 const (
@@ -80,32 +76,8 @@ func NewStorage(dataPath string) *Storage {
 	return &storage
 }
 
-func (storage *Storage) GetUserFilesPath() string {
+func (storage *Storage) UserFilesPath() string {
 	return storage.fileRootPath
-}
-
-func loadFilesOfAddress(address ethcommon.Address, baseDir string) (map[[32]byte]*File, error) {
-	fileMap := make(map[[32]byte]*File)
-
-	currentDir := baseDir + "/" + address.String()
-	files, err := ioutil.ReadDir(currentDir)
-	if err != nil {
-		return fileMap, fmt.Errorf("could not read dir: '%s': Storage.BuildRepo: %s", currentDir, err)
-	}
-
-	for _, filePTPFile := range files {
-		filePTPPath := currentDir + "/" + filePTPFile.Name()
-
-		filePTP, err := LoadPTPFile(filePTPPath)
-		if err != nil {
-			glog.Warningf("could not load file ptp: '%s': Storage.BuildRepo: %s", filePTPPath, err)
-			continue
-		}
-
-		fileMap[filePTP.Cap.Id] = filePTP
-	}
-
-	return fileMap, nil
 }
 
 func (storage *Storage) CopyFileIntoPublicDir(filePath string) error {
@@ -160,23 +132,19 @@ func (storage *Storage) GetGroupCaps() ([]GroupAccessCap, error) {
 	return caps, nil
 }
 
-func (storage *Storage) SaveGroupCap(groupId string, data []byte) error {
-	capPath := storage.capsGAPath + "/" + groupId + CAP_EXT
-	if err := utils.WriteFile(capPath, data); err != nil {
-		return errors.Wrap(err, "could not write group cap file")
-	}
-	return nil
+func (storage *Storage) GroupAccessCapDir() string {
+	return storage.capsGAPath
 }
 
-func (storage *Storage) GetGroupFileCapDir(id string) string {
+func (storage *Storage) GroupFileCapDir(id string) string {
 	return storage.capsPath + id + "/"
 }
 
-func (storage *Storage) GetGroupFilePendingDir(id string) string {
+func (storage *Storage) GroupFilePendingDir(id string) string {
 	return storage.pendingPath + id + "/"
 }
 
-func (storage *Storage) GetGroupFileDataDir(id string) string {
+func (storage *Storage) GroupFileDataDir(id string) string {
 	return storage.fileRootPath + id + "/"
 }
 
@@ -185,45 +153,6 @@ func (storage *Storage) MakeGroupDir(id string) {
 	os.MkdirAll(storage.capsPath + id, 0770)
 	os.MkdirAll(storage.fileRootPath + id, 0770)
 	os.MkdirAll(storage.pendingPath + id, 0770)
-}
-
-
-// +------------------------------+
-// |       Helper functions       |
-// +------------------------------+
-
-func (storage *Storage) PublishPublicDir(ipfs ipfsapi.IIpfs) error {
-	glog.Info("Publishing...")
-	t := time.Now()
-	publicDir := storage.dataPath + "/public"
-	hash, err := ipfs.AddDir(publicDir)
-	if err != nil {
-		return fmt.Errorf("could not ipfs add dir: Storage.PublishPublicDir: %s", err)
-	}
-	glog.Info("ipfs add: ", time.Since(t))
-
-	if err := ipfs.Publish("", hash); err != nil {
-		return fmt.Errorf("could not ipfs name publish: Storage.PublishPublicDir: %s", err)
-	}
-
-	glog.Info("ipfs add n pub: ", time.Since(t))
-	glog.Info("Publishing ended")
-	return nil
-}
-
-func (storage *Storage) MakeForDirectory(dirName string, ipfs ipfsapi.IIpfs) (string, error) {
-	dirPath := storage.publicForPath + "/" + dirName
-	os.Mkdir(dirPath, 0770)
-	hash, err := ipfs.AddDir(dirPath)
-	if err != nil {
-		return "", fmt.Errorf("could not publish: Storage.MakeForDirectory: %s", err)
-	}
-	return hash, nil
-}
-
-func (storage *Storage) InitMyCapsByFriend(friendAddress string) {
-	dirPath := storage.capsPath + "/" + friendAddress
-	os.Mkdir(dirPath, 0770)
 }
 
 func (storage *Storage) DownloadTmpFile(ipfsHash string, ipfs ipfsapi.IIpfs) (string, error) {

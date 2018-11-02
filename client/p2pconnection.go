@@ -35,11 +35,9 @@ func NewP2PConnection(port string, ctx *UserContext) (*P2PServer, error) {
 		return nil, errors.New("could not create P2P listener")
 	}
 
-	sessions := NewConcurrentCollection()
-
 	p2p := &P2PServer{
 		SessionClosedChan: closedSession,
-		sessions: sessions,
+		sessions: NewConcurrentCollection(),
 		p2pListener: p2pListener,
 		ctx: ctx,
 		stop: stop,

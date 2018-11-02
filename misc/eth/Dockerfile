@@ -14,11 +14,11 @@ RUN \
 
 RUN npm install -g truffle
 
-COPY ./eth /ethcode
-COPY ./misc/eth /ethnet
+#COPY ./eth /ethcode
+#COPY ./misc/eth /ethnet
 
 EXPOSE 8000
 EXPOSE 8001
 EXPOSE 30304
-RUN chmod +x /ethnet/start.sh
+#RUN chmod +x /ethnet/start.sh
 ENTRYPOINT "/ethnet/start.sh"

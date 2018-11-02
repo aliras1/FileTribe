@@ -20,6 +20,7 @@ import (
 	"math/big"
 	"crypto/rand"
 	"context"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 // const key = `{"address":"c4f45f1822b614116ea5b68d4020f3ae1a0179e5","crypto":{"cipher":"aes-128-ctr","ciphertext":"c47565906c488c5122c805a31a3e241d0839cda984903ec28aa07c8892deb5b0","cipherparams":{"iv":"d7814d0dc15a383630c0439c6ad2fea8"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"78d74296f7796969b5764bcfda6cf1cd2cd5bfc423fc0897313b9d23e7e0f219"},"mac":"d852362f275a61fd32acdf040a136a08dc0dc25ab69ddc3d54404b17e9f85826"},"id":"ce2a2147-38d2-4d99-95c1-4968ff6b7a0e","version":3}`
@@ -48,17 +49,18 @@ type INetwork interface {
 	GetUser(address common.Address) (*Contact, error)
 	RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) error
 	IsUserRegistered(common.Address) (bool, error)
-	CreateGroup(id [32]byte, name string, ipfsPath string) error
+	CreateGroup(id [32]byte, name string, ipfsPath []byte) error
 	InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) error
-	GetGroup(groupId [32]byte) (string, []common.Address, string, error)
-	UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string, approvals []*Approval) error
+	GetGroup(groupId [32]byte) (string, []common.Address, []byte, error)
+	UpdateGroupIpfsHash(groupId [32]byte, newIpfsPath []byte, approvals []*Approval) error
+	TransactionReceipt(tx *types.Transaction) (*types.Receipt, error)
 
 	// contract events
 	GetGroupInvitationSub() *event.Subscription
 	GetGroupInvitationChannel() chan *eth.EthGroupInvitation
 
 	GetGroupUpdateIpfsSub() *event.Subscription
-	GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsPath
+	GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsHash
 
 	GetDebugSub() *event.Subscription
 	GetDebugChannel() chan *eth.EthDebug
@@ -82,7 +84,7 @@ type Network struct {
 	groupInvitationChannel chan *eth.EthGroupInvitation
 
 	groupUpdateIpfsSub     event.Subscription
-	groupUpdateIpfsChannel chan *eth.EthGroupUpdateIpfsPath
+	groupUpdateIpfsChannel chan *eth.EthGroupUpdateIpfsHash
 
 	groupRegisteredSub     event.Subscription
 	groupRegisteredChannel chan *eth.EthGroupRegistered
@@ -167,7 +169,7 @@ func NewNetwork(wsAddress, ethKeyPath, contractAddress, password string) (INetwo
 
 	channelDebug := make(chan *eth.EthDebug)
 	channelGroupInvitation := make(chan *eth.EthGroupInvitation)
-	channelGroupUpdateIpfs := make(chan *eth.EthGroupUpdateIpfsPath)
+	channelGroupUpdateIpfs := make(chan *eth.EthGroupUpdateIpfsHash)
 
 	network := Network{
 		Client: conn,
@@ -192,7 +194,6 @@ func NewNetwork(wsAddress, ethKeyPath, contractAddress, password string) (INetwo
 }
 
 
-
 func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 	opts := &bind.WatchOpts{
 		Context: network.Auth.Context,
@@ -207,7 +208,7 @@ func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 	if err != nil {
 		return err
 	}
-	subGroupUpdateIpfs, err := network.Session.Contract.WatchGroupUpdateIpfsPath(opts, network.groupUpdateIpfsChannel)
+	subGroupUpdateIpfs, err := network.Session.Contract.WatchGroupUpdateIpfsHash(opts, network.groupUpdateIpfsChannel)
 	if err != nil {
 		return err
 	}
@@ -224,6 +225,10 @@ func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 	return nil
 }
 
+func (network *Network) TransactionReceipt(tx *types.Transaction) (*types.Receipt, error) {
+	return network.Client.TransactionReceipt(network.Auth.Context, tx.Hash())
+}
+
 func (network *Network) GetGroupInvitationSub() *event.Subscription {
 	return &network.groupInvitationSub
 }
@@ -236,7 +241,7 @@ func (network *Network) GetGroupUpdateIpfsSub() *event.Subscription {
 	return &network.groupUpdateIpfsSub
 }
 
-func (network *Network) GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsPath {
+func (network *Network) GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsHash {
 	return network.groupUpdateIpfsChannel
 }
 
@@ -256,7 +261,7 @@ func (network *Network) GetDebugChannel() chan *eth.EthDebug {
 	return network.debugChannel
 }
 
-func (network *Network) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string, approvals []*Approval) error {
+func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) error {
 	network.lock.Lock()
 	defer network.lock.Unlock()
 
@@ -290,7 +295,7 @@ func (network *Network) UpdateGroupIpfsPath(groupId [32]byte, newIpfsPath string
 		vs = append(vs, v)
 	}
 
-	_, err := network.Session.UpdateGroupIpfsPath(groupId, newIpfsPath, members, rs, ss, vs)
+	_, err := network.Session.UpdateGroupIpfsHash(groupId, newIpfsHash, members, rs, ss, vs)
 	if err != nil {
 		return errors.Wrapf(err, "could not send updateGroupIpfsPath transaction")
 	}
@@ -337,14 +342,14 @@ func (network *Network) GetUser(address common.Address) (*Contact, error) {
 	}, nil
 }
 
-func (network *Network) CreateGroup(id [32]byte, name string, ipfsPath string) error {
+func (network *Network) CreateGroup(id [32]byte, name string, ipfsHash []byte) error {
 	network.lock.Lock()
 	defer network.lock.Unlock()
 
 	//network.nonce.Add(network.nonce, big.NewInt(1))
 	//network.Session.TransactOpts.Nonce = network.nonce
 
-	tx, err := network.Session.CreateGroup(id, name, ipfsPath)
+	tx, err := network.Session.CreateGroup(id, name, ipfsHash)
 
 	glog.Infof("tx create group nonce: %d", tx.Nonce())
 
@@ -365,7 +370,7 @@ func (network *Network) InviteUser(groupId [32]byte, newMember common.Address, c
 	return err
 }
 
-func (network *Network) GetGroup(groupId [32]byte) (string, []common.Address, string, error) {
+func (network *Network) GetGroup(groupId [32]byte) (string, []common.Address, []byte, error) {
 	return network.Session.GetGroup(groupId)
 }
 

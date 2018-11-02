@@ -27,13 +27,13 @@ RUN wget "https://dist.ipfs.io/go-ipfs/v0.4.17/go-ipfs_v0.4.17_linux-amd64.tar.g
     cd go-ipfs && \
     ./install.sh
 
-ADD ./.docker/start.sh /
-ADD . /root/go/src/ipfs-share
+#ADD ./.docker/start.sh /
+#ADD . /root/go/src/ipfs-share
 
 EXPOSE 3333
 RUN cd /
-RUN chmod +x /start.sh
-ENTRYPOINT "/start.sh"
+#RUN chmod +x /root/go/src/ipfs-share/.docker/start.sh
+ENTRYPOINT "/mounted/start.sh"
 
 # RUN chmod +x /root/go/src/ipfs-share/.docker/start.sh
 # ENTRYPOINT [ "/root/go/src/ipfs-share/.docker/start.sh" ]

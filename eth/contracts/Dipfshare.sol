@@ -15,7 +15,7 @@ contract Dipfshare {
         address owner;
         string name;
         address[] members;
-        string ipfsPath; // encrypted with group key
+        bytes ipfsHash; // encrypted with group key
         mapping(address => bool) canInvite;
         bool exists;
     }
@@ -27,8 +27,8 @@ contract Dipfshare {
     event UserRegistered(address addr);
     event GroupRegistered(bytes32 id);
     event GroupInvitation(address from, address to, bytes32 groupId);
-    event GroupUpdateIpfsPath(bytes32 groupId, string ipfsPath);
-    event Debug(bytes msg);
+    event GroupUpdateIpfsHash(bytes32 groupId, bytes ipfsHash);
+    event Debug(int msg);
 
     constructor () public {
         owner = msg.sender;
@@ -66,7 +66,7 @@ contract Dipfshare {
     function createGroup(
         bytes32 id,
         string name,
-        string ipfsPath
+        bytes ipfsHash
     ) 
         public
     {
@@ -75,17 +75,17 @@ contract Dipfshare {
         groups[id].owner = msg.sender;
         groups[id].name = name;
         groups[id].members.push(msg.sender);
-        groups[id].ipfsPath = ipfsPath;
+        groups[id].ipfsHash = ipfsHash;
         groups[id].exists = true;
         groups[id].canInvite[msg.sender] = true;
 
         emit GroupRegistered(id);
     }
 
-    function getGroup(bytes32 groupId) public view returns(string, address[], string) {
+    function getGroup(bytes32 groupId) public view returns(string, address[], bytes) {
         require(groups[groupId].exists, "Group does not exists");
 
-        return (groups[groupId].name, groups[groupId].members, groups[groupId].ipfsPath);
+        return (groups[groupId].name, groups[groupId].members, groups[groupId].ipfsHash);
     }
 
     function inviteUser(bytes32 groupId, address newMember, bool hasInviteRight) public {
@@ -129,9 +129,9 @@ contract Dipfshare {
         return ecrecover(hash, v, r, s) == user;
     }
 
-    function updateGroupIpfsPath(
+    function updateGroupIpfsHash(
         bytes32 groupId,
-        string newIpfsPath,
+        bytes newIpfsHash,
         address[] members,
         bytes32[] rs,
         bytes32[] ss,
@@ -139,18 +139,41 @@ contract Dipfshare {
     )
         public
     {
-        require(groups[groupId].exists, "group does not exist");
+        emit Debug(120);
 
-        require(rs.length == members.length);
-        require(ss.length == members.length);
-        require(vs.length == members.length);
-        require(members.length > groups[groupId].members.length / 2);
+        if (!groups[groupId].exists) {
+            emit Debug(0);
+        }
+//        require(groups[groupId].exists, "group does not exist");
 
-        bytes32 digest = keccak256(groups[groupId].ipfsPath, newIpfsPath);
+        if (rs.length != members.length) {
+            emit Debug(1);
+        }
+//        require(rs.length == members.length, "invalid r length");
+        if (ss.length != members.length) {
+            emit Debug(2);
+        }
+//        require(ss.length == members.length, "invalid s length");
+        if (vs.length != members.length) {
+            emit Debug(3);
+        }
+//        require(vs.length == members.length, "invalid v length");
+        if (members.length <= groups[groupId].members.length / 2) {
+            emit Debug(4);
+        }
+        //require(members.length > groups[groupId].members.length / 2, "not enough approvals");
+
+        bytes32 digest = keccak256(groups[groupId].ipfsHash, newIpfsHash);
 
         for (uint256 i = 0; i < members.length; i++) {
-            require(isUserInGroup(groupId, members[i]), "invalid approval: user is not a group member");
-            require(verify(members[i], digest, vs[i], rs[i], ss[i]), "invalid approval: invalid signature");
+            if (!isUserInGroup(groupId, members[i])) {
+                emit Debug(5);
+            }
+            //require(isUserInGroup(groupId, members[i]), "invalid approval: user is not a group member");
+            if (!verify(members[i], digest, vs[i], rs[i], ss[i])) {
+                emit Debug(6);
+            }
+            //require(verify(members[i], digest, vs[i], rs[i], ss[i]), "invalid approval: invalid signature");
         }
 
         heapSort(members);
@@ -162,13 +185,15 @@ contract Dipfshare {
             if (i == 0) {
                 continue;
             }
-            require(members[i] != members[i - 1], "duplicate approvals detected");
+            if (members[i] == members[i - 1]) {
+                emit Debug(7);
+            }
+            //require(members[i] != members[i - 1], "duplicate approvals detected");
         }
 
-        // TODO: re-entrance danger
-        groups[groupId].ipfsPath = newIpfsPath;
+        groups[groupId].ipfsHash = newIpfsHash;
 
-        emit GroupUpdateIpfsPath(groupId, newIpfsPath);
+        emit GroupUpdateIpfsHash(groupId, newIpfsHash);
     }
 
 
