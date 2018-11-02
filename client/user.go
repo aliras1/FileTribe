@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"io/ioutil"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -12,17 +11,39 @@ import (
 	"golang.org/x/crypto/sha3"
 
 	"ipfs-share/crypto"
-	nw "ipfs-share/network"
 )
 
-type User struct {
-	Address ethcommon.Address
-	Name    string
-	Signer  *crypto.Signer
-	Boxer   crypto.AnonymBoxer
+type IUser interface {
+	Address() ethcommon.Address
+	Name() string
+	Signer() crypto.Signer
+	Boxer() crypto.AnonymBoxer
 }
 
-func NewUser(username, password, ethKeyPath string) (*User, error) {
+type User struct {
+	address ethcommon.Address
+	name    string
+	signer  *crypto.Signer
+	boxer   crypto.AnonymBoxer
+}
+
+func (user *User) Address() ethcommon.Address {
+	return user.address
+}
+
+func (user *User) Name() string {
+	return user.name
+}
+
+func (user *User) Signer() crypto.Signer {
+	return *user.signer
+}
+
+func (user *User) Boxer() crypto.AnonymBoxer {
+	return user.boxer
+}
+
+func NewUser(username, password, ethKeyPath string) (IUser, error) {
 	passwordDigest := sha3.Sum256([]byte(password))
 	keySeeds, err := scrypt.Key(
 		passwordDigest[:],
@@ -52,50 +73,12 @@ func NewUser(username, password, ethKeyPath string) (*User, error) {
 	}
 
 	return &User{
-		Address: key.Address,
-		Name:    username,
-		Signer:  &crypto.Signer{PrivateKey: key.PrivateKey},
-		Boxer: crypto.AnonymBoxer{
-			PublicKey:  crypto.AnonymPublicKey{Value: &publicBoxerBytes},
-			PrivateKey: crypto.AnonymPrivateKey{Value: &secretBoxerBytes},
+		address: key.Address,
+		name:    username,
+		signer:  &crypto.Signer{PrivateKey: key.PrivateKey},
+		boxer: crypto.AnonymBoxer{
+			PublicKey:  crypto.AnonymPublicKey{Value: publicBoxerBytes},
+			PrivateKey: crypto.AnonymPrivateKey{Value: secretBoxerBytes},
 		},
 	}, nil
-}
-
-func SignUp(username, password, ipfsPeerId, ethKeyPath string, network nw.INetwork) (*User, error) {
-	user, err := NewUser(username, password, ethKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not generate user: SignUp: %s", err)
-	}
-
-	exists, err := network.IsUserRegistered(user.Address)
-	if err != nil {
-		return nil, fmt.Errorf("could not check if username '%s', is registered: SignUp: %s", username, err)
-	}
-	if exists {
-		return nil, fmt.Errorf("username '%s' already exists: SignUp", username)
-	}
-
-	if err = network.RegisterUser(username, ipfsPeerId, *user.Boxer.PublicKey.Value); err != nil {
-		return nil, fmt.Errorf("could not register username '%s': SignUp: %s", username, err)
-	}
-
-	return user, nil
-}
-
-func SignIn(username, password, keyStore string, network nw.INetwork) (*User, error) {
-	user, err := NewUser(username, password, keyStore)
-	if err != nil {
-		return nil, fmt.Errorf("could not generate user: SignIn")
-	}
-
-	exists, err := network.IsUserRegistered(user.Address)
-	if err != nil {
-		return nil, fmt.Errorf("could not check if username '%s' is registered: SignIn: %s", username, err)
-	}
-	if !exists {
-		return nil, fmt.Errorf("username '%s' does not exists: SignIn", username)
-	}
-
-	return user, nil
 }

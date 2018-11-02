@@ -139,41 +139,18 @@ contract Dipfshare {
     )
         public
     {
-        emit Debug(120);
+        require(groups[groupId].exists, "group does not exist");
 
-        if (!groups[groupId].exists) {
-            emit Debug(0);
-        }
-//        require(groups[groupId].exists, "group does not exist");
-
-        if (rs.length != members.length) {
-            emit Debug(1);
-        }
-//        require(rs.length == members.length, "invalid r length");
-        if (ss.length != members.length) {
-            emit Debug(2);
-        }
-//        require(ss.length == members.length, "invalid s length");
-        if (vs.length != members.length) {
-            emit Debug(3);
-        }
-//        require(vs.length == members.length, "invalid v length");
-        if (members.length <= groups[groupId].members.length / 2) {
-            emit Debug(4);
-        }
-        //require(members.length > groups[groupId].members.length / 2, "not enough approvals");
+        require(rs.length == members.length, "invalid r length");
+        require(ss.length == members.length, "invalid s length");
+        require(vs.length == members.length, "invalid v length");
+        require(members.length > groups[groupId].members.length / 2, "not enough approvals");
 
         bytes32 digest = keccak256(groups[groupId].ipfsHash, newIpfsHash);
 
         for (uint256 i = 0; i < members.length; i++) {
-            if (!isUserInGroup(groupId, members[i])) {
-                emit Debug(5);
-            }
-            //require(isUserInGroup(groupId, members[i]), "invalid approval: user is not a group member");
-            if (!verify(members[i], digest, vs[i], rs[i], ss[i])) {
-                emit Debug(6);
-            }
-            //require(verify(members[i], digest, vs[i], rs[i], ss[i]), "invalid approval: invalid signature");
+            require(isUserInGroup(groupId, members[i]), "invalid approval: user is not a group member");
+            require(verify(members[i], digest, vs[i], rs[i], ss[i]), "invalid approval: invalid signature");
         }
 
         heapSort(members);
@@ -185,10 +162,7 @@ contract Dipfshare {
             if (i == 0) {
                 continue;
             }
-            if (members[i] == members[i - 1]) {
-                emit Debug(7);
-            }
-            //require(members[i] != members[i - 1], "duplicate approvals detected");
+            require(members[i] != members[i - 1], "duplicate approvals detected");
         }
 
         groups[groupId].ipfsHash = newIpfsHash;

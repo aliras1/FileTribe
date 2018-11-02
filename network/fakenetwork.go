@@ -190,7 +190,7 @@ func (network *FakeNetwork) IsUserRegistered(id common.Address) (bool, error) {
 
 
 
-func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) error {
+func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error) {
 	//network.Simulator.EstimateGas(network.Auth.Context, )
 
 	var members []common.Address
@@ -200,7 +200,7 @@ func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []
 
 	for _, approval := range approvals {
 		if len(approval.Signature) != 65 {
-			return errors.New("signature length must be 65")
+			return nil, errors.New("signature length must be 65")
 		}
 
 		members = append(members, approval.From)
@@ -224,7 +224,7 @@ func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []
 	glog.Error("auth: " + auth.From.String())
 	tx, err := network.Client.UpdateGroupIpfsHash(auth, groupId, newIpfsHash, members, rs, ss, vs)
 	if err != nil {
-		return errors.Wrapf(err, "could not send updateGroupIpfsPath transaction")
+		return nil, errors.Wrapf(err, "could not send updateGroupIpfsPath transaction")
 	}
 	glog.Error(tx.Nonce())
 
@@ -232,21 +232,21 @@ func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []
 
 	glog.Info("FakeNetwork.UpdateGroupIpfsHash ended")
 
-	return nil
+	return &Transaction{tx: tx}, nil
 }
 
-func (network *FakeNetwork) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) error {
+func (network *FakeNetwork) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error) {
 	auth := network.auths[network.currentAcc]
 	auth.GasLimit = 3000000
 
-	_, err := network.Client.RegisterUser(auth, username, ipfsPeerId, boxingKey)
+	tx, err := network.Client.RegisterUser(auth, username, ipfsPeerId, boxingKey)
 	if err != nil {
-		return fmt.Errorf("error while FakeNetwork.RegisterUser(): %s", err)
+		return nil, fmt.Errorf("error while FakeNetwork.RegisterUser(): %s", err)
 	}
 
 	network.Simulator.Commit()
 
-	return nil
+	return &Transaction{tx: tx}, nil
 }
 
 func (network *FakeNetwork) GetUser(address common.Address) (*Contact, error) {
@@ -259,34 +259,34 @@ func (network *FakeNetwork) GetUser(address common.Address) (*Contact, error) {
 		Address:   address,
 		Name:      username,
 		IpfsPeerId: ipfsPeerId,
-		Boxer:     crypto.AnonymPublicKey{&boxingKey},
+		Boxer:     crypto.AnonymPublicKey{boxingKey},
 	}, nil
 }
 
-func (network *FakeNetwork) CreateGroup(id [32]byte, name string, ipfsHash []byte) error {
-	_, err := network.Client.CreateGroup(network.auths[network.currentAcc], id, name, ipfsHash)
+func (network *FakeNetwork) CreateGroup(id [32]byte, name string, ipfsHash []byte) (*Transaction, error) {
+	tx, err := network.Client.CreateGroup(network.auths[network.currentAcc], id, name, ipfsHash)
 	if err != nil {
-		return fmt.Errorf("error while FakeNetwork.CreateGroup(): %s", err)
+		return nil, fmt.Errorf("error while FakeNetwork.CreateGroup(): %s", err)
 	}
 
 	network.Simulator.Commit()
 
-	return nil
+	return &Transaction{tx: tx}, nil
 }
 
 func (network *FakeNetwork) GetGroup(groupId [32]byte) (string, []common.Address, []byte, error) {
 	return network.Client.GetGroup(&bind.CallOpts{Pending: true}, groupId)
 }
 
-func (network *FakeNetwork) InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) error {
-	_, err := network.Client.InviteUser(network.auths[network.currentAcc], groupId, newMember, canInvite)
+func (network *FakeNetwork) InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) (*Transaction, error) {
+	tx, err := network.Client.InviteUser(network.auths[network.currentAcc], groupId, newMember, canInvite)
 	if err != nil {
-		return fmt.Errorf("error while FakeNetwork.InviteUser(): %s", err)
+		return nil, fmt.Errorf("error while FakeNetwork.InviteUser(): %s", err)
 	}
 
 	network.Simulator.Commit()
 
-	return nil
+	return &Transaction{tx: tx}, nil
 }
 
 func (network *FakeNetwork) Close() {

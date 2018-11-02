@@ -8,20 +8,23 @@ import (
 	"math/rand"
 	"ipfs-share/network"
 	"encoding/hex"
+	"github.com/pkg/errors"
 )
 
-func NewGroupSessionServer(msg *Message, contact *Contact, ctx *GroupContext) ISession {
+func NewGroupSessionServer(msg *Message, contact *Contact,  user IUser, group IGroup, repo *GroupRepo, closedChan chan ISession) (ISession, error) {
 	switch msg.Type {
 	case AddFile:
 		{
-			return NewCommitChangesGroupSessionServer(msg, contact, ctx)
+			return NewCommitChangesGroupSessionServer(msg, contact, user, group, repo, closedChan)
 		}
 	default:
 		{
-			return nil
+			return nil, errors.New("invalid message type")
 		}
 	}
 }
+
+type CommitChangesOnSuccessCallback func(encIpfsHash []byte, approvals []*network.Approval)
 
 type CommitChangesGroupSessionClient struct {
 	sessionId          IIdentifier
@@ -29,40 +32,61 @@ type CommitChangesGroupSessionClient struct {
 	approvals          []*network.Approval
 	digest             []byte // the original message digest which is signed by the group members
 	state              uint8
-	groupCtx           *GroupContext
+	user IUser
+	group IGroup
+	groupConnection *GroupConnection
+	closedChan chan ISession
 	lock               sync.RWMutex
 	approvalsCountChan chan int
+	onSuccessCallback CommitChangesOnSuccessCallback
+	error error
 }
 
-func NewCommitChangesGroupSessionClient(newIpfsHash string, groupCtx *GroupContext) ISession {
+func NewCommitChangesGroupSessionClient(
+	newIpfsHash string,
+	user IUser,
+	group IGroup,
+	groupConnection *GroupConnection,
+	closedChan chan ISession,
+	onSuccess CommitChangesOnSuccessCallback,
+	) ISession {
+
 	sessionId := rand.Uint32()
 	hasher := crypto.NewKeccak256Hasher()
 
-	boxer := groupCtx.Group.Boxer()
+	boxer := group.Boxer()
 	encNewIpfsHash := boxer.BoxSeal([]byte(newIpfsHash))
 	glog.Errorf("master enc base64: %v", encNewIpfsHash)
 
-	digest := hasher.Sum(groupCtx.Group.EncryptedIpfsHash(), encNewIpfsHash)
+	digest := hasher.Sum(group.EncryptedIpfsHash(), encNewIpfsHash)
 	glog.Errorf("verif digest: %v", digest)
 
 	session := &CommitChangesGroupSessionClient{
 		sessionId:          NewUint32Id(sessionId),
-		groupCtx:           groupCtx,
+		user: user,
+		group: group,
+		groupConnection: groupConnection,
+		closedChan:closedChan,
 		encNewIpfsHash:     encNewIpfsHash,
 		approvals:          []*network.Approval{},
 		digest:             digest,
 		state:              0,
 		approvalsCountChan: make(chan int),
+		onSuccessCallback: onSuccess,
 	}
 
-	glog.Infof("----> Digest: %s, old: %v, new: %v", hex.EncodeToString(session.digest), groupCtx.Group.IpfsHash, encNewIpfsHash)
+	glog.Infof("----> Digest: %s, old: %v, new: %v", hex.EncodeToString(session.digest), group.IpfsHash, encNewIpfsHash)
 
 	return session
 }
 
+func (session *CommitChangesGroupSessionClient) Error() error {
+	return session.error
+}
+
 func (session *CommitChangesGroupSessionClient) close() {
 	session.state = EndOfSession
-	session.groupCtx.P2P.SessionClosedChan <- session.Id()
+	session.closedChan <- session
 }
 
 func (session *CommitChangesGroupSessionClient) Abort() {
@@ -76,7 +100,7 @@ func (session *CommitChangesGroupSessionClient) Abort() {
 	session.close()
 }
 
-func (session *CommitChangesGroupSessionClient) GetState() uint8 {
+func (session *CommitChangesGroupSessionClient) State() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
@@ -100,33 +124,33 @@ func (session *CommitChangesGroupSessionClient) Run() {
 	}
 	payload, err := addFileGroupMsg.Encode()
 	if err != nil {
-		glog.Errorf("could not encode add file group message %s", err)
+		session.error = errors.Wrap(err, "could not encode commit changes group message")
 		session.close()
 		return
 	}
 
 	msg, err := NewMessage(
-		session.groupCtx.User.Address,
+		session.user.Address(),
 		AddFile,
 		session.sessionId.Data().(uint32),
 		payload,
-		session.groupCtx.User.Signer,
+		session.user.Signer(),
 	)
 	if err != nil {
-		glog.Errorf("could not create add file group message %s", err)
+		session.error = errors.Wrap(err, "could not create commit changes group message")
 		session.close()
 		return
 	}
 
 	encMsg, err := msg.Encode()
 	if err != nil {
-		glog.Errorf("could not encode group message: %s", err)
+		session.error = errors.Wrap(err, "could not encode group message")
 		session.close()
 		return
 	}
 
-	if err := session.groupCtx.GroupConnection.SendAll(encMsg); err != nil {
-		glog.Errorf("could not send to all group message: %s", err)
+	if err := session.groupConnection.Broadcast(encMsg); err != nil {
+		session.error = errors.Wrap(err, "could not broadcast group message")
 		session.close()
 		return
 	}
@@ -152,31 +176,35 @@ func (session *CommitChangesGroupSessionClient) NextState(contact *Contact, data
 	}
 
 	session.approvals = append (session.approvals, approval)
-	if len(session.approvals) <= session.groupCtx.Group.CountMembers() / 2 {
+	if len(session.approvals) <= session.group.CountMembers() / 2 {
 		return
 	}
 
-	groupId := session.groupCtx.Group.Id().Data().([32]byte)
-	if err := session.groupCtx.Network.UpdateGroupIpfsHash(groupId, session.encNewIpfsHash, session.approvals); err != nil {
-		session.close()
-		glog.Errorf("could not send update group ipfs hash transaction: %s", err)
-		return
-	}
+	session.onSuccessCallback(session.encNewIpfsHash, session.approvals)
+	session.close()
 }
 
 type CommitChangesGroupSessionServer struct {
 	sessionId          IIdentifier
 	newFileCapIpfsHash string
 	encNewIpfsHash     []byte
-	groupCtx           *GroupContext
+	user IUser
+	group IGroup
+	repo *GroupRepo
+	closedChan chan ISession
 	state              uint8
 	lock               sync.RWMutex
 	contact            *Contact
+	error error
+}
+
+func (session *CommitChangesGroupSessionServer) Error() error {
+	return session.error
 }
 
 func (session *CommitChangesGroupSessionServer) close() {
 	session.state = EndOfSession
-	session.groupCtx.P2P.SessionClosedChan <- session.Id()
+	session.closedChan <- session
 }
 
 func (session *CommitChangesGroupSessionServer) Abort() {
@@ -190,7 +218,7 @@ func (session *CommitChangesGroupSessionServer) Abort() {
 	session.close()
 }
 
-func (session *CommitChangesGroupSessionServer) GetState() uint8 {
+func (session *CommitChangesGroupSessionServer) State() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
@@ -211,67 +239,68 @@ func (session *CommitChangesGroupSessionServer) IsAlive() bool {
 func (session *CommitChangesGroupSessionServer) Run() {
 	defer session.close()
 
-	glog.Errorf("verif enc: %v", session.encNewIpfsHash)
-
-	boxer := session.groupCtx.Group.Boxer()
+	boxer := session.group.Boxer()
 	newIpfsHash, ok := boxer.BoxOpen(session.encNewIpfsHash)
 	if !ok {
-		glog.Errorf("could not decrypt new ipfs hash")
+		session.error = errors.New("could not decrypt new ipfs hash")
 		return
 	}
-	if err := session.groupCtx.Repo.IsValidChangeSet(string(newIpfsHash), &session.contact.Address); err != nil {
-		glog.Errorf("invalid change set: %s", err)
+	if err := session.repo.IsValidChangeSet(string(newIpfsHash), &session.contact.Address); err != nil {
+		session.error = errors.Wrap(err, "invalid change set")
 		return
 	}
 
 	hasher := crypto.NewKeccak256Hasher()
-	digest := hasher.Sum(session.groupCtx.Group.EncryptedIpfsHash(), session.encNewIpfsHash)
+	digest := hasher.Sum(session.group.EncryptedIpfsHash(), session.encNewIpfsHash)
 	glog.Errorf("signer digest: %v", digest)
-	sig, err := session.groupCtx.User.Signer.Sign(digest)
+	signer := session.user.Signer()
+	sig, err := signer.Sign(digest)
 	if err != nil {
-		glog.Errorf("could not sign approval: %s", err)
+		session.error = errors.Wrap(err, "could not sign approval")
 		return
 	}
 
 	msg, err := NewMessage(
-		session.groupCtx.User.Address,
+		session.user.Address(),
 		AddFile,
 		session.sessionId.Data().(uint32),
 		sig,
-		session.groupCtx.User.Signer,
+		session.user.Signer(),
 	)
 	if err != nil {
-		glog.Errorf("could not create group message: %s", err)
+		session.error = errors.Wrap(err, "could not create group message")
 		return
 	}
 
 	encMsg, err := msg.Encode()
 	if err != nil {
-		glog.Errorf("could not encode group message: %s", err)
+		session.error = errors.Wrap(err, "could not encode group message")
 		return
 	}
 
 	if err := session.contact.Send(encMsg); err != nil {
-		glog.Errorf("could not send message: %s", err)
+		session.error = errors.Wrap(err, "could not send message")
 	}
 }
 
 func (session *CommitChangesGroupSessionServer) NextState(contact *Contact, data []byte) { }
 
-func NewCommitChangesGroupSessionServer(msg *Message, contact *Contact, ctx *GroupContext) *CommitChangesGroupSessionServer {
+func NewCommitChangesGroupSessionServer(msg *Message, contact *Contact, user IUser, group IGroup, repo *GroupRepo, closedChan chan ISession) (*CommitChangesGroupSessionServer, error) {
 	addFileMsg, err := DecodeAddFileGroupMessage(msg.Payload)
 	if err != nil {
-		glog.Errorf("could not create CommitChangesGroupSessionServer: %s", err)
-		return nil
+		return nil, errors.Wrap(err, "could not read rand")
 	}
 
 	session := &CommitChangesGroupSessionServer{
-		groupCtx:       ctx,
+		user:       user,
+		group:group,
+		repo:repo,
+		closedChan:closedChan,
 		sessionId:      NewUint32Id(msg.SessionId),
 		encNewIpfsHash: addFileMsg.NewGroupIpfsHash,
 		contact:        contact,
 		state:          0,
 	}
 
-	return session
+	return session, nil
 }

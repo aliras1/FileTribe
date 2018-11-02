@@ -75,7 +75,7 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 	}
 
 	for _, member := range members {
-		if bytes.Equal(member.Bytes(), ctx.User.Address.Bytes()) {
+		if bytes.Equal(member.Bytes(), ctx.User.Address().Bytes()) {
 			continue
 		}
 		c, err := ctx.Network.GetUser(member)
@@ -89,7 +89,31 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 		}
 		contact := ctx.AddressBook.Get(NewAddressId(&c.Address)).(*Contact)
 
-		session := NewGetGroupKeySessionClient(groupId, contact, ctx)
+		session := NewGetGroupKeySessionClient(groupId, contact, ctx.User, ctx.Storage, ctx.P2P.SessionClosedChan, func(cap *GroupAccessCap) {
+			groupCtx, err := NewGroupContextFromCAP(
+				cap,
+				ctx.User,
+				ctx.P2P,
+				ctx.AddressBook,
+				ctx.Network,
+				ctx.Ipfs,
+				ctx.Storage,
+				ctx.Transactions,
+			)
+			if err != nil {
+				glog.Error(err, "could not create group context")
+				return
+			}
+
+			if err := groupCtx.Update(); err != nil {
+				glog.Error(err, "could not update group")
+				return
+			}
+
+			if err := ctx.Groups.Append(groupCtx); err != nil {
+				glog.Warningf("could not append elem: %s", err)
+			}
+		})
 		if err := ctx.P2P.sessions.Append(session); err != nil {
 			glog.Warningf("could not append elem: %s", err)
 		}
@@ -101,6 +125,9 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 }
 
 func (g *Group) Save(storage *Storage) error {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	cap := GroupAccessCap{
 		GroupId: g.id.Data().([32]byte),
 		Boxer:   g.boxer,
@@ -117,6 +144,9 @@ func (g *Group) Save(storage *Storage) error {
 // cipher text, therefore on each instance of the ipfs-share
 // daemon, the ecnryptedIpfsHash's will be different
 func (g *Group) SetIpfsHash(ipfsHash string, encIpfsHash []byte) error {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
 	decryptedIpfsHash, ok := g.boxer.BoxOpen(encIpfsHash)
 	if !ok {
 		return errors.New("could not decrypt encrypted ipfs hash")
@@ -194,25 +224,43 @@ func (g *Group) Members() []ethcommon.Address {
 }
 
 func (g *Group) CountMembers() int {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	return len(g.members)
 }
 
 func (g *Group) Id() IIdentifier {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	return g.id
 }
 
 func (g *Group) Name() string {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	return g.name
 }
 
 func (g *Group) IpfsHash() string {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	return g.ipfsHash
 }
 
 func (g *Group) EncryptedIpfsHash() []byte {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	return g.encryptedIpfsHash
 }
 
 func (g *Group) Boxer() crypto.SymmetricKey {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	return g.boxer
 }

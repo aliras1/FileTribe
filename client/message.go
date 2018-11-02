@@ -73,7 +73,7 @@ func (approval *Approval) Id() IIdentifier {
 	return NewAddressId(&approval.From)
 }
 
-func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer *crypto.Signer) (*Message, error) {
+func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer crypto.Signer) (*Message, error) {
 	msg := &Message{
 		From: from,
 		Type: msgType,

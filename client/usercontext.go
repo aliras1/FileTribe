@@ -13,15 +13,16 @@ import (
 
 
 type UserContext struct {
-	User           *User // TODO lock boxer
+	User           IUser
 	Groups         *ConcurrentCollection
 	IPNSAddr       string
 	AddressBook    *ConcurrentCollection
 	Network        nw.INetwork
 	Ipfs           ipfsapi.IIpfs
-	Storage        *Storage // TODO lock
+	Storage        *Storage
 	LatestBlock    uint64
 	P2P            *P2PServer
+	Transactions   *ConcurrentCollection
 
 	channelStop chan int
 }
@@ -34,16 +35,32 @@ func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, n
 		return nil, errors.Wrap(err, "could not get ipfs peer id")
 	}
 
-	user, err := SignUp(username, password, ipfsPeerId.ID, ethKeyPath, network)
+	user, err := NewUser(username, password, ethKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not sign up: NewUserContextFromSignUp: %s", err)
-	}
-	uc, err := NewUserContext(dataPath, user, network, ipfs, p2pPort)
-	if err != nil {
-		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignUp: %s", err)
+		return nil, errors.Wrap(err, "could not create new user")
 	}
 
-	glog.Info("[*] Signed in")
+	// check if user is registered
+	registered, err := network.IsUserRegistered(user.Address())
+	if err != nil {
+		return nil, errors.Wrap(err, "could not check if user is registered")
+	}
+	if registered {
+		return nil, errors.New("user is already registered")
+	}
+
+	uc, err := NewUserContext(dataPath, user, network, ipfs, p2pPort)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create new user context")
+	}
+
+	boxer := user.Boxer()
+	tx, err := network.RegisterUser(username, ipfsPeerId.ID, boxer.PublicKey.Value)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not start transaction")
+	}
+
+	uc.Transactions.Append(tx)
 
 	return uc, nil
 }
@@ -51,13 +68,22 @@ func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, n
 func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	glog.Infof("[*] User '%s' signing in...", username)
 
-	user, err := SignIn(username, password, ethKeyPath, network)
+	user, err := NewUser(username, password, ethKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not sign in: NewUserContextFromSignIn: %s", err)
+		return nil, errors.Wrap(err, "could not create new user")
 	}
+
+	registered, err := network.IsUserRegistered(user.Address())
+	if err != nil {
+		return nil, errors.Wrap(err, "could not check if user is registered")
+	}
+	if !registered {
+		return nil, errors.New("user is not registered")
+	}
+
 	uc, err := NewUserContext(dataPath, user, network, ipfs, p2pPort)
 	if err != nil {
-		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignIn: %s", err)
+		return nil, errors.Wrap(err, "could not create new user context")
 	}
 
 	glog.Info("[*] Signed in")
@@ -65,7 +91,7 @@ func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, n
 	return uc, nil
 }
 
-func NewUserContext(dataPath string, user *User, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
+func NewUserContext(dataPath string, user IUser, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	var err error
 	var uc UserContext
 	uc.User = user
@@ -74,6 +100,7 @@ func NewUserContext(dataPath string, user *User, network nw.INetwork, ipfs ipfsa
 	uc.Storage = NewStorage(dataPath)
 	uc.Groups = NewConcurrentCollection()
 	uc.AddressBook = NewConcurrentCollection()
+	uc.Transactions = NewConcurrentCollection()
 	p2p, err := NewP2PConnection(p2pPort, &uc)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create P2P connection")
@@ -141,6 +168,7 @@ func (ctx *UserContext) BuildGroups() error {
 			ctx.Network,
 			ctx.Ipfs,
 			ctx.Storage,
+			ctx.Transactions,
 		)
 		if err != nil {
 			return fmt.Errorf("could not create new group context: UserContext.BuildGroups: %s", err)
@@ -163,6 +191,7 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 		ctx.Network,
 		ctx.Ipfs,
 		ctx.Storage,
+		ctx.Transactions,
 	)
 	if err != nil {
 		return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
@@ -180,13 +209,16 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 		return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
 	}
 
-	if err := groupCtx.Network.CreateGroup(
+	tx, err := groupCtx.Network.CreateGroup(
 		group.Id().Data().([32]byte),
 		group.Name(),
 		group.EncryptedIpfsHash(),
-		); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
 	}
+
+	ctx.Transactions.Append(tx)
 
 	if err := ctx.Groups.Append(groupCtx); err != nil {
 		glog.Warningf("could not append elem: %s", err)
@@ -194,20 +226,6 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 
 	return nil
 }
-
-func (ctx *UserContext) AddFile(filePath string) ([32]byte, error) {
-	//file, err := NewFile(filePath, ctx)
-	//if err != nil {
-	//	return [32]byte{}, fmt.Errorf("could not create new file ptp'%s': UserContext.AddFile: %s", filePath, err)
-	//}
-	//
-	//// file is user's, add to under his address
-	//ctx.addFileToRepo(ctx.User.Address, file)
-	//
-	//return file.Cap.Id, nil
-	return [32]byte{}, nil
-}
-
 
 // List lists the content of the user's repository
 func (ctx *UserContext) List() map[string][]string {

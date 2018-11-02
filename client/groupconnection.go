@@ -42,7 +42,7 @@ func NewGroupConnection(groupCtx *GroupContext) *GroupConnection {
 }
 
 
-func (conn *GroupConnection) SendAll(msg []byte) error {
+func (conn *GroupConnection) Broadcast(msg []byte) error {
 	id := conn.groupCtx.Group.Id().Data().([32]byte)
 	topic := base64.URLEncoding.EncodeToString(id[:])
 
@@ -108,7 +108,8 @@ func (conn *GroupConnection) connectionListener() {
 				}
 
 				// TODO: check this with Ipfs address at the beginning
-				if bytes.Equal(contact.Address.Bytes(), conn.groupCtx.User.Address.Bytes()) {
+				address := conn.groupCtx.User.Address()
+				if bytes.Equal(contact.Address.Bytes(), address.Bytes()) {
 					continue
 				}
 
@@ -120,7 +121,18 @@ func (conn *GroupConnection) connectionListener() {
 				}
 				contact = conn.groupCtx.AddressBook.Get(contact.Id()).(*Contact)
 
-				session := NewGroupSessionServer(msg, contact, conn.groupCtx)
+				session, err := NewGroupSessionServer(
+					msg,
+					contact,
+					conn.groupCtx.User,
+					conn.groupCtx.Group,
+					conn.groupCtx.Repo,
+					conn.groupCtx.P2P.SessionClosedChan)
+				if err != nil {
+					glog.Error("could not create new group session server: %s", err)
+					continue
+				}
+
 				conn.groupCtx.P2P.AddSession(session)
 				go session.Run()
 			}

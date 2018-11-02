@@ -83,7 +83,7 @@ func processGroupInvitationEvent(inv *eth.EthGroupInvitation, ctx *UserContext) 
 	glog.Infof("%s: got a group invitation event into %v", ctx.User.Name, inv.GroupId)
 
 	// if new member
-	if bytes.Equal(inv.To.Bytes(), ctx.User.Address.Bytes()) {
+	if bytes.Equal(inv.To.Bytes(), ctx.User.Address().Bytes()) {
 		glog.Infof("%s: entering group %v", ctx.User.Name, inv.GroupId)
 
 		if err := NewGroupFromId(inv.GroupId, ctx); err != nil {

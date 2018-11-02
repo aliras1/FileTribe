@@ -19,7 +19,7 @@ type P2PConn net.TCPConn
 
 type P2PServer struct {
 	sessions *ConcurrentCollection
-	SessionClosedChan chan IIdentifier
+	SessionClosedChan chan ISession
 	p2pListener *ipfs.P2PListener
 	ctx *UserContext
 	stop chan bool
@@ -28,7 +28,7 @@ type P2PServer struct {
 
 func NewP2PConnection(port string, ctx *UserContext) (*P2PServer, error) {
 	stop := make(chan bool)
-	closedSession := make(chan IIdentifier)
+	closedSession := make(chan ISession)
 
 	p2pListener, err := ctx.Ipfs.P2PListen(context.Background(), p2pProtocolName, "/ip4/127.0.0.1/tcp/" + port)
 	if err != nil {
@@ -60,9 +60,9 @@ func (p2p *P2PServer) Stop() {
 }
 
 func (p2p *P2PServer) closedSessionListener() {
-	for sessionId := range p2p.SessionClosedChan {
+	for session := range p2p.SessionClosedChan {
 		//p2p.sessions.DeleteWithId(sessionId)
-		glog.Infof("session %d closed", sessionId.Data().(uint32))
+		glog.Infof("session %d closed with error: %s", session.Id().Data().(uint32), session.Error())
 	}
 }
 
@@ -129,13 +129,19 @@ func (p2p *P2PServer) handleConnection(addressBook *ConcurrentCollection, conn *
 					continue
 				}
 
-				glog.Infof("%s (%s): msg from: %s, sessid: %d", p2p.ctx.User.Name, p2p.ctx.User.Address.String(), msg.From.String(), msg.SessionId)
+				address := p2p.ctx.User.Address()
+				glog.Infof("%s (%s): msg from: %s, sessid: %d", p2p.ctx.User.Name, address.String(), msg.From.String(), msg.SessionId)
 
 				sessionId := NewUint32Id(msg.SessionId)
 				var session ISession
 				sessionInterface := p2p.sessions.Get(sessionId)
 				if sessionInterface == nil {
-					session = NewServerSession(msg, contact, p2p.ctx)
+					session, err = NewServerSession(msg, contact, p2p.ctx.User, p2p.ctx.Groups, p2p.SessionClosedChan)
+					if err != nil {
+						glog.Error("could not create new session: %s", err)
+						continue
+					}
+
 					if err := p2p.sessions.Append(session); err != nil {
 						glog.Warningf("could not append elem: %s", err)
 					}

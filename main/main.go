@@ -15,6 +15,7 @@ import (
 	ipfsapi "ipfs-share/ipfs"
 	"fmt"
 	"ipfs-share/collections"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 const (
@@ -165,7 +166,7 @@ func invite(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func groupCommitChanges(w http.ResponseWriter, r *http.Request) {
+func groupRepoCommit(w http.ResponseWriter, r *http.Request) {
 	if userContext == nil {
 		errorHandler(w, r, "")
 		return
@@ -195,7 +196,7 @@ func groupCommitChanges(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func groupRepoLs(w http.ResponseWriter, r *http.Request) {
+func groupRepoListFiles(w http.ResponseWriter, r *http.Request) {
 	if userContext == nil {
 		errorHandler(w, r, "usercontext is nil")
 		return
@@ -218,16 +219,52 @@ func groupRepoLs(w http.ResponseWriter, r *http.Request) {
 
 	groupCtx := groupCtxInterface.(*client.GroupContext)
 	list := groupCtx.Repo.List()
+	fmt.Print("repo ls: ")
 	fmt.Println(list)
+	glog.Error(list)
+
 	if err := json.NewEncoder(w).Encode(list); err != nil {
 		errorHandler(w, r, "could not encode file list")
 	}
 }
 
+func groupListMembers(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		errorHandler(w, r, "user context is null")
+		return
+	}
+
+	params := mux.Vars(r)
+	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
+	if err != nil {
+		errorHandler(w, r, "no group id found")
+		return
+	}
+	var groupId [32]byte
+	copy(groupId[:], groupIdArray)
+
+	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
+	if groupCtxInterface == nil {
+		errorHandler(w, r, "no group found")
+		return
+	}
+
+	groupCtx := groupCtxInterface.(*client.GroupContext)
+	var list []string
+	for _, address := range groupCtx.Group.Members() {
+		list = append(list, address.String())
+	}
+
+	glog.Error(list)
+
+	if err := json.NewEncoder(w).Encode(list); err != nil {
+		glog.Error(err)
+	}
+}
 
 func ls(w http.ResponseWriter, r *http.Request) {
 	if userContext == nil {
-		errorHandler(w, r, "")
+		errorHandler(w, r, "user context is nil")
 		return
 	}
 
@@ -245,11 +282,37 @@ func lsGroups(w http.ResponseWriter, r *http.Request) {
 
 	var list []string
 	for groupCtx := range userContext.Groups.Iterator() {
-		list = append(list, groupCtx.(*client.GroupContext).Group.Name)
+		list = append(list, groupCtx.(*client.GroupContext).Group.Name())
 	}
 
 	if err := json.NewEncoder(w).Encode(list); err != nil {
 		errorHandler(w, r, fmt.Sprintf("could not encode groupCtx list"))
+	}
+}
+
+func listTransactions(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		errorHandler(w, r, "user context is nil")
+		return
+	}
+
+	var txList []*types.Receipt
+
+	for txInt := range userContext.Transactions.Iterator() {
+		tx := txInt.(*nw.Transaction)
+
+		receipt, err := tx.Receipt(network)
+		if err != nil {
+			errorHandler(w, r, fmt.Sprintf("could not get tx status: %s", err))
+		}
+
+		txList = append(txList, receipt)
+	}
+
+	fmt.Println(txList)
+
+	if err := json.NewEncoder(w).Encode(txList); err != nil {
+		errorHandler(w, r, fmt.Sprintf("could not encode txMap list"))
 	}
 }
 
@@ -266,18 +329,20 @@ func main() {
 
 	router := mux.NewRouter()
 	
-	
 	router.HandleFunc("/signup/{username}/{password}", signUp).Methods("POST")
 	router.HandleFunc("/signin/{username}/{password}", signIn).Methods("POST")
 	router.HandleFunc("/signout", signOut).Methods("GET")
 	
 	router.HandleFunc("/group/create", createGroup).Methods("POST")
 	router.HandleFunc("/group/invite/{groupId}", invite).Methods("POST")
-	router.HandleFunc("/group/commit/{groupId}", groupCommitChanges).Methods("POST")
-	router.HandleFunc("/group/repo/ls/{groupId}", groupRepoLs).Methods("GET")
+	router.HandleFunc("/group/ls/{groupId}", groupListMembers).Methods("GET")
+	router.HandleFunc("/group/repo/commit/{groupId}", groupRepoCommit).Methods("POST")
+	router.HandleFunc("/group/repo/ls/{groupId}", groupRepoListFiles).Methods("GET")
 	
 	router.HandleFunc("/ls", ls).Methods("GET")
 	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")
+
+	router.HandleFunc("/tx/ls", listTransactions).Methods("GET")
 	
 	glog.Fatal(http.ListenAndServe(host+":"+port, router))
 }

@@ -94,7 +94,7 @@ func NewTestUser(username string, signup bool, ethKeyPath string, shellIdx int, 
 		}
 	}
 
-	reg, err := network.IsUserRegistered(testUser.User.Address)
+	reg, err := network.IsUserRegistered(testUser.User.Address())
 	if err != nil {
 		return nil, err
 	}
@@ -174,8 +174,8 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	groupAtAlice := alice.Groups.FirstOrDefault(nil).(*GroupContext)
-	groupAtAlice.Invite(bob.User.Address, true)
-	groupAtAlice.Invite(charlie.User.Address, true)
+	groupAtAlice.Invite(bob.User.Address(), true)
+	groupAtAlice.Invite(charlie.User.Address(), true)
 
 	time.Sleep(5 * time.Second)
 
@@ -224,7 +224,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("----------- Grant W access to only alice  ------------")
 
-	if err := groupAtAlice.GrantWriteAccess(fileAlice, bob.User.Address); err != nil {
+	if err := groupAtAlice.GrantWriteAccess(fileAlice, bob.User.Address()); err != nil {
 		t.Fatal(err)
 	}
 	if err := groupAtAlice.CommitChanges(); err != nil {

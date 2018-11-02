@@ -47,12 +47,12 @@ type Approval struct {
 
 type INetwork interface {
 	GetUser(address common.Address) (*Contact, error)
-	RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) error
+	RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error)
 	IsUserRegistered(common.Address) (bool, error)
-	CreateGroup(id [32]byte, name string, ipfsPath []byte) error
-	InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) error
+	CreateGroup(id [32]byte, name string, ipfsPath []byte) (*Transaction, error)
+	InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) (*Transaction, error)
 	GetGroup(groupId [32]byte) (string, []common.Address, []byte, error)
-	UpdateGroupIpfsHash(groupId [32]byte, newIpfsPath []byte, approvals []*Approval) error
+	UpdateGroupIpfsHash(groupId [32]byte, newIpfsPath []byte, approvals []*Approval) (*Transaction, error)
 	TransactionReceipt(tx *types.Transaction) (*types.Receipt, error)
 
 	// contract events
@@ -158,7 +158,6 @@ func NewNetwork(wsAddress, ethKeyPath, contractAddress, password string) (INetwo
 			From:     auth.From,
 			Signer:   auth.Signer,
 			GasLimit: 3000000,
-			//Nonce: nonce,
 			Context: context.Background(),
 		},
 	}
@@ -226,7 +225,7 @@ func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 }
 
 func (network *Network) TransactionReceipt(tx *types.Transaction) (*types.Receipt, error) {
-	return network.Client.TransactionReceipt(network.Auth.Context, tx.Hash())
+	return network.Client.TransactionReceipt(context.Background(), tx.Hash())
 }
 
 func (network *Network) GetGroupInvitationSub() *event.Subscription {
@@ -261,13 +260,7 @@ func (network *Network) GetDebugChannel() chan *eth.EthDebug {
 	return network.debugChannel
 }
 
-func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) error {
-	network.lock.Lock()
-	defer network.lock.Unlock()
-
-	//network.nonce.Add(network.nonce, big.NewInt(1))
-	//network.Session.TransactOpts.Nonce = network.nonce
-
+func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error) {
 	var members []common.Address
 	var rs [][32]byte
 	var ss [][32]byte
@@ -275,7 +268,7 @@ func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte
 
 	for _, approval := range approvals {
 		if len(approval.Signature) != 65 {
-			return errors.New("signature length must be 65")
+			return nil, errors.New("signature length must be 65")
 		}
 
 		members = append(members, approval.From)
@@ -295,30 +288,23 @@ func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte
 		vs = append(vs, v)
 	}
 
-	_, err := network.Session.UpdateGroupIpfsHash(groupId, newIpfsHash, members, rs, ss, vs)
+	tx, err := network.Session.UpdateGroupIpfsHash(groupId, newIpfsHash, members, rs, ss, vs)
 	if err != nil {
-		return errors.Wrapf(err, "could not send updateGroupIpfsPath transaction")
+		return nil, errors.Wrap(err, "could not send updateGroupIpfsPath transaction")
 	}
 
-	return nil
+	return &Transaction{tx: tx}, err
 }
 
-func (network *Network) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) error {
-	network.lock.Lock()
-	defer network.lock.Unlock()
-
-	//network.nonce.Add(network.nonce, big.NewInt(1))
-	//network.Session.TransactOpts.Nonce = network.nonce
-	network.Session.TransactOpts.GasLimit = 300000
-
+func (network *Network) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error) {
 	tx, err := network.Session.RegisterUser(username, ipfsPeerId, boxingKey)
 	if err != nil {
-		return fmt.Errorf("error while Network.RegisterUser(): %s", err)
+		return nil, err
 	}
 
 	glog.Infof("tx reg user nonce: %d", tx.Nonce())
 
-	return nil
+	return &Transaction{tx: tx}, err
 }
 
 func (network *Network) IsUserRegistered(id common.Address) (bool, error) {
@@ -332,42 +318,37 @@ func (network *Network) IsUserRegistered(id common.Address) (bool, error) {
 func (network *Network) GetUser(address common.Address) (*Contact, error) {
 	username, ipfsPeerId, boxingKey, err := network.Session.GetUser(address)
 	if err != nil {
-		return &Contact{}, fmt.Errorf("error while Network-GetUser(): %s", err)
+		return &Contact{}, err
 	}
+
 	return &Contact{
 		Address:   address,
 		Name:      username,
 		IpfsPeerId: ipfsPeerId,
-		Boxer:     crypto.AnonymPublicKey{&boxingKey},
+		Boxer:     crypto.AnonymPublicKey{boxingKey},
 	}, nil
 }
 
-func (network *Network) CreateGroup(id [32]byte, name string, ipfsHash []byte) error {
-	network.lock.Lock()
-	defer network.lock.Unlock()
-
-	//network.nonce.Add(network.nonce, big.NewInt(1))
-	//network.Session.TransactOpts.Nonce = network.nonce
-
+func (network *Network) CreateGroup(id [32]byte, name string, ipfsHash []byte) (*Transaction, error) {
 	tx, err := network.Session.CreateGroup(id, name, ipfsHash)
+	if err != nil {
+		return nil, err
+	}
 
 	glog.Infof("tx create group nonce: %d", tx.Nonce())
 
-	return err
+	return &Transaction{tx: tx}, err
 }
 
-func (network *Network) InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) error {
-	network.lock.Lock()
-	defer network.lock.Unlock()
-
-	//network.nonce.Add(network.nonce, big.NewInt(1))
-	//network.Session.TransactOpts.Nonce = network.nonce
-
+func (network *Network) InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) (*Transaction, error) {
 	tx, err := network.Session.InviteUser(groupId, newMember, canInvite)
+	if err != nil {
+		return nil, err
+	}
 
 	glog.Infof("tx invite new member nonce: %d", tx.Nonce())
 
-	return err
+	return &Transaction{tx: tx}, err
 }
 
 func (network *Network) GetGroup(groupId [32]byte) (string, []common.Address, []byte, error) {
