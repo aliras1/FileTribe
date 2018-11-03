@@ -13,7 +13,7 @@ import (
 
 func NewGroupSessionServer(msg *Message, contact *Contact,  user IUser, group IGroup, repo *GroupRepo, closedChan chan ISession) (ISession, error) {
 	switch msg.Type {
-	case AddFile:
+	case Commit:
 		{
 			return NewCommitChangesGroupSessionServer(msg, contact, user, group, repo, closedChan)
 		}
@@ -137,7 +137,7 @@ func (session *CommitChangesGroupSessionClient) Run() {
 
 	msg, err := NewMessage(
 		session.user.Address(),
-		AddFile,
+		Commit,
 		session.sessionId.Data().(uint32),
 		payload,
 		session.user.Signer(),
@@ -268,7 +268,7 @@ func (session *CommitChangesGroupSessionServer) Run() {
 
 	msg, err := NewMessage(
 		session.user.Address(),
-		AddFile,
+		Commit,
 		session.sessionId.Data().(uint32),
 		sig,
 		session.user.Signer(),

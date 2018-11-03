@@ -18,8 +18,8 @@ import (
 type MessageType byte
 
 const (
-	GetGroupKey   MessageType = 0
-	AddFile MessageType = 1
+	GetGroupKey MessageType = 0
+	Commit      MessageType = 1
 )
 
 type Message struct {

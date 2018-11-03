@@ -10,12 +10,11 @@ import (
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 
-	"ipfs-share/client"
+	ipfs_share "ipfs-share/client"
 	nw "ipfs-share/network"
 	ipfsapi "ipfs-share/ipfs"
 	"fmt"
 	"ipfs-share/collections"
-	"github.com/ethereum/go-ethereum/core/types"
 )
 
 const (
@@ -28,7 +27,7 @@ const (
 	contractAddress = "0x41cf9ed28c99cc5ebd531bd1929a7e99c122fed8"
 )
 
-var userContext *client.UserContext
+var client ipfs_share.IUserFacade
 var network nw.INetwork
 var ipfs ipfsapi.IIpfs
 
@@ -40,9 +39,9 @@ func stringToAddress(addressString string) ethcommon.Address {
 }
 
 func signUp(w http.ResponseWriter, r *http.Request) {
-	if userContext != nil {
-		userContext.SignOut()
-		userContext = nil
+	if client != nil {
+		client.SignOut()
+		client = nil
 	}
 
 	params := mux.Vars(r)
@@ -57,7 +56,7 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userContext, err = client.NewUserContextFromSignUp(
+	client, err = ipfs_share.NewUserContextFromSignUp(
 		params["username"],
 		params["password"],
 		ethKeyPath,
@@ -72,9 +71,9 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 }
 
 func signIn(w http.ResponseWriter, r *http.Request) {
-	if userContext != nil {
-		userContext.SignOut()
-		userContext = nil
+	if client != nil {
+		client.SignOut()
+		client = nil
 	}
 
 	params := mux.Vars(r)
@@ -92,7 +91,7 @@ func signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userContext, err = client.NewUserContextFromSignIn(
+	client, err = ipfs_share.NewUserContextFromSignIn(
 		params["username"],
 		params["password"],
 		ethKeyPath,
@@ -107,17 +106,17 @@ func signIn(w http.ResponseWriter, r *http.Request) {
 }
 
 func signOut(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	userContext.SignOut()
-	userContext = nil
+	client.SignOut()
+	client = nil
 }
 
 func createGroup(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "user context is null")
 		return
 	}
@@ -128,13 +127,13 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := userContext.CreateGroup(groupname); err != nil {
+	if err := client.CreateGroup(groupname); err != nil {
 		errorHandler(w, r, err.Error())
 	}
 }
 
 func invite(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "user context is null")
 		return
 	}
@@ -155,19 +154,20 @@ func invite(w http.ResponseWriter, r *http.Request) {
 	}
 	address := ethcommon.HexToAddress(member)
 
-	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
-	if groupCtxInterface == nil {
-		errorHandler(w, r, "no group found")
-		return
+	for _, group := range client.Groups() {
+		if group.Id().Equal(collections.NewBytesId(groupId)) {
+			if err := group.Invite(address, true); err != nil {
+				errorHandler(w, r, fmt.Sprintf("could not invite user: %s", err.Error()))
+			}
+			return
+		}
 	}
-	groupCtx := groupCtxInterface.(*client.GroupContext)
-	if err := groupCtx.Invite(address, true); err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not invite user: %s", err.Error()))
-	}
+
+	errorHandler(w, r, "no group found")
 }
 
 func groupRepoCommit(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "")
 		return
 	}
@@ -184,20 +184,20 @@ func groupRepoCommit(w http.ResponseWriter, r *http.Request) {
 	var groupId [32]byte
 	copy(groupId[:], groupIdArray)
 
+	for _, group := range client.Groups() {
+		if group.Id().Equal(collections.NewBytesId(groupId)) {
+			if err := group.CommitChanges(); err != nil {
+				errorHandler(w, r, fmt.Sprintf("could not add group file: %s", err.Error()))
+			}
+			return
+		}
+	}
 
-	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
-	if groupCtxInterface == nil {
-		errorHandler(w, r, "no group found")
-		return
-	}
-	groupCtx := groupCtxInterface.(*client.GroupContext)
-	if err := groupCtx.CommitChanges(); err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not add group file: %s", err.Error()))
-	}
+	errorHandler(w, r, "no group found")
 }
 
 func groupRepoListFiles(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "usercontext is nil")
 		return
 	}
@@ -211,25 +211,22 @@ func groupRepoListFiles(w http.ResponseWriter, r *http.Request) {
 	var groupId [32]byte
 	copy(groupId[:], groupIdArray)
 
-	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
-	if groupCtxInterface == nil {
-		errorHandler(w, r, "no group found")
-		return
+	for _, group := range client.Groups() {
+		if group.Id().Equal(collections.NewBytesId(groupId)) {
+			list := group.ListFiles()
+
+			if err := json.NewEncoder(w).Encode(list); err != nil {
+				errorHandler(w, r, "could not encode file list")
+			}
+			return
+		}
 	}
 
-	groupCtx := groupCtxInterface.(*client.GroupContext)
-	list := groupCtx.Repo.Files()
-	fmt.Print("repo ls: ")
-	fmt.Println(list)
-	glog.Error(list)
-
-	if err := json.NewEncoder(w).Encode(list); err != nil {
-		errorHandler(w, r, "could not encode file list")
-	}
+	errorHandler(w, r, "no group found")
 }
 
 func groupListMembers(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "user context is null")
 		return
 	}
@@ -243,27 +240,28 @@ func groupListMembers(w http.ResponseWriter, r *http.Request) {
 	var groupId [32]byte
 	copy(groupId[:], groupIdArray)
 
-	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
-	if groupCtxInterface == nil {
-		errorHandler(w, r, "no group found")
-		return
+	for _, group := range client.Groups() {
+		if group.Id().Equal(collections.NewBytesId(groupId)) {
+			var list []string
+			for _, address := range group.ListMembers() {
+				list = append(list, address.String())
+			}
+
+			glog.Error(list)
+
+			if err := json.NewEncoder(w).Encode(list); err != nil {
+				glog.Error(err)
+			}
+
+			return
+		}
 	}
 
-	groupCtx := groupCtxInterface.(*client.GroupContext)
-	var list []string
-	for _, address := range groupCtx.Group.Members() {
-		list = append(list, address.String())
-	}
-
-	glog.Error(list)
-
-	if err := json.NewEncoder(w).Encode(list); err != nil {
-		glog.Error(err)
-	}
+	errorHandler(w, r, "no group found")
 }
 
 func groupRepoGrantWriteAccess(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "user context is null")
 		return
 	}
@@ -281,20 +279,21 @@ func groupRepoGrantWriteAccess(w http.ResponseWriter, r *http.Request) {
 	file := params["file"]
 	address := ethcommon.HexToAddress(params["member"])
 
-	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
-	if groupCtxInterface == nil {
-		errorHandler(w, r, "no group found")
-		return
+	for _, group := range client.Groups() {
+		if group.Id().Equal(collections.NewBytesId(groupId)) {
+			if err := group.GrantWriteAccess(file, address); err != nil {
+				errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
+			}
+
+			return
+		}
 	}
 
-	groupCtx := groupCtxInterface.(*client.GroupContext)
-	if err := groupCtx.GrantWriteAccess(file, address); err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
-	}
+	errorHandler(w, r, "no group found")
 }
 
 func groupRepoRevokeWriteAccess(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "user context is null")
 		return
 	}
@@ -312,39 +311,28 @@ func groupRepoRevokeWriteAccess(w http.ResponseWriter, r *http.Request) {
 	file := params["file"]
 	address := ethcommon.HexToAddress(params["member"])
 
-	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
-	if groupCtxInterface == nil {
-		errorHandler(w, r, "no group found")
-		return
+	for _, group := range client.Groups() {
+		if group.Id().Equal(collections.NewBytesId(groupId)) {
+			if err := group.RevokeWriteAccess(file, address); err != nil {
+				errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
+			}
+
+			return
+		}
 	}
 
-	groupCtx := groupCtxInterface.(*client.GroupContext)
-	if err := groupCtx.Re(file, address); err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
-	}
-}
-
-func ls(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
-		errorHandler(w, r, "user context is nil")
-		return
-	}
-
-	list := userContext.List()
-	if err := json.NewEncoder(w).Encode(list); err != nil {
-		glog.Error(err)
-	}
+	errorHandler(w, r, "no group found")
 }
 
 func lsGroups(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "user context is nil")
 		return
 	}
 
 	var list []string
-	for groupCtx := range userContext.Groups.Iterator() {
-		list = append(list, groupCtx.(*client.GroupContext).Group.Name())
+	for _, group := range client.Groups() {
+		list = append(list, group.Id().ToString())
 	}
 
 	if err := json.NewEncoder(w).Encode(list); err != nil {
@@ -353,28 +341,18 @@ func lsGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func listTransactions(w http.ResponseWriter, r *http.Request) {
-	if userContext == nil {
+	if client == nil {
 		errorHandler(w, r, "user context is nil")
 		return
 	}
 
-	var txList []*types.Receipt
-
-	for txInt := range userContext.Transactions.Iterator() {
-		tx := txInt.(*nw.Transaction)
-
-		receipt, err := tx.Receipt(network)
-		if err != nil {
-			errorHandler(w, r, fmt.Sprintf("could not get tx status: %s", err))
-		}
-
-		txList = append(txList, receipt)
+	txList, err := client.Transactions()
+	if err != nil {
+		errorHandler(w, r, fmt.Sprintf(fmt.Sprintf("could not get tx's: %s", err)))
 	}
 
-	fmt.Println(txList)
-
 	if err := json.NewEncoder(w).Encode(txList); err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not encode txMap list"))
+		errorHandler(w, r, fmt.Sprintf("could not encode txMap list: %s", err))
 	}
 }
 
@@ -402,11 +380,9 @@ func main() {
 	router.HandleFunc("/group/repo/ls/{groupId}", groupRepoListFiles).Methods("GET")
 	router.HandleFunc("/group/repo/grant/{groupId}/{file}/{member}", groupRepoGrantWriteAccess).Methods("POST")
 	router.HandleFunc("/group/repo/revoke/{groupId}/{file}/{member}", groupRepoRevokeWriteAccess).Methods("POST")
-	
-	router.HandleFunc("/ls", ls).Methods("GET")
-	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")
 
-	router.HandleFunc("/tx/ls", listTransactions).Methods("GET")
+	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")
+	router.HandleFunc("/ls/tx", listTransactions).Methods("GET")
 	
 	glog.Fatal(http.ListenAndServe(host+":"+port, router))
 }

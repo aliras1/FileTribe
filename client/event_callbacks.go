@@ -9,39 +9,48 @@ import (
 	. "ipfs-share/collections"
 )
 
-func HandleDebugEvents(ctx *UserContext) {
+func HandleDebugEvents(ch chan *eth.EthDebug) {
 	glog.Info("hadnling debug events...")
 
-	for debug := range ctx.network.GetDebugChannel() {
+	for debug := range ch {
 		glog.Infof("Eth Debug code: %v", debug.Msg.String())
 	}
 }
 
-func HandleGroupInvitationEvents(ctx *UserContext) {
+type OnGroupInvitationCallback func(registered *eth.EthGroupInvitation)
+
+func HandleGroupInvitationEvents(ch chan *eth.EthGroupInvitation, callback OnGroupInvitationCallback) {
 	glog.Info("groupInvitation handling...")
 
-	for groupInvitation := range ctx.network.GetGroupInvitationChannel() {
-		go processGroupInvitationEvent(groupInvitation, ctx)
+	for groupInvitation := range ch {
+		callback(groupInvitation)
 	}
 }
 
-func HandleGroupUpdateIpfsEvents(ctx *UserContext) {
+type OnGroupUpdateIpfsCallback func(registered *eth.EthGroupUpdateIpfsHash)
+
+func HandleGroupUpdateIpfsEvents(ch chan *eth.EthGroupUpdateIpfsHash, callback OnGroupUpdateIpfsCallback) {
 	glog.Info("groupUpdateIpfs handling...")
 
-	for updateIpfs := range ctx.network.GetGroupUpdateIpfsChannel() {
-		processGroupUpdateIpfsEvent(updateIpfs, ctx)
+	for updateIpfs := range ch {
+		callback(updateIpfs)
 	}
 }
 
-func HandleGroupRegisteredEvents(ctx *UserContext) {
+type OnGroupRegisteredCallback func(registered *eth.EthGroupRegistered)
+
+func HandleGroupRegisteredEvents(ch chan *eth.EthGroupRegistered, callback OnGroupRegisteredCallback) {
 	glog.Info("group registered handling...")
 
-	for groupRegistered := range ctx.network.GetGroupRegisteredChannel() {
-		processGroupRegisteredEvent(groupRegistered, ctx)
+	for groupRegistered := range ch {
+		callback(groupRegistered)
 	}
 }
 
-func processGroupUpdateIpfsEvent(updateIpfs *eth.EthGroupUpdateIpfsHash, ctx *UserContext) {
+func (ctx *UserContext) onGroupUpdateIpfsCallback(updateIpfs *eth.EthGroupUpdateIpfsHash) {
+	ctx.lock.Lock()
+	defer ctx.lock.Unlock()
+
 	glog.Info("got update ipfs event message")
 
 	groupCtxInterface := ctx.groups.Get(NewBytesId(updateIpfs.GroupId))
@@ -67,7 +76,10 @@ func processGroupUpdateIpfsEvent(updateIpfs *eth.EthGroupUpdateIpfsHash, ctx *Us
 	}
 }
 
-func processGroupRegisteredEvent(groupRegistered *eth.EthGroupRegistered, ctx *UserContext) {
+func (ctx *UserContext) onGroupRegisteredCallback(groupRegistered *eth.EthGroupRegistered) {
+	ctx.lock.Lock()
+	defer ctx.lock.Unlock()
+
 	glog.Info("got group registered event message")
 
 	id := NewBytesId(groupRegistered.Id)
@@ -79,7 +91,10 @@ func processGroupRegisteredEvent(groupRegistered *eth.EthGroupRegistered, ctx *U
 	glog.Infof("group '%s' registered", id.ToString())
 }
 
-func processGroupInvitationEvent(inv *eth.EthGroupInvitation, ctx *UserContext) {
+func (ctx *UserContext) onGroupInvitationCallback(inv *eth.EthGroupInvitation) {
+	ctx.lock.Lock()
+	defer ctx.lock.Unlock()
+
 	glog.Infof("%s: got a group invitation event into %v", ctx.user.Name, inv.GroupId)
 
 	// if new member

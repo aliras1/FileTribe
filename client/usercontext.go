@@ -10,12 +10,16 @@ import (
 	"github.com/pkg/errors"
 	. "ipfs-share/collections"
 	"ipfs-share/client/fs"
+	"sync"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type IUserFacade interface {
 	CreateGroup(groupname string) error
 	User() IUser
 	Groups() []IGroupFacade
+	SignOut()
+	Transactions() ([]*types.Receipt, error)
 }
 
 type UserContext struct {
@@ -29,6 +33,7 @@ type UserContext struct {
 	transactions   *ConcurrentCollection
 
 	channelStop chan int
+	lock sync.RWMutex
 }
 
 func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (IUserFacade, error) {
@@ -113,10 +118,10 @@ func NewUserContext(dataPath string, user IUser, network nw.INetwork, ipfs ipfsa
 
 	uc.channelStop = make(chan int)
 
-	go HandleDebugEvents(&uc)
-	go HandleGroupInvitationEvents(&uc)
-	go HandleGroupUpdateIpfsEvents(&uc)
-	go HandleGroupRegisteredEvents(&uc)
+	go HandleDebugEvents(network.GetDebugChannel())
+	go HandleGroupInvitationEvents(network.GetGroupInvitationChannel(), uc.onGroupInvitationCallback)
+	go HandleGroupUpdateIpfsEvents(network.GetGroupUpdateIpfsChannel(), uc.onGroupUpdateIpfsCallback)
+	go HandleGroupRegisteredEvents(network.GetGroupRegisteredChannel(), uc.onGroupRegisteredCallback)
 
 	if err := uc.BuildGroups(); err != nil {
 		return nil, fmt.Errorf("could not build Groups: NewUserContext: %s", err)
@@ -238,4 +243,19 @@ func (ctx *UserContext) Groups() []IGroupFacade {
 func (ctx *UserContext) List() map[string][]string {
 	list := make(map[string][]string)
 	return list
+}
+
+func (ctx *UserContext) Transactions() ([]*types.Receipt, error) {
+	var list []*types.Receipt
+
+	for txInt := range ctx.transactions.Iterator() {
+		r, err := txInt.(*nw.Transaction).Receipt(ctx.network)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get tx receipt")
+		}
+
+		list = append(list, r)
+	}
+
+	return list, nil
 }

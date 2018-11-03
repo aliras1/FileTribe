@@ -143,15 +143,15 @@ func TestBigScenario(t *testing.T) {
 	//	t.Fatal("bobs dir mismatch")
 	//}
 	//
-	//fileID1, err := alice.AddFile("./user.go")
+	//fileID1, err := alice.Commit("./user.go")
 	//if err != nil {
 	//	t.Fatal(err)
 	//}
-	//fileID2, err := alice.AddFile("./user_test.go")
+	//fileID2, err := alice.Commit("./user_test.go")
 	//if err != nil {
 	//	t.Fatal(err)
 	//}
-	//fileID3, err := bob.AddFile("./storage.go")
+	//fileID3, err := bob.Commit("./storage.go")
 	//if err != nil {
 	//	t.Fatal(err)
 	//}
@@ -189,7 +189,7 @@ func TestBigScenario(t *testing.T) {
 	//
 	//alice.SignOut()
 	//
-	//fileID4, err := bob.AddFile("./cap.go")
+	//fileID4, err := bob.Commit("./cap.go")
 	//if err != nil {
 	//	t.Fatal(err)
 	//}
@@ -333,10 +333,10 @@ func TestSharingFromUserContext(t *testing.T) {
 	// if err != nil {
 	// 	t.Fatal(err)
 	// }
-	// if err := uc1.AddFile("usercontext.go", []string{uc2.User.Name}); err != nil {
+	// if err := uc1.Commit("usercontext.go", []string{uc2.User.Name}); err != nil {
 	// 	t.Fatal(err)
 	// }
-	// if err := uc1.AddFile("usercontext_test.go", []string{uc2.User.Name}); err != nil {
+	// if err := uc1.Commit("usercontext_test.go", []string{uc2.User.Name}); err != nil {
 	// 	t.Fatal(err)
 	// }
 	// time.Sleep(3 * time.Second)

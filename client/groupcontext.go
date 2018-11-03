@@ -16,9 +16,13 @@ import (
 )
 
 type IGroupFacade interface {
+	Id() IIdentifier
 	GrantWriteAccess(filePath string, user ethcommon.Address) error
 	RevokeWriteAccess(filePath string, user ethcommon.Address) error
 	CommitChanges() error
+	Invite(user ethcommon.Address, hasInviteRigth bool) error
+	ListFiles() []string
+	ListMembers() []ethcommon.Address
 }
 
 type GroupContext struct {
@@ -225,4 +229,12 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 	}
 
 	return nil
+}
+
+func (groupCtx *GroupContext) ListFiles() []string {
+	return groupCtx.Repo.Files()
+}
+
+func (groupCtx *GroupContext) ListMembers() []ethcommon.Address {
+	return groupCtx.Group.Members()
 }
