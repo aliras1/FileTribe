@@ -9,25 +9,29 @@ import (
 	nw "ipfs-share/network"
 	"github.com/pkg/errors"
 	. "ipfs-share/collections"
+	"ipfs-share/client/fs"
 )
 
+type IUserFacade interface {
+	CreateGroup(groupname string) error
+	User() IUser
+	Groups() []IGroupFacade
+}
 
 type UserContext struct {
-	User           IUser
-	Groups         *ConcurrentCollection
-	IPNSAddr       string
-	AddressBook    *ConcurrentCollection
-	Network        nw.INetwork
-	Ipfs           ipfsapi.IIpfs
-	Storage        *Storage
-	LatestBlock    uint64
-	P2P            *P2PServer
-	Transactions   *ConcurrentCollection
+	user           IUser
+	groups         *ConcurrentCollection
+	addressBook    *ConcurrentCollection
+	network        nw.INetwork
+	ipfs           ipfsapi.IIpfs
+	storage        *fs.Storage
+	p2p            *P2PServer
+	transactions   *ConcurrentCollection
 
 	channelStop chan int
 }
 
-func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
+func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (IUserFacade, error) {
 	glog.Infof("[*] User '%s' signing up...", username)
 
 	ipfsPeerId, err := ipfs.ID()
@@ -60,12 +64,12 @@ func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, n
 		return nil, errors.Wrap(err, "could not start transaction")
 	}
 
-	uc.Transactions.Append(tx)
+	uc.transactions.Append(tx)
 
 	return uc, nil
 }
 
-func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
+func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (IUserFacade, error) {
 	glog.Infof("[*] User '%s' signing in...", username)
 
 	user, err := NewUser(username, password, ethKeyPath)
@@ -94,28 +98,18 @@ func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, n
 func NewUserContext(dataPath string, user IUser, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	var err error
 	var uc UserContext
-	uc.User = user
-	uc.Network = network
-	uc.Ipfs = ipfs
-	uc.Storage = NewStorage(dataPath)
-	uc.Groups = NewConcurrentCollection()
-	uc.AddressBook = NewConcurrentCollection()
-	uc.Transactions = NewConcurrentCollection()
+	uc.user = user
+	uc.network = network
+	uc.ipfs = ipfs
+	uc.storage = fs.NewStorage(dataPath)
+	uc.groups = NewConcurrentCollection()
+	uc.addressBook = NewConcurrentCollection()
+	uc.transactions = NewConcurrentCollection()
 	p2p, err := NewP2PConnection(p2pPort, &uc)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create P2P connection")
 	}
-	uc.P2P = p2p
-
-	//if err := uc.Storage.LoadContextData(&uc); err != nil {
-	//	glog.Warningf("could not load context data: %s", err)
-	//}
-
-	ipfsID, err := ipfs.ID()
-	if err != nil {
-		return nil, fmt.Errorf("could not get ipfs sessionId: NewUserContect: %s", err)
-	}
-	uc.IPNSAddr = ipfsID.ID
+	uc.p2p = p2p
 
 	uc.channelStop = make(chan int)
 
@@ -131,6 +125,9 @@ func NewUserContext(dataPath string, user IUser, network nw.INetwork, ipfs ipfsa
 	return &uc, nil
 }
 
+func (ctx *UserContext) User() IUser {
+	return ctx.user
+}
 
 func (ctx *UserContext) Save() error {
 	//if err := ctx.Storage.SaveContextData(ctx); err != nil {
@@ -141,12 +138,12 @@ func (ctx *UserContext) Save() error {
 }
 
 func (ctx *UserContext) SignOut() {
-	fmt.Printf("[*] User '%s' signing out...\n", ctx.User.Name)
-	for groupCtx := range ctx.Groups.Iterator() {
+	fmt.Printf("[*] User '%s' signing out...\n", ctx.user.Name())
+	for groupCtx := range ctx.groups.Iterator() {
 		groupCtx.(*GroupContext).Stop()
 	}
 
-	ctx.Network.Close()
+	ctx.network.Close()
 
 	if err := ctx.Save(); err != nil {
 		glog.Errorf("could not save context state: UserContext.SignOut: %s", err)
@@ -154,26 +151,26 @@ func (ctx *UserContext) SignOut() {
 }
 
 func (ctx *UserContext) BuildGroups() error {
-	glog.Infof("Building Groups for user '%s'...", ctx.User.Name)
-	caps, err := ctx.Storage.GetGroupCaps()
+	glog.Infof("Building Groups for user '%s'...", ctx.user.Name())
+	caps, err := ctx.storage.GetGroupCaps()
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not get group caps: UserContext.BuildGroups: %s", err)
 	}
 	for _, cap := range caps {
 		groupCtx, err := NewGroupContextFromCAP(
 			&cap,
-			ctx.User,
-			ctx.P2P,
-			ctx.AddressBook,
-			ctx.Network,
-			ctx.Ipfs,
-			ctx.Storage,
-			ctx.Transactions,
+			ctx.user,
+			ctx.p2p,
+			ctx.addressBook,
+			ctx.network,
+			ctx.ipfs,
+			ctx.storage,
+			ctx.transactions,
 		)
 		if err != nil {
 			return fmt.Errorf("could not create new group context: UserContext.BuildGroups: %s", err)
 		}
-		if err := ctx.Groups.Append(groupCtx); err != nil {
+		if err := ctx.groups.Append(groupCtx); err != nil {
 			glog.Warningf("could not append elem: %s", err)
 		}
 	}
@@ -185,13 +182,13 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 	group := NewGroup(groupname)
 	groupCtx, err := NewGroupContext(
 		group,
-		ctx.User,
-		ctx.P2P,
-		ctx.AddressBook,
-		ctx.Network,
-		ctx.Ipfs,
-		ctx.Storage,
-		ctx.Transactions,
+		ctx.user,
+		ctx.p2p,
+		ctx.addressBook,
+		ctx.network,
+		ctx.ipfs,
+		ctx.storage,
+		ctx.transactions,
 	)
 	if err != nil {
 		return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
@@ -205,7 +202,7 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 		return errors.Wrap(err, "could not set ipfs hash of group")
 	}
 
-	if err := group.Save(ctx.Storage); err != nil {
+	if err := group.Save(ctx.storage); err != nil {
 		return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
 	}
 
@@ -218,16 +215,26 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 		return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
 	}
 
-	ctx.Transactions.Append(tx)
+	ctx.transactions.Append(tx)
 
-	if err := ctx.Groups.Append(groupCtx); err != nil {
+	if err := ctx.groups.Append(groupCtx); err != nil {
 		glog.Warningf("could not append elem: %s", err)
 	}
 
 	return nil
 }
 
-// List lists the content of the user's repository
+func (ctx *UserContext) Groups() []IGroupFacade {
+	var groups []IGroupFacade
+
+	for groupCtxInt := range ctx.groups.Iterator() {
+		groups = append(groups, groupCtxInt.(IGroupFacade))
+	}
+
+	return groups
+}
+
+// Files lists the content of the user's repository
 func (ctx *UserContext) List() map[string][]string {
 	list := make(map[string][]string)
 	return list

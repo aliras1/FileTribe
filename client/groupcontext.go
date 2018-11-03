@@ -12,8 +12,14 @@ import (
 	"sync"
 	"path"
 	"github.com/golang/glog"
+	"ipfs-share/client/fs"
 )
 
+type IGroupFacade interface {
+	GrantWriteAccess(filePath string, user ethcommon.Address) error
+	RevokeWriteAccess(filePath string, user ethcommon.Address) error
+	CommitChanges() error
+}
 
 type GroupContext struct {
 	User             IUser
@@ -24,7 +30,7 @@ type GroupContext struct {
 	AddressBook *ConcurrentCollection
 	Network          nw.INetwork
 	Ipfs             ipfsapi.IIpfs
-	Storage          *Storage
+	Storage          *fs.Storage
 	Transactions     *ConcurrentCollection
 	broadcastChannel *ipfsapi.PubSubSubscription
 	lock sync.Mutex
@@ -41,7 +47,7 @@ func NewGroupContext(
 	addressBook *ConcurrentCollection,
 	network nw.INetwork,
 	ipfs ipfsapi.IIpfs,
-	storage *Storage,
+	storage *fs.Storage,
 	transactions *ConcurrentCollection,
 ) (*GroupContext, error) {
 
@@ -69,13 +75,13 @@ func NewGroupContext(
 }
 
 func NewGroupContextFromCAP(
-	cap *GroupAccessCap,
+	cap *fs.GroupAccessCap,
 	user IUser,
 	p2p *P2PServer,
 	addressBook *ConcurrentCollection,
 	network nw.INetwork,
 	ipfs ipfsapi.IIpfs,
-	storage *Storage,
+	storage *fs.Storage,
 	transactions *ConcurrentCollection,
 ) (*GroupContext, error) {
 	group := NewGroupFromCap(cap)
@@ -101,7 +107,7 @@ func (groupCtx *GroupContext) Update() error {
 		return errors.Wrapf(err, "could not save group")
 	}
 
-	if err := groupCtx.Repo.Update(groupCtx.Group.IpfsHash()); err != nil {
+	if err := groupCtx.Repo.update(groupCtx.Group.IpfsHash()); err != nil {
 		return errors.Wrap(err, "could not update group repo")
 	}
 
@@ -170,21 +176,20 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 		return errors.New("can not grant write access to non group members")
 	}
 
-	var file *File
+	var file *fs.File
 	fileInt := groupCtx.Repo.files.Get(NewStringId(path.Base(filePath)))
 	if fileInt == nil {
-		tmpFile, err := NewGroupFile(
+		tmpFile, err := fs.NewGroupFile(
 			filePath,
 			[]ethcommon.Address{groupCtx.User.Address()},
-			groupCtx.Group,
-			groupCtx.Storage,
-			groupCtx.Ipfs)
+			groupCtx.Group.Id().ToString(),
+			groupCtx.Storage,)
 		if err != nil {
 			return errors.Wrap(err, "could not create new group file")
 		}
 		file = tmpFile
 	} else {
-		file = fileInt.(*File)
+		file = fileInt.(*fs.File)
 	}
 
 	if err := file.GrantWriteAccess(groupCtx.User.Address(), user); err != nil {
@@ -194,3 +199,30 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 	return nil
 }
 
+func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.Address) error {
+	if !groupCtx.Group.IsMember(user) {
+		return errors.New("can not revoke write access from non group members")
+	}
+
+	var file *fs.File
+	fileInt := groupCtx.Repo.files.Get(NewStringId(path.Base(filePath)))
+	if fileInt == nil {
+		tmpFile, err := fs.NewGroupFile(
+			filePath,
+			[]ethcommon.Address{groupCtx.User.Address()},
+			groupCtx.Group.Id().ToString(),
+			groupCtx.Storage,)
+		if err != nil {
+			return errors.Wrap(err, "could not create new group file")
+		}
+		file = tmpFile
+	} else {
+		file = fileInt.(*fs.File)
+	}
+
+	if err := file.RevokeWriteAccess(groupCtx.User.Address(), user); err != nil {
+		return errors.Wrap(err, "could not revoke write access to user")
+	}
+
+	return nil
+}

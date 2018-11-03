@@ -30,7 +30,7 @@ func NewP2PConnection(port string, ctx *UserContext) (*P2PServer, error) {
 	stop := make(chan bool)
 	closedSession := make(chan ISession)
 
-	p2pListener, err := ctx.Ipfs.P2PListen(context.Background(), p2pProtocolName, "/ip4/127.0.0.1/tcp/" + port)
+	p2pListener, err := ctx.ipfs.P2PListen(context.Background(), p2pProtocolName, "/ip4/127.0.0.1/tcp/" + port)
 	if err != nil {
 		return nil, errors.New("could not create P2P listener")
 	}
@@ -103,8 +103,8 @@ func (p2p *P2PServer) connectionListener(port string) {
 				stopConnectionChannel := make(chan bool)
 				p2p.stopConnectionChannels = append(p2p.stopConnectionChannels, stopConnectionChannel)
 				conn.SetKeepAlive(true)
-				go p2p.handleConnection(p2p.ctx.AddressBook, (*P2PConn)(conn), stopConnectionChannel)
-				glog.Infof("%s is serving %s on %s", p2p.ctx.User.Name, conn.RemoteAddr().String(), conn.LocalAddr().String())
+				go p2p.handleConnection(p2p.ctx.addressBook, (*P2PConn)(conn), stopConnectionChannel)
+				glog.Infof("%s is serving %s on %s", p2p.ctx.user.Name, conn.RemoteAddr().String(), conn.LocalAddr().String())
 			}
 		}
 	}
@@ -123,20 +123,20 @@ func (p2p *P2PServer) handleConnection(addressBook *ConcurrentCollection, conn *
 			}
 		default:
 			{
-				msg, contact, err := conn.ReadMessage(addressBook, p2p.ctx.Network, p2p.ctx.Ipfs)
+				msg, contact, err := conn.ReadMessage(addressBook, p2p.ctx.network, p2p.ctx.ipfs)
 				if err != nil {
 					glog.Errorf("could not read from connection: %s", err)
 					continue
 				}
 
-				address := p2p.ctx.User.Address()
-				glog.Infof("%s (%s): msg from: %s, sessid: %d", p2p.ctx.User.Name, address.String(), msg.From.String(), msg.SessionId)
+				address := p2p.ctx.user.Address()
+				glog.Infof("%s (%s): msg from: %s, sessid: %d", p2p.ctx.user.Name, address.String(), msg.From.String(), msg.SessionId)
 
 				sessionId := NewUint32Id(msg.SessionId)
 				var session ISession
 				sessionInterface := p2p.sessions.Get(sessionId)
 				if sessionInterface == nil {
-					session, err = NewServerSession(msg, contact, p2p.ctx.User, p2p.ctx.Groups, p2p.SessionClosedChan)
+					session, err = NewServerSession(msg, contact, p2p.ctx.user, p2p.ctx.groups, p2p.SessionClosedChan)
 					if err != nil {
 						glog.Error("could not create new session: %s", err)
 						continue

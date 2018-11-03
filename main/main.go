@@ -218,7 +218,7 @@ func groupRepoListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	groupCtx := groupCtxInterface.(*client.GroupContext)
-	list := groupCtx.Repo.List()
+	list := groupCtx.Repo.Files()
 	fmt.Print("repo ls: ")
 	fmt.Println(list)
 	glog.Error(list)
@@ -259,6 +259,68 @@ func groupListMembers(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewEncoder(w).Encode(list); err != nil {
 		glog.Error(err)
+	}
+}
+
+func groupRepoGrantWriteAccess(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		errorHandler(w, r, "user context is null")
+		return
+	}
+
+	params := mux.Vars(r)
+
+	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
+	if err != nil {
+		errorHandler(w, r, "no group id found")
+		return
+	}
+	var groupId [32]byte
+	copy(groupId[:], groupIdArray)
+
+	file := params["file"]
+	address := ethcommon.HexToAddress(params["member"])
+
+	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
+	if groupCtxInterface == nil {
+		errorHandler(w, r, "no group found")
+		return
+	}
+
+	groupCtx := groupCtxInterface.(*client.GroupContext)
+	if err := groupCtx.GrantWriteAccess(file, address); err != nil {
+		errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
+	}
+}
+
+func groupRepoRevokeWriteAccess(w http.ResponseWriter, r *http.Request) {
+	if userContext == nil {
+		errorHandler(w, r, "user context is null")
+		return
+	}
+
+	params := mux.Vars(r)
+
+	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
+	if err != nil {
+		errorHandler(w, r, "no group id found")
+		return
+	}
+	var groupId [32]byte
+	copy(groupId[:], groupIdArray)
+
+	file := params["file"]
+	address := ethcommon.HexToAddress(params["member"])
+
+	groupCtxInterface := userContext.Groups.Get(collections.NewBytesId(groupId))
+	if groupCtxInterface == nil {
+		errorHandler(w, r, "no group found")
+		return
+	}
+
+	groupCtx := groupCtxInterface.(*client.GroupContext)
+	if err := groupCtx.Re(file, address); err != nil {
+		errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
 	}
 }
 
@@ -338,6 +400,8 @@ func main() {
 	router.HandleFunc("/group/ls/{groupId}", groupListMembers).Methods("GET")
 	router.HandleFunc("/group/repo/commit/{groupId}", groupRepoCommit).Methods("POST")
 	router.HandleFunc("/group/repo/ls/{groupId}", groupRepoListFiles).Methods("GET")
+	router.HandleFunc("/group/repo/grant/{groupId}/{file}/{member}", groupRepoGrantWriteAccess).Methods("POST")
+	router.HandleFunc("/group/repo/revoke/{groupId}/{file}/{member}", groupRepoRevokeWriteAccess).Methods("POST")
 	
 	router.HandleFunc("/ls", ls).Methods("GET")
 	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")

@@ -61,6 +61,12 @@ func NewCommitChangesGroupSessionClient(
 	digest := hasher.Sum(group.EncryptedIpfsHash(), encNewIpfsHash)
 	glog.Errorf("verif digest: %v", digest)
 
+	signer := user.Signer()
+	sig, err := signer.Sign(digest)
+	if err != nil {
+		glog.Error("could not sign own CommitChanges digest")
+	}
+
 	session := &CommitChangesGroupSessionClient{
 		sessionId:          NewUint32Id(sessionId),
 		user: user,
@@ -68,7 +74,7 @@ func NewCommitChangesGroupSessionClient(
 		groupConnection: groupConnection,
 		closedChan:closedChan,
 		encNewIpfsHash:     encNewIpfsHash,
-		approvals:          []*network.Approval{},
+		approvals:          []*network.Approval{ {From: user.Address(), Signature: sig} },
 		digest:             digest,
 		state:              0,
 		approvalsCountChan: make(chan int),
@@ -119,10 +125,10 @@ func (session *CommitChangesGroupSessionClient) IsAlive() bool {
 }
 
 func (session *CommitChangesGroupSessionClient) Run() {
-	addFileGroupMsg := CommitGroupMessage{
+	commitChangesGroupMsg := CommitGroupMessage{
 		NewGroupIpfsHash: session.encNewIpfsHash,
 	}
-	payload, err := addFileGroupMsg.Encode()
+	payload, err := commitChangesGroupMsg.Encode()
 	if err != nil {
 		session.error = errors.Wrap(err, "could not encode commit changes group message")
 		session.close()
@@ -245,7 +251,7 @@ func (session *CommitChangesGroupSessionServer) Run() {
 		session.error = errors.New("could not decrypt new ipfs hash")
 		return
 	}
-	if err := session.repo.IsValidChangeSet(string(newIpfsHash), &session.contact.Address); err != nil {
+	if err := session.repo.isValidChangeSet(string(newIpfsHash), &session.contact.Address); err != nil {
 		session.error = errors.Wrap(err, "invalid change set")
 		return
 	}

@@ -1,17 +1,14 @@
-package client
+package fs
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	ipfsapi "ipfs-share/ipfs"
-
 	"ipfs-share/crypto"
 	"github.com/pkg/errors"
 	"bytes"
 	"strings"
 	"crypto/rand"
-	"os"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"ipfs-share/utils"
 )
@@ -99,7 +96,7 @@ func DecodeFileCapList(data []byte) ([]*FileCap, error) {
 }
 
 
-func NewGroupFileCap(fileName string, filePath string, hasWriteAccess []ethcommon.Address, ipfs ipfsapi.IIpfs, storage *Storage) (*FileCap, error) {
+func NewGroupFileCap(fileName string, hasWriteAccess []ethcommon.Address) (*FileCap, error) {
 	var id [32]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return nil, errors.Wrap(err, "could not read from crypto/rand")
@@ -112,25 +109,10 @@ func NewGroupFileCap(fileName string, filePath string, hasWriteAccess []ethcommo
 
 	boxer := crypto.FileBoxer{Key: key}
 
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not open file")
-	}
-
- 	encBuffer, err := boxer.Seal(file)
- 	if err != nil {
- 		return nil, errors.Wrap(err, "could not encrypt file")
-	}
-
-	hash, err := ipfs.Add(encBuffer)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not ipfs add file")
-	}
-
 	return &FileCap{
 		Id:              id,
 		DataKey:         boxer,
-		IpfsHash:        hash,
+		IpfsHash:        "",
 		FileName:        fileName,
 		WriteAccessList: hasWriteAccess,
 	}, nil

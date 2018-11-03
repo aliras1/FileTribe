@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"sync"
 	"strings"
+	"ipfs-share/client/fs"
 )
 
 type IGroup interface {
@@ -28,7 +29,7 @@ type IGroup interface {
 	Members() []ethcommon.Address
 	Boxer() crypto.SymmetricKey
 	Update(name string, members []ethcommon.Address, encIpfsHash []byte) error
-	Save(storage *Storage) error
+	Save(storage *fs.Storage) error
 }
 
 type Group struct {
@@ -61,7 +62,7 @@ func NewGroup(groupName string) IGroup {
 	}
 }
 
-func NewGroupFromCap(cap *GroupAccessCap) IGroup {
+func NewGroupFromCap(cap *fs.GroupAccessCap) IGroup {
 	return &Group {
 		id: NewBytesId(cap.GroupId),
 		boxer: cap.Boxer,
@@ -69,36 +70,36 @@ func NewGroupFromCap(cap *GroupAccessCap) IGroup {
 }
 
 func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
-	_, members, _, err := ctx.Network.GetGroup(groupId)
+	_, members, _, err := ctx.network.GetGroup(groupId)
 	if err != nil {
 		errors.Wrap(err, "could not get group from network")
 	}
 
 	for _, member := range members {
-		if bytes.Equal(member.Bytes(), ctx.User.Address().Bytes()) {
+		if bytes.Equal(member.Bytes(), ctx.user.Address().Bytes()) {
 			continue
 		}
-		c, err := ctx.Network.GetUser(member)
+		c, err := ctx.network.GetUser(member)
 		if err != nil {
 			glog.Warningf("could not get user in Group.GetKey(): %s", err)
 			continue
 		}
 
-		if err := ctx.AddressBook.Append(NewContact(c, ctx.Ipfs)); err != nil {
+		if err := ctx.addressBook.Append(NewContact(c, ctx.ipfs)); err != nil {
 			glog.Warningf("could not append elem: %s", err)
 		}
-		contact := ctx.AddressBook.Get(NewAddressId(&c.Address)).(*Contact)
+		contact := ctx.addressBook.Get(NewAddressId(&c.Address)).(*Contact)
 
-		session := NewGetGroupKeySessionClient(groupId, contact, ctx.User, ctx.Storage, ctx.P2P.SessionClosedChan, func(cap *GroupAccessCap) {
+		session := NewGetGroupKeySessionClient(groupId, contact, ctx.user, ctx.storage, ctx.p2p.SessionClosedChan, func(cap *fs.GroupAccessCap) {
 			groupCtx, err := NewGroupContextFromCAP(
 				cap,
-				ctx.User,
-				ctx.P2P,
-				ctx.AddressBook,
-				ctx.Network,
-				ctx.Ipfs,
-				ctx.Storage,
-				ctx.Transactions,
+				ctx.user,
+				ctx.p2p,
+				ctx.addressBook,
+				ctx.network,
+				ctx.ipfs,
+				ctx.storage,
+				ctx.transactions,
 			)
 			if err != nil {
 				glog.Error(err, "could not create group context")
@@ -110,11 +111,11 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 				return
 			}
 
-			if err := ctx.Groups.Append(groupCtx); err != nil {
+			if err := ctx.groups.Append(groupCtx); err != nil {
 				glog.Warningf("could not append elem: %s", err)
 			}
 		})
-		if err := ctx.P2P.sessions.Append(session); err != nil {
+		if err := ctx.p2p.sessions.Append(session); err != nil {
 			glog.Warningf("could not append elem: %s", err)
 		}
 
@@ -124,11 +125,11 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 	return nil
 }
 
-func (g *Group) Save(storage *Storage) error {
+func (g *Group) Save(storage *fs.Storage) error {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	cap := GroupAccessCap{
+	cap := fs.GroupAccessCap{
 		GroupId: g.id.Data().([32]byte),
 		Boxer:   g.boxer,
 	}

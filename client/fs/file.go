@@ -1,25 +1,26 @@
-package client
+package fs
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
-	"github.com/golang/glog"
 	ipfsapi "ipfs-share/ipfs"
 	"ipfs-share/collections"
 	"github.com/pkg/errors"
 	"ipfs-share/utils"
-	"io"
 	"bytes"
 	"github.com/getlantern/deepcopy"
 	"sync"
 	"strings"
+	"github.com/sergi/go-diff/diffmatchpatch"
+	"ipfs-share/crypto"
+	"github.com/golang/glog"
+	"github.com/golang-collections/collections/stack"
 )
 
 // IFile is an interface for the files
@@ -31,24 +32,26 @@ type IFile interface {
 // File represents a file that
 // is shared in a peer to peer mode
 type File struct {
-	Cap      *FileCap
+	Cap            *FileCap
 	PendingChanges *FileCap
-	DataPath string
-	CapPath string
-	PendingPath string
-	lock sync.RWMutex
+	DataPath       string
+	CapPath        string
+	OrigPath       string
+	lock           sync.RWMutex
 }
 
 func (f *File) Id() collections.IIdentifier {
 	return collections.NewStringId(f.Cap.FileName)
 }
 
-func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, group IGroup, storage *Storage, ipfs ipfsapi.IIpfs) (*File, error) {
+func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId string, storage *Storage) (*File, error) {
 	if writeAccessList == nil {
 		return nil, errors.New("writeAccessList can not be nil")
 	}
 
-	cap, err := NewGroupFileCap(path.Base(filePath), filePath, writeAccessList, ipfs, storage)
+	fileName := path.Base(filePath)
+
+	cap, err := NewGroupFileCap(fileName, writeAccessList)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create cap for NewFile")
 	}
@@ -58,15 +61,15 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, group IG
 	}
 
 	idString := base64.URLEncoding.EncodeToString(cap.Id[:])
-	capPath := storage.GroupFileCapDir(group.Id().ToString()) + idString
-	pendingPath := storage.GroupFilePendingDir(group.Id().ToString()) + idString
+	capPath := storage.GroupFileCapDir(groupId) + idString
+	pendingPath := storage.GroupFileOrigDir(groupId) + fileName
 
 	file := &File{
-		Cap:      cap,
+		Cap:            cap,
 		PendingChanges: pendingChanges,
-		DataPath: filePath,
-		CapPath: capPath,
-		PendingPath: pendingPath,
+		DataPath:       filePath,
+		CapPath:        capPath,
+		OrigPath:       pendingPath,
 	}
 
 	if err := file.SaveMetadata(); err != nil {
@@ -80,7 +83,7 @@ func NewGroupFileFromCap(cap *FileCap, groupId string, storage *Storage) (*File,
 	idString := base64.URLEncoding.EncodeToString(cap.Id[:])
 	capPath := storage.GroupFileCapDir(groupId) + idString
 	dataPath := storage.GroupFileDataDir(groupId) + cap.FileName
-	pendingPath := storage.GroupFilePendingDir(groupId) + idString
+	pendingPath := storage.GroupFileOrigDir(groupId) + idString
 
 	var pendingChanges *FileCap
 	if err := deepcopy.Copy(&pendingChanges, cap); err != nil {
@@ -88,11 +91,11 @@ func NewGroupFileFromCap(cap *FileCap, groupId string, storage *Storage) (*File,
 	}
 
 	file := &File{
-		Cap:      cap,
+		Cap:            cap,
 		PendingChanges: pendingChanges,
-		DataPath: dataPath,
-		CapPath:   capPath,
-		PendingPath: pendingPath,
+		DataPath:       dataPath,
+		CapPath:        capPath,
+		OrigPath:       pendingPath,
 	}
 
 	return file, nil
@@ -135,11 +138,18 @@ func NewFileFromCap(dataDir, capDir string, cap *FileCap, ipfs ipfsapi.IIpfs, st
 }
 
 func (f *File) Update(cap *FileCap, storage *Storage, ipfs ipfsapi.IIpfs) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
 	oldIpfsHash := f.Cap.IpfsHash
 	f.Cap = cap
 	if strings.Compare(oldIpfsHash, cap.IpfsHash) != 0 {
 		if err := f.SaveMetadata(); err != nil {
 			return errors.Wrap(err, "could not save file meta data")
+		}
+
+		if err := deepcopy.Copy(&f.PendingChanges, f.Cap); err != nil {
+			return errors.Wrap(err, "could not deep copy cap top pending changes")
 		}
 
 		go f.Download(storage, ipfs)
@@ -149,37 +159,67 @@ func (f *File) Update(cap *FileCap, storage *Storage, ipfs ipfsapi.IIpfs) error 
 
 // Downloads, decrypts and verifies the content of file from Ipfs
 func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
-	tmpFilePath, err := storage.DownloadTmpFile(f.Cap.IpfsHash, ipfs)
-	if err != nil {
-		glog.Errorf("could not ipfs get '%s': File.download: %s", f.Cap.IpfsHash, err)
+	dmp := diffmatchpatch.New()
+	patchStack := stack.New()
+
+	currentDiffIpfsHash := f.Cap.IpfsHash
+	currentStr := ""
+	var origHash []byte
+	if utils.FileExists(f.OrigPath) {
+		origData, err := ioutil.ReadFile(f.OrigPath)
+		if err != nil {
+			glog.Errorf("could not read original file: %s", err)
+			return
+		}
+
+		hasher := crypto.NewKeccak256Hasher()
+		origHash = hasher.Sum(origData)
+
+		currentStr = string(origData)
 	}
 
-	encReader, err := os.Open(tmpFilePath)
-	if err != nil {
-		glog.Errorf("could not read file '%s': File.download: %s", tmpFilePath, err)
+	for {
+		data, err := storage.DownloadAndDecryptWithFileBoxer(f.Cap.DataKey, currentDiffIpfsHash, ipfs)
+		if err != nil {
+			glog.Error("could not download and decrypt diff node")
+			return
+		}
+
+		diff, err := DecodeDiffNode(data)
+		if err != nil {
+			glog.Errorf("download err: could not decode diff node: %s", err)
+			return
+		}
+
+		patch := dmp.PatchMake(diff.Diff)
+		patchStack.Push(patch)
+
+		// there is no next element
+		if strings.Compare(diff.Next, "") == 0 {
+			break
+		}
+		// we found our state
+		if bytes.Equal(diff.Hash, origHash) {
+			break
+		}
+
+		currentDiffIpfsHash = diff.Next
 	}
-	defer func() {
-		if err := encReader.Close(); err != nil {
-			glog.Warningf("could not close tmp file '%s': %s", tmpFilePath, err)
-		}
-		if err := os.Remove(tmpFilePath); err != nil {
-			glog.Warningf("could not delete tmp file '%s': %s", tmpFilePath, err)
-		}
-	}()
 
-	fout, err := os.Create(f.DataPath)
-	if err != nil {
-		glog.Errorf("could not create file '%s': File.download: %s", f.DataPath, err)
+	for {
+		patchInt := patchStack.Pop()
+		if patchInt == nil {
+			break
+		}
+
+		currentStr, _ = dmp.PatchApply(patchInt.([]diffmatchpatch.Patch), currentStr)
 	}
 
-	defer func() {
-		if err := fout.Close(); err != nil {
-			glog.Warningf("could not close file '%s': %s", f.DataPath, err)
-		}
-	}()
-
-	if err := f.Cap.DataKey.Open(encReader, fout); err != nil {
-		glog.Errorf("could not dycrypt file '%s': File.download: %s", f.DataPath, err)
+	if err := utils.WriteFile(f.OrigPath, []byte(currentStr)); err != nil {
+		glog.Errorf("download err: could not write orig file: %s", err)
+	}
+	if err := utils.WriteFile(f.DataPath, []byte(currentStr)); err != nil {
+		glog.Errorf("download err: could not data orig file: %s", err)
 	}
 }
 
@@ -196,36 +236,12 @@ func (f *File) SaveMetadata() error {
 	return nil
 }
 
-
-func (f *File) Encrypt() (io.Reader, error) {
-	data, err := ioutil.ReadFile(f.DataPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not read file")
-	}
-	encData, err := f.Cap.DataKey.Seal(bytes.NewReader(data))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not encrypt data")
-	}
-
-	return encData, nil
-}
-
 func GetCapListFromFileList(files []*File) []*FileCap {
 	var l []*FileCap
 	for _, file := range files {
 		l = append(l, file.Cap)
 	}
 	return l
-}
-
-func (f *File) ResetPendingChanges() error {
-	var pendingChanges *FileCap
-	if err := deepcopy.Copy(&pendingChanges, f.Cap); err != nil {
-		return errors.Wrap(err, "could not deep copy file cap")
-	}
-	f.PendingChanges = pendingChanges
-
-	return nil
 }
 
 func (f *File) GrantWriteAccess(user, target ethcommon.Address) error {
@@ -290,4 +306,67 @@ func (f *File) RevokeWriteAccess(user, target ethcommon.Address) error {
 	}
 
 	return nil
+}
+
+func (f *File) diff() (*DiffNode, error) {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
+	dmp := diffmatchpatch.New()
+
+	diff := &DiffNode{
+		Hash: nil,
+		Next: "",
+	}
+
+	originalStr := ""
+
+	if utils.FileExists(f.OrigPath) {
+		originalData, err := ioutil.ReadFile(f.OrigPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read original file")
+		}
+
+		hasher := crypto.NewKeccak256Hasher()
+		hash := hasher.Sum(originalData)
+
+		diff.Hash = hash
+
+		originalStr = string(originalData)
+	}
+
+	currentData, err := ioutil.ReadFile(f.DataPath)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read current file")
+	}
+
+	diffs := dmp.DiffMain(originalStr, string(currentData), true)
+
+	diff.Diff = diffs
+	diff.Next = f.Cap.IpfsHash
+
+	return diff, nil
+}
+
+// uploads the diff
+func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
+	diff, err := f.diff()
+	if err != nil {
+		return "", errors.Wrap(err, "could not get file diff")
+	}
+
+	encData, err := diff.Encrypt(f.PendingChanges.DataKey)
+	if err != nil {
+		return "", errors.Wrap(err, "could not encrypt file diff")
+	}
+
+	newIpfsHash, err := ipfs.Add(encData)
+	if err != nil {
+		return "", errors.Wrap(err, "could not ipfs add file diff")
+	}
+
+	return newIpfsHash, nil
 }

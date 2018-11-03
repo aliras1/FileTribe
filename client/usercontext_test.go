@@ -177,8 +177,8 @@ func TestBigScenario(t *testing.T) {
 	//
 	//time.Sleep(10 * time.Second)
 	//
-	//alice.List()
-	//bob.List()
+	//alice.Files()
+	//bob.Files()
 	//
 	//if len(bob.Repo[alice.User.Address]) < 2 {
 	//	t.Fatal("no files by Bob2")
@@ -206,7 +206,7 @@ func TestBigScenario(t *testing.T) {
 	//
 	//time.Sleep(10 * time.Second)
 	//
-	//alice.List()
+	//alice.Files()
 }
 
 func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
@@ -239,8 +239,8 @@ func TestSignInAndBuildUpAfterInviteTest(t *testing.T) {
 	// fmt.Println(uc2.Groups[0].Members)
 
 	// for i := 0; i < uc1.Groups[0].Members.Length(); i++ {
-	// 	str1 := uc1.Groups[0].Members.List[i].Name
-	// 	str2 := uc2.Groups[0].Members.List[i].Name
+	// 	str1 := uc1.Groups[0].Members.Files[i].Name
+	// 	str2 := uc2.Groups[0].Members.Files[i].Name
 	// 	if strings.Compare(str1, str2) != 0 {
 	// 		t.Fatal("group members do not match")
 	// 	}
@@ -278,10 +278,10 @@ func TestGroupInviteWithMoreMembers(t *testing.T) {
 	// if len(uc1.Groups) != len(uc3.Groups) && len(uc2.Groups) != len(uc3.Groups) {
 	// 	t.Fatal("#Groups do not match")
 	// }
-	// if len(uc1.Groups[0].Members.List) != len(uc2.Groups[0].Members.List) {
+	// if len(uc1.Groups[0].Members.Files) != len(uc2.Groups[0].Members.Files) {
 	// 	t.Fatal("members do not match")
 	// }
-	// if len(uc1.Groups[0].Members.List) != len(uc3.Groups[0].Members.List) {
+	// if len(uc1.Groups[0].Members.Files) != len(uc3.Groups[0].Members.Files) {
 	// 	t.Fatal("members do not match")
 	// }
 }
@@ -340,8 +340,8 @@ func TestSharingFromUserContext(t *testing.T) {
 	// 	t.Fatal(err)
 	// }
 	// time.Sleep(3 * time.Second)
-	// uc1.List()
-	// uc2.List()
+	// uc1.Files()
+	// uc2.Files()
 }
 
 func TestNewUserContextFromSignIn(t *testing.T) {
@@ -358,7 +358,7 @@ func TestNewUserContextFromSignIn(t *testing.T) {
 	// if err != nil {
 	// 	t.Fatal(err)
 	// }
-	// uc1.List()
-	// uc2.List()
+	// uc1.Files()
+	// uc2.Files()
 	// time.Sleep(3 * time.Second)
 }

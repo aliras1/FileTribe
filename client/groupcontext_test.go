@@ -53,12 +53,12 @@ var (
 	controller *gomock.Controller
 )
 
-func NewTestUser(username string, signup bool, ethKeyPath string, shellIdx int, network nw.INetwork, p2pPort string) (*UserContext, error) {
+func NewTestUser(username string, signup bool, ethKeyPath string, shellIdx int, network nw.INetwork, p2pPort string) (IUserFacade, error) {
 	t := time.Now()
 	glog.Info("ipfs inst: ", time.Since(t))
 	password := "pwd"
 	homeDir := "./" + username + "/"
-	var testUser *UserContext
+	var testUser IUserFacade
 	var err error
 
 	var ipfs ipfsapi.IIpfs
@@ -94,7 +94,8 @@ func NewTestUser(username string, signup bool, ethKeyPath string, shellIdx int, 
 		}
 	}
 
-	reg, err := network.IsUserRegistered(testUser.User.Address())
+	user := testUser.User()
+	reg, err := network.IsUserRegistered(user.Address())
 	if err != nil {
 		return nil, err
 	}
@@ -169,36 +170,42 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if alice.Groups.Count() != 1 {
+	if len(alice.Groups()) != 1 {
 		t.Fatal("no groupAtAlice found by alice")
 	}
 
-	groupAtAlice := alice.Groups.FirstOrDefault(nil).(*GroupContext)
-	groupAtAlice.Invite(bob.User.Address(), true)
-	groupAtAlice.Invite(charlie.User.Address(), true)
+	bobUser := bob.User()
+	charlieUser := charlie.User()
+
+	aliceGroups := alice.Groups()
+	groupAtAlice := aliceGroups[0].(*GroupContext)
+	groupAtAlice.Invite(bobUser.Address(), true)
+	groupAtAlice.Invite(charlieUser.Address(), true)
 
 	time.Sleep(5 * time.Second)
 
-	if bob.Groups.Count() != 1 {
+	if len(bob.Groups()) != 1 {
 		t.Fatal("no group found by bob")
 	}
-	if charlie.Groups.Count() != 1 {
+	if len(charlie.Groups()) != 1 {
 		t.Fatal("no group found by charlie")
 	}
 
-	fmt.Println(alice.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
-	fmt.Println(bob.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
-	fmt.Println(charlie.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
 
-	if alice.Groups.FirstOrDefault(nil).(*GroupContext).Group.CountMembers() != 3 {
+	aliceGroups = alice.Groups()
+	bobGroups := bob.Groups()
+	charlieGroups := charlie.Groups()
+	if aliceGroups[0].(*GroupContext).Group.CountMembers() != 3 {
 		t.Fatal("alice's groupAtAlice has not got enough members")
 	}
-	if bob.Groups.FirstOrDefault(nil).(*GroupContext).Group.CountMembers() != 3 {
+	if bobGroups[0].(*GroupContext).Group.CountMembers() != 3 {
 		t.Fatal("bob's groupAtAlice has not got enough members")
 	}
-	if charlie.Groups.FirstOrDefault(nil).(*GroupContext).Group.CountMembers() != 3 {
+	if charlieGroups[0].(*GroupContext).Group.CountMembers() != 3 {
 		t.Fatal("charlie's groupAtAlice has not got enough members")
 	}
+
+	fmt.Println("----------- Alice init commit ------------")
 
 	fileAlice := "./alice/data/userdata/root/" + groupAtAlice.Group.Id().ToString() + "/rrrepo.go"
 	if err := utils.CopyFile("./grouprepo.go", fileAlice); err != nil {
@@ -209,9 +216,10 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	time.Sleep(5 * time.Second)
-	fmt.Println("----------- change file ------------")
+	fmt.Println("----------- Bob change file ------------")
 
-	groupAtBob := bob.Groups.FirstOrDefault(nil).(*GroupContext)
+	bobGroups = bob.Groups()
+	groupAtBob := bobGroups[0].(*GroupContext)
 	fileBob := "./bob/data/userdata/root/" + groupAtBob.Group.Id().ToString() + "/rrrepo.go"
 	if err := AppendToFile(fileBob, "Bob's modification (should fail)\n"); err != nil {
 		t.Fatal(err)
@@ -224,7 +232,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("----------- Grant W access to only alice  ------------")
 
-	if err := groupAtAlice.GrantWriteAccess(fileAlice, bob.User.Address()); err != nil {
+	if err := groupAtAlice.GrantWriteAccess(fileAlice, bobUser.Address()); err != nil {
 		t.Fatal(err)
 	}
 	if err := groupAtAlice.CommitChanges(); err != nil {
@@ -232,6 +240,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	time.Sleep(5 * time.Second)
+	fmt.Println("----------- Bob modif  ------------")
 	if err := AppendToFile(fileBob, "Bob's modification\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +250,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	time.Sleep(5 * time.Second)
+	fmt.Println("----------- Alice modif  ------------")
 	if err := AppendToFile(fileAlice, "Alice's modification\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -249,26 +259,7 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-
-
 	time.Sleep(500 * time.Second)
-
-	fmt.Println(alice)
-	for c := range alice.AddressBook.Iterator() {
-		cc := c.(*Contact)
-		cc.Send([]byte{2})
-	}
-
-	fmt.Println(bob)
-	for c := range bob.AddressBook.Iterator() {
-		cc := c.(*Contact)
-		cc.Send([]byte{2})
-	}
-	fmt.Println(charlie)
-	for c := range charlie.AddressBook.Iterator() {
-		cc := c.(*Contact)
-		cc.Send([]byte{2})
-	}
 }
 
 func AppendToFile(path string, data string) error {

@@ -9,6 +9,7 @@ import (
 
 	. "ipfs-share/collections"
 	"github.com/pkg/errors"
+	"ipfs-share/client/fs"
 )
 
 
@@ -213,7 +214,7 @@ func NewGetGroupKeySessionServer(msg *Message, contact *Contact, user IUser, gro
 
 // ---------------------
 
-type GetGroupKeyOnSuccessCallback func(cap *GroupAccessCap)
+type GetGroupKeyOnSuccessCallback func(cap *fs.GroupAccessCap)
 
 type GetGroupKeySessionClient struct {
 	sessionId IIdentifier
@@ -221,7 +222,7 @@ type GetGroupKeySessionClient struct {
 	contact   *Contact
 	groupId [32]byte
 
-	storage *Storage
+	storage *fs.Storage
 	user IUser
 	closedChan chan ISession
 
@@ -359,7 +360,7 @@ func (session *GetGroupKeySessionClient) NextState(contact *Contact, data []byte
 				return
 			}
 
-			groupCap := &GroupAccessCap{
+			groupCap := &fs.GroupAccessCap{
 				GroupId: session.groupId,
 				Boxer:   *key,
 			}
@@ -386,7 +387,7 @@ func NewGetGroupKeySessionClient(
 	groupId [32]byte,
 	contact *Contact,
 	user IUser,
-	storage *Storage,
+	storage *fs.Storage,
 	closedChan chan ISession,
 	onSuccess GetGroupKeyOnSuccessCallback,
 	) *GetGroupKeySessionClient {
