@@ -1,11 +1,18 @@
 version: '3'
 services:
-  server:
-    image: server
+  fullnode:
+    image: fullnode_snapshot
     build:
-      context: ./server
+      dockerfile: ./misc/eth/Dockerfile
+      context: ./
     networks:
       - ipfs-net
+    tty: true
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./eth:/ethcode
+      - ./misc/eth:/ethnet
 
   alice:
     image: ipfs-share
@@ -18,9 +25,11 @@ services:
       - "30311:30311"
       - "8501:8501"
     depends_on:
-      - server
+      - fullnode
+    stdin_open: true
+    tty: true
     volumes:
-      - ./ethereumdocker/alice/keystore:/ethnode
+       - ./test/alice:/mounted
 
   bob:
       image: ipfs-share
@@ -33,9 +42,11 @@ services:
         - "30312:30311"
         - "8502:8501"
       depends_on:
-        - server
+        - fullnode
+      stdin_open: true
+      tty: true
       volumes:
-        - ./ethereumdocker/bob/keystore:/ethnode
+         - ./test/bob:/mounted
 
   charlie:
       image: ipfs-share
@@ -48,8 +59,10 @@ services:
         - "30313:30311"
         - "8503:8501"
       depends_on:
-        - server
+        - fullnode
+      stdin_open: true
+      tty: true
       volumes:
-        - ./ethereumdocker/charlie/keystore:/ethnode
+         - ./test/charlie:/mounted
 networks:
   ipfs-net:

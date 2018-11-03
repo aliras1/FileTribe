@@ -1,26 +1,54 @@
 package client
 
 import (
-	"bytes"
+	// "crypto/rand"
+	"github.com/ugorji/go/codec"
+	"fmt"
+	"path"
 	"strings"
 	"testing"
 
-	nw "ipfs-share/networketh"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+
 )
+
+
+func TestAsd(t *testing.T) {
+	var (
+		handler codec.CborHandle
+		out []byte
+		message = "hello friend"
+		messageDec string
+	)
+
+	cborEnc := codec.NewEncoderBytes(&out, &handler)
+
+	if err := cborEnc.Encode(message); err != nil {
+		t.Fatal(err)
+	}
+
+	cborDec := codec.NewDecoderBytes(out, &handler)
+
+	if err := cborDec.Decode(&messageDec); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestBoxing(t *testing.T) {
 	username := "testuser"
 	password := "password"
 
-	user := NewUser(username, password)
+	user, _ := NewUser(username, password, "")
 
 	message := "Hello friend!"
-	encMsg, err := user.Boxer.Seal([]byte(message))
+	boxer := user.Boxer()
+	encMsg, err := boxer.Seal([]byte(message))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	plain, err := user.Boxer.Open(encMsg)
+	plain, err := boxer.Open(encMsg)
 	if err != nil {
 		t.Fatalf("could not decrypt message: %s", err)
 	}
@@ -33,72 +61,31 @@ func TestSigning(t *testing.T) {
 	username1 := "testuser1"
 	password1 := "password1"
 
-	user1 := NewUser(username1, password1)
+	ks := keystore.NewKeyStore("../test/keystore", keystore.StandardScryptN, keystore.StandardScryptP)
+	acc, err := ks.NewAccount(password1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileName := "../test/keystore/" + path.Base(acc.URL.String())
 
-	message := "Hello friend!"
-	signedMessage := user1.Signer.SigningKey.Sign([]byte(message))
-	msg, ok := user1.Signer.VerifyKey.Verify(signedMessage)
+	user1, err := NewUser(username1, password1, fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// message := "Hello friend!"
+	digest := [32]byte{120}
+	signer1 := user1.Signer()
+	sig, err := signer1.Sign(digest[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pk := ethcrypto.CompressPubkey(&signer1.PrivateKey.PublicKey)
+	fmt.Println(pk)
+	ok := ethcrypto.VerifySignature(pk, digest[:], sig[:64])
 	if !ok {
 		t.Fatal("failed to verify")
 	}
-	if !bytes.Equal(msg, []byte(message)) {
-		t.Fatal("messages do not match")
-	}
 }
 
-func TestUserDataOnServer(t *testing.T) {
-	username := "testuser"
-	password := "password"
-	ipfsAddress := "2434hasdf439asdjhbvc234f"
-	network, err := nw.NewTestNetwork()
-	if err != nil {
-		t.Fatal(err)
-	}
-	user, err := SignUp(username, password, ipfsAddress, network)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	registered, err := network.IsUserRegistered(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !registered {
-		t.Fatal("user should be registered")
-	}
-
-	_, uName, bKey, vKey, ipfs, err := network.GetUser(user.ID)
-	if strings.Compare(uName, user.Name) != 0 {
-		t.Fatal("usernames do not match")
-	}
-	if !bytes.Equal(bKey[:], user.Boxer.PublicKey.Value[:]) {
-		t.Fatal("boxing keys do not match")
-	}
-	if !bytes.Equal(vKey[:], user.Signer.VerifyKey[:]) {
-		t.Fatal("verify keys do not match")
-	}
-	if strings.Compare(ipfs, ipfsAddress) != 0 {
-		t.Fatal("ipfs addresses do not match")
-	}
-}
-
-func TestSignIn(t *testing.T) {
-	username := "testuser"
-	password := "password"
-	network, err := nw.NewTestNetwork()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = SignUp(username, password, "ipfs", network)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	user, err := SignIn(username, password, network)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if user == nil {
-		t.Fatal("user is nil")
-	}
-}

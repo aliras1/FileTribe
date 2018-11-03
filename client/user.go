@@ -1,25 +1,49 @@
 package client
 
 import (
-	"fmt"
+	"io/ioutil"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/golang/glog"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/scrypt"
 	"golang.org/x/crypto/sha3"
 
 	"ipfs-share/crypto"
-	nw "ipfs-share/networketh"
 )
 
-type User struct {
-	Name   string
-	ID     [32]byte
-	Signer crypto.SigningKeyPair
-	Boxer  crypto.AnonymBoxer
+type IUser interface {
+	Address() ethcommon.Address
+	Name() string
+	Signer() crypto.Signer
+	Boxer() crypto.AnonymBoxer
 }
 
-func NewUser(username, password string) *User {
+type User struct {
+	address ethcommon.Address
+	name    string
+	signer  *crypto.Signer
+	boxer   crypto.AnonymBoxer
+}
+
+func (user *User) Address() ethcommon.Address {
+	return user.address
+}
+
+func (user *User) Name() string {
+	return user.name
+}
+
+func (user *User) Signer() crypto.Signer {
+	return *user.signer
+}
+
+func (user *User) Boxer() crypto.AnonymBoxer {
+	return user.boxer
+}
+
+func NewUser(username, password, ethKeyPath string) (IUser, error) {
 	passwordDigest := sha3.Sum256([]byte(password))
 	keySeeds, err := scrypt.Key(
 		passwordDigest[:],
@@ -27,75 +51,34 @@ func NewUser(username, password string) *User {
 		32768,
 		8,
 		1,
-		64,
+		32,
 	)
 	if err != nil {
 		glog.Error("error while scrypt: NewUser: %s", err)
-		return nil
+		return nil, err
 	}
 
 	var secretBoxerBytes [32]byte
 	var publicBoxerBytes [32]byte
-	var signingKeyBytes [32]byte
-	copy(secretBoxerBytes[:], keySeeds[:32])
-	copy(signingKeyBytes[:], keySeeds[32:])
-
+	copy(secretBoxerBytes[:], keySeeds)
 	curve25519.ScalarBaseMult(&publicBoxerBytes, &secretBoxerBytes)
-	verifyKey, signingKey := crypto.Ed25519KeyPair(&signingKeyBytes)
+
+	ethKeyData, err := ioutil.ReadFile(ethKeyPath)
+	if err != nil {
+		return nil, err
+	}
+	key, err := keystore.DecryptKey(ethKeyData, password)
+	if err != nil {
+		return nil, err
+	}
 
 	return &User{
-		Name: username,
-		ID:   sha3.Sum256(append(publicBoxerBytes[:], verifyKey...)),
-		Signer: crypto.SigningKeyPair{
-			SigningKey: signingKey,
-			VerifyKey:  verifyKey,
+		address: key.Address,
+		name:    username,
+		signer:  &crypto.Signer{PrivateKey: key.PrivateKey},
+		boxer: crypto.AnonymBoxer{
+			PublicKey:  crypto.AnonymPublicKey{Value: publicBoxerBytes},
+			PrivateKey: crypto.AnonymPrivateKey{Value: secretBoxerBytes},
 		},
-		Boxer: crypto.AnonymBoxer{
-			PublicKey: crypto.AnonymPublicKey{Value: &publicBoxerBytes},
-			SecretKey: crypto.AnonymSecretKey{Value: &secretBoxerBytes},
-		},
-	}
-}
-
-func SignUp(username, password, ipfsAddr string, network *nw.Network) (*User, error) {
-	user := NewUser(username, password)
-	if user == nil {
-		return nil, fmt.Errorf("could not generate user: SignUp")
-	}
-
-	exists, err := network.IsUserRegistered(user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("could not check if username '%s', is registered: SignUp: %s", username, err)
-	}
-	if exists {
-		return nil, fmt.Errorf("username '%s' already exists: SignUp", username)
-	}
-
-	if err = network.RegisterUser(user.ID, username, *user.Boxer.PublicKey.Value, *user.Signer.VerifyKey.Bytes(), ipfsAddr); err != nil {
-		return nil, fmt.Errorf("could not register username '%s': SignUp: %s", username, err)
-	}
-
-	return user, nil
-}
-
-func SignIn(username, password string, network *nw.Network) (*User, error) {
-	user := NewUser(username, password)
-	if user == nil {
-		return nil, fmt.Errorf("could not generate user: SignIn")
-	}
-
-	exists, err := network.IsUserRegistered(user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("could not check if username '%s' is registered: SignIn: %s", username, err)
-	}
-	if !exists {
-		return nil, fmt.Errorf("username '%s' does not exists: SignIn", username)
-	}
-
-	return user, nil
-}
-
-func (u *User) SignTransaction(transaction *Transaction) []byte {
-	// return u.Signer.VerifyKey.Sign(transaction.Bytes())[:64]
-	return nil
+	}, nil
 }

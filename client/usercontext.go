@@ -1,290 +1,261 @@
 package client
 
 import (
-	"crypto/rand"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"path"
-	"strings"
-
-	fs "ipfs-share/client/filestorage"
-	"ipfs-share/crypto"
-	"ipfs-share/eth"
-	"ipfs-share/ipfs"
-	nw "ipfs-share/networketh"
-
 	"github.com/golang/glog"
+	//ipfsapi "github.com/ipfs/go-ipfs-api"
+
+	ipfsapi "ipfs-share/ipfs"
+	nw "ipfs-share/network"
+	"github.com/pkg/errors"
+	. "ipfs-share/collections"
+	"ipfs-share/client/fs"
+	"sync"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
+type IUserFacade interface {
+	CreateGroup(groupname string) error
+	User() IUser
+	Groups() []IGroupFacade
+	SignOut()
+	Transactions() ([]*types.Receipt, error)
+}
+
 type UserContext struct {
-	User     *User // TODO lock boxer
-	Groups   []*GroupContext
-	Repo     []*fs.FilePTP
-	IPNSAddr string
-	Network  *nw.Network
-	IPFS     *ipfs.IPFS
-	Storage  *fs.Storage // TODO lock
+	user           IUser
+	groups         *ConcurrentCollection
+	addressBook    *ConcurrentCollection
+	network        nw.INetwork
+	ipfs           ipfsapi.IIpfs
+	storage        *fs.Storage
+	p2p            *P2PServer
+	transactions   *ConcurrentCollection
 
 	channelStop chan int
+	lock sync.RWMutex
 }
 
-func NewUserContextFromSignUp(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
-	fmt.Printf("[*] User '%s' signing up...\n", username)
+func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (IUserFacade, error) {
+	glog.Infof("[*] User '%s' signing up...", username)
 
-	ipfsID, err := ipfs.ID()
+	ipfsPeerId, err := ipfs.ID()
 	if err != nil {
-		return nil, fmt.Errorf("could not get ipfs id: NewUserContextFromSignUp: %s", err)
-	}
-	user, err := SignUp(username, password, ipfsID.ID, network)
-	if err != nil {
-		return nil, fmt.Errorf("could not sign up: NewUserContextFromSignUp: %s", err)
-	}
-	uc, err := NewUserContext(dataPath, user, network, ipfs)
-	if err != nil {
-		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignUp: %s", err)
+		return nil, errors.Wrap(err, "could not get ipfs peer id")
 	}
 
-	fmt.Printf("[*] Signed in\n")
+	user, err := NewUser(username, password, ethKeyPath)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create new user")
+	}
+
+	// check if user is registered
+	registered, err := network.IsUserRegistered(user.Address())
+	if err != nil {
+		return nil, errors.Wrap(err, "could not check if user is registered")
+	}
+	if registered {
+		return nil, errors.New("user is already registered")
+	}
+
+	uc, err := NewUserContext(dataPath, user, network, ipfs, p2pPort)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create new user context")
+	}
+
+	boxer := user.Boxer()
+	tx, err := network.RegisterUser(username, ipfsPeerId.ID, boxer.PublicKey.Value)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not start transaction")
+	}
+
+	uc.transactions.Append(tx)
 
 	return uc, nil
 }
 
-func NewUserContextFromSignIn(username, password, dataPath string, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
-	fmt.Printf("[*] User '%s' signing in...\n", username)
+func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (IUserFacade, error) {
+	glog.Infof("[*] User '%s' signing in...", username)
 
-	user, err := SignIn(username, password, network)
+	user, err := NewUser(username, password, ethKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not sign in: NewUserContextFromSignIn: %s", err)
-	}
-	uc, err := NewUserContext(dataPath, user, network, ipfs)
-	if err != nil {
-		return nil, fmt.Errorf("could not create new user context: NewUserContextFromSignIn: %s", err)
+		return nil, errors.Wrap(err, "could not create new user")
 	}
 
-	fmt.Println("[*] Signed in")
+	registered, err := network.IsUserRegistered(user.Address())
+	if err != nil {
+		return nil, errors.Wrap(err, "could not check if user is registered")
+	}
+	if !registered {
+		return nil, errors.New("user is not registered")
+	}
+
+	uc, err := NewUserContext(dataPath, user, network, ipfs, p2pPort)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create new user context")
+	}
+
+	glog.Info("[*] Signed in")
 
 	return uc, nil
 }
 
-func NewUserContext(dataPath string, user *User, network *nw.Network, ipfs *ipfs.IPFS) (*UserContext, error) {
+func NewUserContext(dataPath string, user IUser, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	var err error
 	var uc UserContext
-	uc.User = user
-	uc.Network = network
-	uc.IPFS = ipfs
-	uc.Storage = fs.NewStorage(dataPath)
-	uc.Storage.Init()
-	uc.Groups = []*GroupContext{}
-	uc.Repo, err = uc.Storage.BuildRepo(user.Name, network, ipfs)
+	uc.user = user
+	uc.network = network
+	uc.ipfs = ipfs
+	uc.storage = fs.NewStorage(dataPath)
+	uc.groups = NewConcurrentCollection()
+	uc.addressBook = NewConcurrentCollection()
+	uc.transactions = NewConcurrentCollection()
+	p2p, err := NewP2PConnection(p2pPort, &uc)
 	if err != nil {
-		return nil, fmt.Errorf("could not build file repo: NewUserContext: %s", err)
+		return nil, errors.Wrap(err, "could not create P2P connection")
 	}
-	ipfsID, err := ipfs.ID()
-	if err != nil {
-		return nil, fmt.Errorf("could not get ipfs id: NewUserContect: %s", err)
-	}
-	uc.IPNSAddr = ipfsID.ID
+	uc.p2p = p2p
 
 	uc.channelStop = make(chan int)
-	go MessageProcessor(&uc)
+
+	go HandleDebugEvents(network.GetDebugChannel())
+	go HandleGroupInvitationEvents(network.GetGroupInvitationChannel(), uc.onGroupInvitationCallback)
+	go HandleGroupUpdateIpfsEvents(network.GetGroupUpdateIpfsChannel(), uc.onGroupUpdateIpfsCallback)
+	go HandleGroupRegisteredEvents(network.GetGroupRegisteredChannel(), uc.onGroupRegisteredCallback)
 
 	if err := uc.BuildGroups(); err != nil {
-		return nil, fmt.Errorf("could not build groups: NewUserContext: %s", err)
+		return nil, fmt.Errorf("could not build Groups: NewUserContext: %s", err)
 	}
-	if err := uc.Storage.PublishPublicDir(uc.IPFS); err != nil {
-		return nil, fmt.Errorf("could not publish public dir: NewUserContext: %s", err)
-	}
+
 	return &uc, nil
 }
 
-func (uc *UserContext) SignOut() {
-	fmt.Printf("[*] User '%s' signing out...\n", uc.User.Name)
-	for _, groupCtx := range uc.Groups {
-		groupCtx.Stop()
-	}
-	uc.channelStop <- 1
+func (ctx *UserContext) User() IUser {
+	return ctx.user
 }
 
-func unpackMessageSentEvent(event *eth.EthMessageSent, ctx *UserContext) (*nw.Message, error) {
-	var messageEnc []byte
-	for _, b := range event.Message {
-		messageEnc = append(messageEnc, b[0])
-	}
+func (ctx *UserContext) Save() error {
+	//if err := ctx.Storage.SaveContextData(ctx); err != nil {
+	//	return fmt.Errorf("could not save context data: %s", err)
+	//}
 
-	messageSigned, err := ctx.User.Boxer.Open(messageEnc)
-	if err != nil {
-		return nil, fmt.Errorf("could not decrypt event: MessageProcessor: %s", err)
-	}
-
-	messageJSON := messageSigned[64:]
-
-	var message nw.Message
-	if err := json.Unmarshal(messageJSON, &message); err != nil {
-		return nil, fmt.Errorf("could not unmarshal message: MessageProcessor: %s", err)
-	}
-
-	_, _, _, verifyKeyBytes, _, err := ctx.Network.GetUser(message.From)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"could not get user '%s': MessageProcessor: %s",
-			base64.StdEncoding.EncodeToString(message.From[:]),
-			err,
-		)
-	}
-	verifyKey := crypto.VerifyKey(verifyKeyBytes[:])
-	_, ok := verifyKey.Verify(messageSigned)
-	if !ok {
-		return nil, fmt.Errorf("could not verify message: MessageProcessor")
-	}
-	return &message, nil
+	return nil
 }
 
-func MessageProcessor(ctx *UserContext) {
-	glog.Infof("User '%s' is processing messages...\n", ctx.User.Name)
-	fmt.Printf("msg proc of '%s'\n", ctx.User.Name)
+func (ctx *UserContext) SignOut() {
+	fmt.Printf("[*] User '%s' signing out...\n", ctx.user.Name())
+	for groupCtx := range ctx.groups.Iterator() {
+		groupCtx.(*GroupContext).Stop()
+	}
 
-	for messageSentEvent := range ctx.Network.MessageSentChannel {
-		message, err := unpackMessageSentEvent(messageSentEvent, ctx)
-		if err != nil {
-			glog.Warning("error while processing 'MessageSentEvent': MessageProcessor: %s", err)
-			continue
-		}
+	ctx.network.Close()
 
-		glog.Infof("--> user '%s' got message", ctx.User.Name)
-
-		switch message.Type {
-		case "PTP READ CAP":
-			fmt.Println("[*] Downloading PTP file")
-			cap, err := fs.DownloadReadCAP(message.From, ctx.User.ID, message.Payload, &ctx.User.Boxer, ctx.Storage, ctx.Network, ctx.IPFS)
-			if err != nil {
-				glog.Errorf("could not download read cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", message.Payload, err)
-				continue
-			}
-			if ctx.isFileInRepo(cap.IPNSPath) {
-				glog.Errorf("file '%s' is already in the repo", cap.IPNSPath)
-				continue
-			}
-			file, err := fs.NewFileFromCAP(cap, ctx.Storage, ctx.IPFS)
-			if err != nil {
-				glog.Errorf("could not instantiate a new file from cap '%s' while 'PTP READ CAP' message: MessageProcessor: %s\n", cap.FileName, err)
-				continue
-			}
-			ctx.addFileToRepo(file)
-
-			fmt.Println("[*] PTP file downloaded")
-		case "GROUP INVITE":
-			fmt.Printf("[*] Joining group '%s'...\n", strings.Split(message.Payload, ".")[0])
-			glog.Infof("\t--> Donwloading group access cap '%s'...", message.Payload)
-
-			cap, err := ctx.Storage.DownloadGroupAccessCAP(message.From, ctx.User.ID, message.Payload, &ctx.User.Boxer, ctx.Network, ctx.IPFS)
-			if err != nil {
-				glog.Errorf("could not download ga cap: MessageProcessor: %s", err)
-				continue
-			}
-			glog.Infof("\t<-- Donwloaded")
-			if err := cap.Store(ctx.Storage); err != nil {
-				glog.Errorf("could not store ga cap: MessageProcessor: %s", err)
-				continue
-			}
-			cap.Boxer.RNG = rand.Reader
-			groupCtx, err := NewGroupContextFromCAP(cap, ctx.User, ctx.Network, ctx.IPFS, ctx.Storage)
-			if err != nil {
-				glog.Errorf("could not create group context from cap: MessageProcessor: %s", err)
-				continue
-			}
-			ctx.Groups = append(ctx.Groups, groupCtx)
-			fmt.Printf("[*] Joined group '%s'\n", groupCtx.Group.Name)
-		}
+	if err := ctx.Save(); err != nil {
+		glog.Errorf("could not save context state: UserContext.SignOut: %s", err)
 	}
 }
 
-func (uc *UserContext) BuildGroups() error {
-	glog.Infof("Building groups for user '%s'...", uc.User.Name)
-	caps, err := uc.Storage.GetGroupCAPs()
+func (ctx *UserContext) BuildGroups() error {
+	glog.Infof("Building Groups for user '%s'...", ctx.user.Name())
+	caps, err := ctx.storage.GetGroupCaps()
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not get group caps: UserContext.BuildGroups: %s", err)
 	}
 	for _, cap := range caps {
-		groupCtx, err := NewGroupContextFromCAP(&cap, uc.User, uc.Network, uc.IPFS, uc.Storage)
+		groupCtx, err := NewGroupContextFromCAP(
+			&cap,
+			ctx.user,
+			ctx.p2p,
+			ctx.addressBook,
+			ctx.network,
+			ctx.ipfs,
+			ctx.storage,
+			ctx.transactions,
+		)
 		if err != nil {
 			return fmt.Errorf("could not create new group context: UserContext.BuildGroups: %s", err)
 		}
-		uc.Groups = append(uc.Groups, groupCtx)
-	}
-	glog.Infof("Building groups ended")
-	return nil
-}
-
-func (uc *UserContext) CreateGroup(groupname string) error {
-	// group := NewGroup(groupname)
-	// if err := group.Register(uc.User.Name, uc.Network); err != nil {
-	// 	return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
-	// }
-	// if err := group.Save(uc.Storage); err != nil {
-	// 	return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
-	// }
-	// groupCtx, err := NewGroupContext(group, uc.User, uc.Network, uc.IPFS, uc.Storage)
-	// if err != nil {
-	// 	return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
-	// }
-	// uc.Groups = append(uc.Groups, groupCtx)
-
-	// fmt.Printf("[*] Group '%s' created!\n", groupname)
-
-	return nil
-}
-
-func (uc *UserContext) AddAndShareFile(filePath string, shareWith []string) error {
-	// fmt.Printf("[*] PTP sharing file '%s' with user '%s'...\n", filePath, shareWith[0])
-
-	// if uc.isFileInRepo("/ipns/" + uc.IPNSAddr + "/files/" + path.Base(filePath)) {
-	// 	return fmt.Errorf("file is already added to the repo: UserContext.AddAndShareFile")
-	// }
-	// file, err := fs.NewSharedFilePTP(filePath, uc.User.Name, uc.Storage, uc.IPFS)
-	// if err != nil {
-	// 	return fmt.Errorf("could not create new shared file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
-	// }
-	// if err := file.Share(shareWith, &uc.User.Boxer, uc.Storage, uc.Network, uc.IPFS); err != nil {
-	// 	return fmt.Errorf("could not share file '%s': UserContext.AddAndShareFile: %s", file.Name, err)
-	// }
-	// uc.addFileToRepo(file)
-
-	// fmt.Println("[*] PTP sharing ended")
-
-	return nil
-}
-
-func (uc *UserContext) isFileInRepo(ipnsPath string) bool {
-	for _, file := range uc.Repo {
-		if strings.Compare(file.IPNSPath, ipnsPath) == 0 {
-			return true
+		if err := ctx.groups.Append(groupCtx); err != nil {
+			glog.Warningf("could not append elem: %s", err)
 		}
 	}
-	return false
-}
-
-func (uc *UserContext) addFileToRepo(file *fs.FilePTP) {
-	uc.Repo = append(uc.Repo, file)
-}
-
-func (uc *UserContext) getFileFromRepo(name string) *fs.FilePTP {
-	for _, file := range uc.Repo {
-		if strings.Compare(path.Base(file.Name), name) == 0 {
-			return file
-		}
-	}
+	glog.Infof("Building Groups ended")
 	return nil
 }
 
-func (uc *UserContext) List() string {
-	str := "MyFilen"
-	for _, file := range uc.Repo {
-		str += "\t--> " + file.Name + "\n"
+func (ctx *UserContext) CreateGroup(groupname string) error {
+	group := NewGroup(groupname)
+	groupCtx, err := NewGroupContext(
+		group,
+		ctx.user,
+		ctx.p2p,
+		ctx.addressBook,
+		ctx.network,
+		ctx.ipfs,
+		ctx.storage,
+		ctx.transactions,
+	)
+	if err != nil {
+		return fmt.Errorf("could not create new group context: UserContext.CreateGroup: %s", err)
 	}
-	for _, groupCtx := range uc.Groups {
-		str += groupCtx.Group.Name
-		str += groupCtx.Repo.List()
+
+	boxer := groupCtx.Group.Boxer()
+	ipfsHash := groupCtx.Repo.ipfsHash
+	encIpfsHash := boxer.BoxSeal([]byte(ipfsHash))
+
+	if err := group.SetIpfsHash(ipfsHash, encIpfsHash); err != nil {
+		return errors.Wrap(err, "could not set ipfs hash of group")
 	}
-	return str
+
+	if err := group.Save(ctx.storage); err != nil {
+		return fmt.Errorf("could not save group: UserContext.CreateGroup: %s", err)
+	}
+
+	tx, err := groupCtx.Network.CreateGroup(
+		group.Id().Data().([32]byte),
+		group.Name(),
+		group.EncryptedIpfsHash(),
+	)
+	if err != nil {
+		return fmt.Errorf("could not register group: UserContext.CreateGroup: %s", err)
+	}
+
+	ctx.transactions.Append(tx)
+
+	if err := ctx.groups.Append(groupCtx); err != nil {
+		glog.Warningf("could not append elem: %s", err)
+	}
+
+	return nil
+}
+
+func (ctx *UserContext) Groups() []IGroupFacade {
+	var groups []IGroupFacade
+
+	for groupCtxInt := range ctx.groups.Iterator() {
+		groups = append(groups, groupCtxInt.(IGroupFacade))
+	}
+
+	return groups
+}
+
+// Files lists the content of the user's repository
+func (ctx *UserContext) List() map[string][]string {
+	list := make(map[string][]string)
+	return list
+}
+
+func (ctx *UserContext) Transactions() ([]*types.Receipt, error) {
+	var list []*types.Receipt
+
+	for txInt := range ctx.transactions.Iterator() {
+		r, err := txInt.(*nw.Transaction).Receipt(ctx.network)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get tx receipt")
+		}
+
+		list = append(list, r)
+	}
+
+	return list, nil
 }

@@ -16,8 +16,8 @@ func TestEncDec(t *testing.T) {
 		t.Fatal(err)
 	}
 	boxer := AnonymBoxer{
-		PublicKey: AnonymPublicKey{pk2},
-		SecretKey: AnonymSecretKey{sk2},
+		PublicKey:  AnonymPublicKey{pk2},
+		PrivateKey: AnonymPrivateKey{sk2},
 	}
 
 	message := "Hello friend!"

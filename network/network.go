@@ -1,281 +1,364 @@
 package network
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
+	"github.com/golang/glog"
+	"crypto/ecdsa"
+	// "encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
-	"strconv"
+	"os"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/event"
 
 	"ipfs-share/crypto"
+	"ipfs-share/eth"
+	"github.com/pkg/errors"
+	"sync"
+	"math/big"
+	"crypto/rand"
+	"context"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
+// const key = `{"address":"c4f45f1822b614116ea5b68d4020f3ae1a0179e5","crypto":{"cipher":"aes-128-ctr","ciphertext":"c47565906c488c5122c805a31a3e241d0839cda984903ec28aa07c8892deb5b0","cipherparams":{"iv":"d7814d0dc15a383630c0439c6ad2fea8"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"78d74296f7796969b5764bcfda6cf1cd2cd5bfc423fc0897313b9d23e7e0f219"},"mac":"d852362f275a61fd32acdf040a136a08dc0dc25ab69ddc3d54404b17e9f85826"},"id":"ce2a2147-38d2-4d99-95c1-4968ff6b7a0e","version":3}`
+// const contractAddress = "0x41cf9ed28c99cc5ebd531bd1929a7e99c122fed8"
+
 type Message struct {
-	From    string `json:"from"`
-	To      string `json:"to,omitempty"`
-	Type    string `json:"type"`
-	Message string `json:"message"`
+	From    common.Address `json:"from"`
+	Type    string         `json:"type"`
+	Payload string         `json:"payload"`
+}
+
+type Contact struct {
+	Address   common.Address
+	Name      string
+	IpfsPeerId string
+	Boxer     crypto.AnonymPublicKey
+}
+
+type Approval struct {
+	From common.Address
+	Signature []byte
+}
+
+
+type INetwork interface {
+	GetUser(address common.Address) (*Contact, error)
+	RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error)
+	IsUserRegistered(common.Address) (bool, error)
+	CreateGroup(id [32]byte, name string, ipfsPath []byte) (*Transaction, error)
+	InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) (*Transaction, error)
+	GetGroup(groupId [32]byte) (string, []common.Address, []byte, error)
+	UpdateGroupIpfsHash(groupId [32]byte, newIpfsPath []byte, approvals []*Approval) (*Transaction, error)
+	TransactionReceipt(tx *types.Transaction) (*types.Receipt, error)
+
+	// contract events
+	GetGroupInvitationSub() *event.Subscription
+	GetGroupInvitationChannel() chan *eth.EthGroupInvitation
+
+	GetGroupUpdateIpfsSub() *event.Subscription
+	GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsHash
+
+	GetDebugSub() *event.Subscription
+	GetDebugChannel() chan *eth.EthDebug
+
+	GetGroupRegisteredSub() *event.Subscription
+	GetGroupRegisteredChannel() chan *eth.EthGroupRegistered
+
+	Close()
 }
 
 type Network struct {
-	Address string
+	Client *ethclient.Client
+
+	Session *eth.EthSession
+	Auth    *bind.TransactOpts
+
+	nonce *big.Int
+
+	// contract events
+	groupInvitationSub     event.Subscription
+	groupInvitationChannel chan *eth.EthGroupInvitation
+
+	groupUpdateIpfsSub     event.Subscription
+	groupUpdateIpfsChannel chan *eth.EthGroupUpdateIpfsHash
+
+	groupRegisteredSub     event.Subscription
+	groupRegisteredChannel chan *eth.EthGroupRegistered
+
+	debugSub     event.Subscription
+	debugChannel chan *eth.EthDebug
+
+	lock sync.Mutex
 }
 
-func (n *Network) Get(path string, args ...string) ([]byte, error) {
-	url := n.Address + path
-	for _, arg := range args {
-		url += "/" + arg
-	}
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("error while http get request '%s': Network.Get: %s", url, err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("could not read response body: Network.Get: %s", err)
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("http get request '%s' returned with status code '%d'", url, resp.StatusCode)
-	}
-	return body, nil
-}
-
-func (n *Network) GetGroupMembers(groupName string) ([]string, error) {
-	membersBytes, err := n.Get("/get/group/members", groupName)
-	if err != nil {
-		return nil, fmt.Errorf("could not get group members: Network.GetGroupMembers: %s", err)
-	}
-	var members []string
-	if err := json.Unmarshal(membersBytes, &members); err != nil {
-		return nil, fmt.Errorf("could not unmarshal group members: Network.GetGroupMembers: %s", err)
-	}
-	return members, nil
-}
-
-func (n *Network) GetUserPublicKeyHash(username string) (crypto.PublicKeyHash, error) {
-	base64PublicKeyHash, err := n.Get("/get/user/publickeyhash", username)
+func NewAccount(ks *keystore.KeyStore, ethKeyPath, password string) (*ecdsa.PrivateKey, error) {
+	json, err := ioutil.ReadFile(ethKeyPath)
 	if err != nil {
 		return nil, err
 	}
-	return crypto.Base64ToPublicKeyHash(string(base64PublicKeyHash))
-}
-
-func (n *Network) GetUserVerifyKey(username string) (crypto.SigningKey, error) {
-	base64PublicSigningKey, err := n.Get("/get/user/signkey", username)
+	key, err := keystore.DecryptKey(json, password)
 	if err != nil {
 		return nil, err
 	}
-	return crypto.Base64ToPublicSigningKey(string(base64PublicSigningKey))
+	return key.PrivateKey, nil
 }
 
-func (n *Network) GetUserBoxingKey(username string) (crypto.PublicBoxingKey, error) {
-	base64PublicBoxingKey, err := n.Get("/get/user/boxkey", username)
+func NewNetwork(wsAddress, ethKeyPath, contractAddress, password string) (INetwork, error) {
+	glog.Infof("ethereum address: %s", wsAddress)
+
+	conn, err := ethclient.Dial(wsAddress)
 	if err != nil {
-		return [32]byte{}, err
+		return nil, fmt.Errorf("could not connect to ethereum node: NewNetwork(): %s", err)
 	}
-	return crypto.Base64ToPublicBoxingKey(string(base64PublicBoxingKey))
+
+	dipfshare, err := eth.NewEth(common.HexToAddress(contractAddress), conn)
+	if err != nil {
+		return nil, fmt.Errorf("could not instantiate contract: NewNetwork: %s", err)
+	}
+
+	keyFile, err := os.Open(ethKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not open key file '%s': NewNetwork: %s", ethKeyPath, err)
+	}
+	defer keyFile.Close()
+
+	auth, err := bind.NewTransactor(keyFile, password)
+	if err != nil {
+		return nil, fmt.Errorf("could not load account key data: NewNetwork: %s", err)
+	}
+
+
+	if conn == nil {
+		glog.Info("conn is nil")
+	}
+	if auth == nil {
+		glog.Info("auth is nil")
+	}
+
+	//Max random value, a 130-bits integer, i.e 2^130 - 1
+	max := new(big.Int)
+	max.Exp(big.NewInt(2), big.NewInt(130), nil).Sub(max, big.NewInt(1))
+
+	//Generate cryptographically strong pseudo-random between 0 - max
+	nonce, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not generate tx nonce")
+	}
+
+	session := &eth.EthSession{
+		Contract: dipfshare,
+		CallOpts: bind.CallOpts{
+			Pending: true,
+		},
+		TransactOpts: bind.TransactOpts{
+			From:     auth.From,
+			Signer:   auth.Signer,
+			GasLimit: 3000000,
+			Context: context.Background(),
+		},
+	}
+
+	if session.TransactOpts.Context == nil {
+		glog.Info("context is nil")
+	}
+
+	channelDebug := make(chan *eth.EthDebug)
+	channelGroupInvitation := make(chan *eth.EthGroupInvitation)
+	channelGroupUpdateIpfs := make(chan *eth.EthGroupUpdateIpfsHash)
+
+	network := Network{
+		Client: conn,
+
+		Session: session,
+		Auth:    auth,
+
+		debugChannel:       channelDebug,
+
+		groupInvitationChannel: channelGroupInvitation,
+		groupUpdateIpfsChannel: channelGroupUpdateIpfs,
+		groupRegisteredChannel: make(chan *eth.EthGroupRegistered),
+
+		nonce: nonce,
+	}
+
+	if err := network.SubscribeToEvents(0); err != nil {
+		return nil, err
+	}
+	
+	return &network, nil
 }
 
-func (n *Network) GetUserIPFSAddr(username string) (string, error) {
-	bytesIPFSAddr, err := n.Get("/get/user/ipfsaddr", username)
-	if err != nil {
-		return "", err
-	}
-	return string(bytesIPFSAddr), nil
-}
 
-func (n *Network) GetGroupState(groupName string) ([]byte, error) {
-	stateBase64Bytes, err := n.Get("/get/group/state", groupName)
-	if err != nil {
-		return nil, fmt.Errorf("error while getting state of group %s: Network.GetGroupState: %s", groupName, err)
+func (network *Network) SubscribeToEvents(latestBlock uint64) error {
+	opts := &bind.WatchOpts{
+		Context: network.Auth.Context,
+		Start: &latestBlock,
 	}
-	state, err := base64.StdEncoding.DecodeString(string(stateBase64Bytes))
-	if err != nil {
-		return nil, fmt.Errorf("error while decoding state of group %s: Network.GetGroupState: %s", groupName, err)
-	}
-	return state, nil
-}
 
-func (n *Network) GetGroupPrevState(groupName string, state []byte) ([]byte, error) {
-	stateBase64 := base64.StdEncoding.EncodeToString(state)
-	prevStateBase64Bytes, err := n.Get("/get/group/prev/state", groupName, stateBase64)
+	subDebug, err := network.Session.Contract.WatchDebug(opts, network.debugChannel)
 	if err != nil {
-		return nil, fmt.Errorf("error while getting previous state %s of group %s: Network.GetGroupPrevState: %s", state, groupName, err)
+		return err
 	}
-	prevState, err := base64.StdEncoding.DecodeString(string(prevStateBase64Bytes))
+	subGroupInvitation, err := network.Session.Contract.WatchGroupInvitation(opts, network.groupInvitationChannel)
 	if err != nil {
-		return nil, fmt.Errorf("error while decoding state of group %s: Network.GetGroupPrevState: %s", groupName, err)
+		return err
 	}
-	return prevState, nil
-}
+	subGroupUpdateIpfs, err := network.Session.Contract.WatchGroupUpdateIpfsHash(opts, network.groupUpdateIpfsChannel)
+	if err != nil {
+		return err
+	}
+	subGroupRegistered, err := network.Session.Contract.WatchGroupRegistered(opts, network.groupRegisteredChannel)
+	if err != nil {
+		return err
+	}
 
-func (n *Network) GetGroupOperation(groupName string, state []byte) ([]byte, error) {
-	stateBase64 := base64.StdEncoding.EncodeToString(state)
-	operationBytes, err := n.Post(
-		"/get/group/operation/"+groupName,
-		"application/octet-stream",
-		[]byte(stateBase64),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error while getting operation of state %s of group %s: Network.GetGroupOperation: %s", state, groupName, err)
-	}
-	return operationBytes, nil
-}
+	network.debugSub = subDebug
+	network.groupInvitationSub = subGroupInvitation
+	network.groupUpdateIpfsSub = subGroupUpdateIpfs
+	network.groupRegisteredSub = subGroupRegistered
 
-func (n *Network) GroupInvite(groupname string, transaction []byte) error {
-	if _, err := n.Post(
-		"/group/invite/"+groupname,
-		"application/json",
-		transaction,
-	); err != nil {
-		return fmt.Errorf("error while inviting into %s: Network.GroupInvite: %s", groupname, err)
-	}
 	return nil
 }
 
-func (n *Network) GroupShare(groupname string, transaction []byte) error {
-	if _, err := n.Post(
-		"/group/share/"+groupname,
-		"application/json",
-		transaction,
-	); err != nil {
-		return fmt.Errorf("error while sharing file with group '%s', Network.GroupShare: %s", groupname, err)
-	}
-	return nil
+func (network *Network) TransactionReceipt(tx *types.Transaction) (*types.Receipt, error) {
+	return network.Client.TransactionReceipt(context.Background(), tx.Hash())
 }
 
-func (n *Network) IsGroupRegistered(groupName string) (bool, error) {
-	boolString, err := n.Get("/is/group/registered", groupName)
+func (network *Network) GetGroupInvitationSub() *event.Subscription {
+	return &network.groupInvitationSub
+}
+
+func (network *Network) GetGroupInvitationChannel() chan *eth.EthGroupInvitation {
+	return network.groupInvitationChannel
+}
+
+func (network *Network) GetGroupUpdateIpfsSub() *event.Subscription {
+	return &network.groupUpdateIpfsSub
+}
+
+func (network *Network) GetGroupUpdateIpfsChannel() chan *eth.EthGroupUpdateIpfsHash {
+	return network.groupUpdateIpfsChannel
+}
+
+func (network *Network) GetGroupRegisteredSub() *event.Subscription {
+	return &network.groupRegisteredSub
+}
+
+func (network *Network) GetGroupRegisteredChannel() chan *eth.EthGroupRegistered {
+	return network.groupRegisteredChannel
+}
+
+func (network *Network) GetDebugSub() *event.Subscription {
+	return &network.debugSub
+}
+
+func (network *Network) GetDebugChannel() chan *eth.EthDebug {
+	return network.debugChannel
+}
+
+func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error) {
+	var members []common.Address
+	var rs [][32]byte
+	var ss [][32]byte
+	var vs []uint8
+
+	for _, approval := range approvals {
+		if len(approval.Signature) != 65 {
+			return nil, errors.New("signature length must be 65")
+		}
+
+		members = append(members, approval.From)
+
+		var r [32]byte
+		copy(r[:], approval.Signature[:32])
+		rs = append(rs, r)
+
+		var s [32]byte
+		copy(s[:], approval.Signature[32:64])
+		ss = append(ss, s)
+
+		v := approval.Signature[64]
+		if v < 27 {
+			v = v + 27;
+		}
+		vs = append(vs, v)
+	}
+
+	tx, err := network.Session.UpdateGroupIpfsHash(groupId, newIpfsHash, members, rs, ss, vs)
 	if err != nil {
-		return false, err
+		return nil, errors.Wrap(err, "could not send updateGroupIpfsPath transaction")
 	}
-	return strconv.ParseBool(string(boolString))
+
+	return &Transaction{tx: tx}, err
 }
 
-func (n *Network) IsUsernameRegistered(username string) (bool, error) {
-	boolString, err := n.Get("/is/username/registered", username)
-	if err != nil {
-		return false, err
-	}
-	return strconv.ParseBool(string(boolString))
-}
-
-func (n *Network) GetMessages(username string) ([]*Message, error) {
-	resp, err := n.Get("/get/messages", username)
+func (network *Network) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error) {
+	tx, err := network.Session.RegisterUser(username, ipfsPeerId, boxingKey)
 	if err != nil {
 		return nil, err
 	}
-	var messages []*Message
-	err = json.Unmarshal(resp, &messages)
+
+	glog.Infof("tx reg user nonce: %d", tx.Nonce())
+
+	return &Transaction{tx: tx}, err
+}
+
+func (network *Network) IsUserRegistered(id common.Address) (bool, error) {
+	registered, err := network.Session.IsUserRegistered(id)
+	if err != nil {
+		return true, fmt.Errorf("error while Network.IsUserRegistered(): %s", err)
+	}
+	return registered, nil
+}
+
+func (network *Network) GetUser(address common.Address) (*Contact, error) {
+	username, ipfsPeerId, boxingKey, err := network.Session.GetUser(address)
+	if err != nil {
+		return &Contact{}, err
+	}
+
+	return &Contact{
+		Address:   address,
+		Name:      username,
+		IpfsPeerId: ipfsPeerId,
+		Boxer:     crypto.AnonymPublicKey{boxingKey},
+	}, nil
+}
+
+func (network *Network) CreateGroup(id [32]byte, name string, ipfsHash []byte) (*Transaction, error) {
+	tx, err := network.Session.CreateGroup(id, name, ipfsHash)
 	if err != nil {
 		return nil, err
 	}
-	return messages, nil
+
+	glog.Infof("tx create group nonce: %d", tx.Nonce())
+
+	return &Transaction{tx: tx}, err
 }
 
-func (n *Network) Post(path string, contentType string, data []byte) ([]byte, error) {
-	url := n.Address + path
-	resp, err := http.Post(
-		url,
-		contentType,
-		bytes.NewReader(data),
-	)
+func (network *Network) InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) (*Transaction, error) {
+	tx, err := network.Session.InviteUser(groupId, newMember, canInvite)
 	if err != nil {
-		return nil, fmt.Errorf("error while http post request '%s': Network.Post: %s", url, err)
+		return nil, err
 	}
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("could not read response body: Network.Post: %s", err)
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("request '%s' returned with status code '%d': Network.Post", url, resp.StatusCode)
-	}
-	return body, nil
+	glog.Infof("tx invite new member nonce: %d", tx.Nonce())
+
+	return &Transaction{tx: tx}, err
 }
 
-func (n *Network) PutVerifyKey(hash crypto.PublicKeyHash, key crypto.SigningKey) error {
-	jsonStr := fmt.Sprintf(`{"hash":"%s", "signkey":"%s"}`, hash.ToBase64(), key.ToBase64())
-	_, err := n.Post(
-		"/put/signkey",
-		"application/json",
-		[]byte(jsonStr),
-	)
-	if err != nil {
-		return fmt.Errorf("error while post: Network.PutVerifyKey: %s", err)
-	}
-	return nil
+func (network *Network) GetGroup(groupId [32]byte) (string, []common.Address, []byte, error) {
+	return network.Session.GetGroup(groupId)
 }
 
-func (n *Network) PutBoxingKey(hash crypto.PublicKeyHash, key crypto.PublicBoxingKey) error {
-	jsonStr := fmt.Sprintf(`{"hash":"%s", "boxkey":"%s"}`, hash.ToBase64(), key.ToBase64())
-	_, err := n.Post(
-		"/put/boxkey",
-		"application/json",
-		[]byte(jsonStr),
-	)
-	if err != nil {
-		return fmt.Errorf("error while post: Network.PutBoxingKey: %s", err)
-	}
-	return nil
-}
 
-func (n *Network) PutIPFSAddr(hash crypto.PublicKeyHash, ipfsAddr string) error {
-	jsonStr := fmt.Sprintf(`{"hash":"%s", "ipfsaddr":"%s"}`, hash.ToBase64(), ipfsAddr)
-	_, err := n.Post(
-		"/put/ipfsaddr",
-		"application/json",
-		[]byte(jsonStr),
-	)
-	if err != nil {
-		return fmt.Errorf("error while post: Network.PutIPFSAddr: %s", err)
-	}
-	return nil
-}
-
-func (n *Network) RegisterGroup(groupName, owner string) error {
-	stateHash := sha256.Sum256([]byte(owner))
-	stateHashBase64 := base64.StdEncoding.EncodeToString(stateHash[:])
-	jsonStr := fmt.Sprintf(`{"groupname":"%s", "owner":"%s", "state":"%s"}`, groupName, owner, stateHashBase64)
-
-	_, err := n.Post(
-		"/register/group",
-		"application/json",
-		[]byte(jsonStr),
-	)
-	if err != nil {
-		return fmt.Errorf("error while post: Network.PutBoxingKey: %s", err)
-	}
-	return nil
-}
-
-func (n *Network) RegisterUsername(username string, hash crypto.PublicKeyHash) error {
-	_, err := n.Post(
-		fmt.Sprintf("/register/username/%s", username),
-		"application/octet-stream",
-		[]byte(hash.ToBase64()),
-	)
-	if err != nil {
-		return fmt.Errorf("error while post: Network.PutBoxingKey: %s", err)
-	}
-	return nil
-}
-
-func (n *Network) SendMessage(from, to, msgType, msgData string) error {
-	m := Message{from, to, msgType, msgData}
-
-	byteJSON, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("could not marshal message")
-	}
-	_, err = n.Post("/send/message", "application/json", byteJSON)
-	if err != nil {
-		return fmt.Errorf("error while post: Network.PutBoxingKey: %s", err)
-	}
-	return nil
+func (network *Network) Close() {
+	network.debugSub.Unsubscribe()
+	network.groupUpdateIpfsSub.Unsubscribe()
+	network.groupInvitationSub.Unsubscribe()
+	network.Client.Close()
 }

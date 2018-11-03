@@ -41,7 +41,7 @@ func TestUnmarshalMarshal(t *testing.T) {
 	A.ToBytes(&pub2)
 
 	if pubBytes != pub2 {
-		t.Errorf("FromBytes(%v)->ToBytes does not round-trip, got %x\n", pubBytes, pub2)
+		t.Errorf("FromBytes(%v)->Digest does not round-trip, got %x\n", pubBytes, pub2)
 	}
 }
 
