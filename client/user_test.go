@@ -42,28 +42,19 @@ func TestBoxing(t *testing.T) {
 	user, _ := NewUser(username, password, "")
 
 	message := "Hello friend!"
-	encMsg, err := user.Boxer.Seal([]byte(message))
+	boxer := user.Boxer()
+	encMsg, err := boxer.Seal([]byte(message))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	plain, err := user.Boxer.Open(encMsg)
+	plain, err := boxer.Open(encMsg)
 	if err != nil {
 		t.Fatalf("could not decrypt message: %s", err)
 	}
 	if strings.Compare(string(plain), message) != 0 {
 		t.Fatal("the original and the decrypted messages are not the same")
 	}
-}
-
-func TestKeystore(t *testing.T) {
-	// ks := keystore.NewKeyStore("../test/keystore", keystore.StandardScryptN, keystore.StandardScryptP)
-	// acc, err := ks.NewAccount("pwd")
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// fileName := path.Base(acc.URL.String())
-
 }
 
 func TestSigning(t *testing.T) {
@@ -84,12 +75,13 @@ func TestSigning(t *testing.T) {
 
 	// message := "Hello friend!"
 	digest := [32]byte{120}
-	sig, err := user1.Signer.Sign(digest[:])
+	signer1 := user1.Signer()
+	sig, err := signer1.Sign(digest[:])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pk := ethcrypto.CompressPubkey(&user1.Signer.PrivateKey.PublicKey)
+	pk := ethcrypto.CompressPubkey(&signer1.PrivateKey.PublicKey)
 	fmt.Println(pk)
 	ok := ethcrypto.VerifySignature(pk, digest[:], sig[:64])
 	if !ok {
@@ -97,65 +89,3 @@ func TestSigning(t *testing.T) {
 	}
 }
 
-func TestUserDataOnServer(t *testing.T) {
-	//username := "testuser"
-	//password := "password"
-	//
-	//dir := "../test/keystore"
-	//ks := keystore.NewKeyStore(dir, keystore.StandardScryptN, keystore.StandardScryptP)
-	//keyAlice, ethKeyPath, err := nw.NewAccount(ks, dir, password)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//keyBob, _, err := nw.NewAccount(ks, dir, password)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//network, _, err := nw.NewTestNetwork(keyAlice, keyBob)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//user, err := SignUp(username, password, ethKeyPath, network)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//txt, _ := user.Address.MarshalText()
-	//fmt.Println(string(txt))
-	//newAd := common.BytesToAddress(user.Address.Bytes())
-	//fmt.Println(newAd.String())
-	//fmt.Println(user.Address.String())
-	//
-	//network.Simulator.Commit()
-	//
-	//registered, err := network.IsUserRegistered(user.Address)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//if !registered {
-	//	t.Fatal("user should be registered")
-	//}
-	//
-	//contact, err := network.GetUser(user.Address)
-	//if strings.Compare(contact.Name, user.Name) != 0 {
-	//	t.Fatal("usernames do not match")
-	//}
-	//if !bytes.Equal(contact.Boxer.Value[:], user.Boxer.PublicKey.Value[:]) {
-	//	t.Fatal("boxing keys do not match")
-	//}
-	//pk := ethcrypto.CompressPubkey(&user.Signer.PrivateKey.PublicKey)
-	//if !bytes.Equal(contact.VerifyKey, pk) {
-	//	t.Fatal("verify keys do not match")
-	//}
-	//
-	//// Test Sign in
-	//user, err = SignIn(username, password, ethKeyPath, network)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//if user == nil {
-	//	t.Fatal("user is nil")
-	//}
-}

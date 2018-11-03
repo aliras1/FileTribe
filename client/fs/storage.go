@@ -1,4 +1,4 @@
-package client
+package fs
 
 import (
 	"crypto/rand"
@@ -7,25 +7,18 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"time"
-
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	ipfsapi "ipfs-share/ipfs"
 	"ipfs-share/utils"
 
+	"ipfs-share/crypto"
 	"github.com/pkg/errors"
+	"bytes"
 )
 
 const (
 	CAP_EXT string = ".cap"
 )
-
-// ContextData is a struct of data from UserContext
-// that are stored on disk.
-type ContextData struct {
-	Groups         []*GroupContext
-}
 
 // Storage is a struct of the directory paths and has
 // functions that are responsible for the file level
@@ -37,6 +30,7 @@ type Storage struct {
 	publicForPath   string
 	userDataPath    string
 	capsPath        string
+	origPath        string
 	capsGAPath      string // group access caps
 	fileRootPath    string
 	sharedPath      string
@@ -55,6 +49,7 @@ func NewStorage(dataPath string) *Storage {
 	storage.publicForPath = storage.dataPath + "public/for/"
 	storage.userDataPath = storage.dataPath + "userdata/"
 	storage.capsPath = storage.dataPath + "userdata/caps/"
+	storage.origPath = storage.dataPath + "userdata/orig/"
 	storage.capsGAPath = storage.dataPath + "userdata/caps/GA/"
 	storage.fileRootPath = storage.dataPath + "userdata/root/"
 	storage.myFilesPath = storage.dataPath + "userdata/root/MyFiles/"
@@ -66,6 +61,7 @@ func NewStorage(dataPath string) *Storage {
 	os.MkdirAll(storage.publicFilesPath, 0770)
 	os.MkdirAll(storage.publicForPath, 0770)
 	os.MkdirAll(storage.capsPath, 0770)
+	os.MkdirAll(storage.origPath, 0770)
 	os.MkdirAll(storage.capsGAPath, 0770)
 	os.MkdirAll(storage.fileRootPath, 0770)
 	os.MkdirAll(storage.myFilesPath, 0770)
@@ -77,32 +73,8 @@ func NewStorage(dataPath string) *Storage {
 	return &storage
 }
 
-func (storage *Storage) GetUserFilesPath() string {
+func (storage *Storage) UserFilesPath() string {
 	return storage.fileRootPath
-}
-
-func loadFilesOfAddress(address ethcommon.Address, baseDir string) (map[[32]byte]*File, error) {
-	fileMap := make(map[[32]byte]*File)
-
-	currentDir := baseDir + "/" + address.String()
-	files, err := ioutil.ReadDir(currentDir)
-	if err != nil {
-		return fileMap, fmt.Errorf("could not read dir: '%s': Storage.BuildRepo: %s", currentDir, err)
-	}
-
-	for _, filePTPFile := range files {
-		filePTPPath := currentDir + "/" + filePTPFile.Name()
-
-		filePTP, err := LoadPTPFile(filePTPPath)
-		if err != nil {
-			glog.Warningf("could not load file ptp: '%s': Storage.BuildRepo: %s", filePTPPath, err)
-			continue
-		}
-
-		fileMap[filePTP.Cap.Id] = filePTP
-	}
-
-	return fileMap, nil
 }
 
 func (storage *Storage) CopyFileIntoPublicDir(filePath string) error {
@@ -157,19 +129,19 @@ func (storage *Storage) GetGroupCaps() ([]GroupAccessCap, error) {
 	return caps, nil
 }
 
-func (storage *Storage) SaveGroupCap(groupId string, data []byte) error {
-	capPath := storage.capsGAPath + "/" + groupId + CAP_EXT
-	if err := utils.WriteFile(capPath, data); err != nil {
-		return errors.Wrap(err, "could not write group cap file")
-	}
-	return nil
+func (storage *Storage) GroupAccessCapDir() string {
+	return storage.capsGAPath
 }
 
-func (storage *Storage) GetGroupFileCapDir(id string) string {
+func (storage *Storage) GroupFileCapDir(id string) string {
 	return storage.capsPath + id + "/"
 }
 
-func (storage *Storage) GetGroupFileDataDir(id string) string {
+func (storage *Storage) GroupFileOrigDir(id string) string {
+	return storage.origPath + id + "/"
+}
+
+func (storage *Storage) GroupFileDataDir(id string) string {
 	return storage.fileRootPath + id + "/"
 }
 
@@ -177,45 +149,7 @@ func (storage *Storage) GetGroupFileDataDir(id string) string {
 func (storage *Storage) MakeGroupDir(id string) {
 	os.MkdirAll(storage.capsPath + id, 0770)
 	os.MkdirAll(storage.fileRootPath + id, 0770)
-}
-
-
-// +------------------------------+
-// |       Helper functions       |
-// +------------------------------+
-
-func (storage *Storage) PublishPublicDir(ipfs ipfsapi.IIpfs) error {
-	glog.Info("Publishing...")
-	t := time.Now()
-	publicDir := storage.dataPath + "/public"
-	hash, err := ipfs.AddDir(publicDir)
-	if err != nil {
-		return fmt.Errorf("could not ipfs add dir: Storage.PublishPublicDir: %s", err)
-	}
-	glog.Info("ipfs add: ", time.Since(t))
-
-	if err := ipfs.Publish("", hash); err != nil {
-		return fmt.Errorf("could not ipfs name publish: Storage.PublishPublicDir: %s", err)
-	}
-
-	glog.Info("ipfs add n pub: ", time.Since(t))
-	glog.Info("Publishing ended")
-	return nil
-}
-
-func (storage *Storage) MakeForDirectory(dirName string, ipfs ipfsapi.IIpfs) (string, error) {
-	dirPath := storage.publicForPath + "/" + dirName
-	os.Mkdir(dirPath, 0770)
-	hash, err := ipfs.AddDir(dirPath)
-	if err != nil {
-		return "", fmt.Errorf("could not publish: Storage.MakeForDirectory: %s", err)
-	}
-	return hash, nil
-}
-
-func (storage *Storage) InitMyCapsByFriend(friendAddress string) {
-	dirPath := storage.capsPath + "/" + friendAddress
-	os.Mkdir(dirPath, 0770)
+	os.MkdirAll(storage.origPath+ id, 0770)
 }
 
 func (storage *Storage) DownloadTmpFile(ipfsHash string, ipfs ipfsapi.IIpfs) (string, error) {
@@ -226,3 +160,55 @@ func (storage *Storage) DownloadTmpFile(ipfsHash string, ipfs ipfsapi.IIpfs) (st
 	return filePath, nil
 }
 
+func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer crypto.SymmetricKey, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
+	path := storage.tmpPath + ipfsHash
+	if err := ipfs.Get(ipfsHash, path); err != nil {
+		return nil, errors.Wrapf(err, "could not ipfs get ipfs hash %s", ipfsHash)
+	}
+
+	encData, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not read tmp file: %s", path)
+	}
+	defer func() {
+		if err := os.Remove(path); err != nil {
+			glog.Warningf("could not remove tmp file %s", path)
+		}
+	}()
+
+	data, ok := boxer.BoxOpen(encData)
+	if !ok {
+		return nil, errors.New("could not decrypt shared group dir")
+	}
+
+	return data, nil
+}
+
+func (storage *Storage) DownloadAndDecryptWithFileBoxer(boxer crypto.FileBoxer, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
+	tmpFilePath, err := storage.DownloadTmpFile(ipfsHash, ipfs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not ipfs get '%s'", ipfsHash)
+	}
+
+	encReader, err := os.Open(tmpFilePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "download err: could not read file '%s'", tmpFilePath)
+	}
+
+	diffBuf := new(bytes.Buffer)
+	err = boxer.Open(encReader, diffBuf)
+	defer func() {
+		if err := encReader.Close(); err != nil {
+			glog.Warningf("download err: could not close tmp file '%s': %s", tmpFilePath, err)
+		}
+		if err := os.Remove(tmpFilePath); err != nil {
+			glog.Warningf("download err: could not delete tmp file '%s': %s", tmpFilePath, err)
+		}
+	}()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "download err: could not decrypt file dif")
+	}
+
+	return diffBuf.Bytes(), nil
+}

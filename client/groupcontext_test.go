@@ -14,6 +14,9 @@ import (
 
 	ipfsapi "ipfs-share/ipfs"
 	"github.com/libp2p/go-libp2p-peer"
+	"crypto/ecdsa"
+	"ipfs-share/utils"
+	"io/ioutil"
 )
 
 type FakePubSubRecord struct {
@@ -38,7 +41,9 @@ func (r *FakePubSubRecord) TopicIDs() []string {
 }
 
 const (
-	topic = "fake_topic"
+	ALICE = 0
+	BOB = 1
+	CHARLIE = 2
 )
 
 var (
@@ -48,12 +53,12 @@ var (
 	controller *gomock.Controller
 )
 
-func NewTestUser(username string, signup bool, ethKeyPath string, shellIdx int, network nw.INetwork, p2pPort string) (*UserContext, error) {
+func NewTestUser(username string, signup bool, ethKeyPath string, shellIdx int, network nw.INetwork, p2pPort string) (IUserFacade, error) {
 	t := time.Now()
 	glog.Info("ipfs inst: ", time.Since(t))
 	password := "pwd"
 	homeDir := "./" + username + "/"
-	var testUser *UserContext
+	var testUser IUserFacade
 	var err error
 
 	var ipfs ipfsapi.IIpfs
@@ -89,7 +94,8 @@ func NewTestUser(username string, signup bool, ethKeyPath string, shellIdx int, 
 		}
 	}
 
-	reg, err := network.IsUserRegistered(testUser.User.Address)
+	user := testUser.User()
+	reg, err := network.IsUserRegistered(user.Address())
 	if err != nil {
 		return nil, err
 	}
@@ -133,24 +139,24 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fakeNetwork, err := nw.NewTestNetwork(keyAlice, keyBob, keyCharlie)
+	fakeNetwork, err := nw.NewTestNetwork([]*ecdsa.PrivateKey{keyAlice, keyBob, keyCharlie})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fakeNetwork.SetAuthAlice()
+	fakeNetwork.SetAuth(ALICE)
 	alice, err := NewTestUser("alice", true, ethKeyAlicePath, 0, fakeNetwork, "2000")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fakeNetwork.SetAuthBob()
+	fakeNetwork.SetAuth(BOB)
 	bob, err := NewTestUser("bob", true, ethKeyBobPath, 1, fakeNetwork, "2001")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fakeNetwork.SetAuthCharlie()
+	fakeNetwork.SetAuth(CHARLIE)
 	charlie, err := NewTestUser("charlie", true, ethKeyCharliePath, 2, fakeNetwork, "2002")
 	if err != nil {
 		t.Fatal(err)
@@ -158,65 +164,109 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	glog.Info("----- fun begins -----")
 
-	fakeNetwork.SetAuthAlice()
+	fakeNetwork.SetAuth(ALICE)
 
 	if err := alice.CreateGroup("GRUPPE"); err != nil {
 		t.Fatal(err)
 	}
 
-	if alice.Groups.Count() != 1 {
-		t.Fatal("no group found by alice")
+	if len(alice.Groups()) != 1 {
+		t.Fatal("no groupAtAlice found by alice")
 	}
 
-	group := alice.Groups.FirstOrDefault(nil).(*GroupContext)
-	group.Invite(bob.User.Address)
-	group.Invite(charlie.User.Address)
+	bobUser := bob.User()
+	charlieUser := charlie.User()
+
+	aliceGroups := alice.Groups()
+	groupAtAlice := aliceGroups[0].(*GroupContext)
+	groupAtAlice.Invite(bobUser.Address(), true)
+	groupAtAlice.Invite(charlieUser.Address(), true)
 
 	time.Sleep(5 * time.Second)
 
-	if bob.Groups.Count() != 1 {
+	if len(bob.Groups()) != 1 {
 		t.Fatal("no group found by bob")
 	}
-	if charlie.Groups.Count() != 1 {
+	if len(charlie.Groups()) != 1 {
 		t.Fatal("no group found by charlie")
 	}
 
-	fmt.Println(alice.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
-	fmt.Println(bob.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
-	fmt.Println(charlie.Groups.FirstOrDefault(nil).(*GroupContext).Group.IpfsHash)
 
-	if len(alice.Groups.FirstOrDefault(nil).(*GroupContext).Group.Members) != 3 {
-		t.Fatal("alice's group has not got enough members")
+	aliceGroups = alice.Groups()
+	bobGroups := bob.Groups()
+	charlieGroups := charlie.Groups()
+	if aliceGroups[0].(*GroupContext).Group.CountMembers() != 3 {
+		t.Fatal("alice's groupAtAlice has not got enough members")
 	}
-	if len(bob.Groups.FirstOrDefault(nil).(*GroupContext).Group.Members) != 3 {
-		t.Fatal("bob's group has not got enough members")
+	if bobGroups[0].(*GroupContext).Group.CountMembers() != 3 {
+		t.Fatal("bob's groupAtAlice has not got enough members")
 	}
-	if len(charlie.Groups.FirstOrDefault(nil).(*GroupContext).Group.Members) != 3 {
-		t.Fatal("charlie's group has not got enough members")
+	if charlieGroups[0].(*GroupContext).Group.CountMembers() != 3 {
+		t.Fatal("charlie's groupAtAlice has not got enough members")
 	}
 
-	if err := group.AddFile("./group.go"); err != nil {
+	fmt.Println("----------- Alice init commit ------------")
+
+	fileAlice := "./alice/data/userdata/root/" + groupAtAlice.Group.Id().ToString() + "/rrrepo.go"
+	if err := utils.CopyFile("./grouprepo.go", fileAlice); err != nil {
+		t.Fatal(err)
+	}
+	if err := groupAtAlice.CommitChanges(); err != nil {
 		t.Fatal(err)
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
+	fmt.Println("----------- Bob change file ------------")
+
+	bobGroups = bob.Groups()
+	groupAtBob := bobGroups[0].(*GroupContext)
+	fileBob := "./bob/data/userdata/root/" + groupAtBob.Group.Id().ToString() + "/rrrepo.go"
+	if err := AppendToFile(fileBob, "Bob's modification (should fail)\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := groupAtBob.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+	fmt.Println("----------- Grant W access to only alice  ------------")
+
+	if err := groupAtAlice.GrantWriteAccess(fileAlice, bobUser.Address()); err != nil {
+		t.Fatal(err)
+	}
+	if err := groupAtAlice.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+	fmt.Println("----------- Bob modif  ------------")
+	if err := AppendToFile(fileBob, "Bob's modification\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := groupAtBob.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+	fmt.Println("----------- Alice modif  ------------")
+	if err := AppendToFile(fileAlice, "Alice's modification\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := groupAtAlice.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
 
 	time.Sleep(500 * time.Second)
+}
 
-	fmt.Println(alice)
-	for c := range alice.AddressBook.Iterator() {
-		cc := c.(*Contact)
-		cc.Send([]byte{2})
+func AppendToFile(path string, data string) error {
+	file, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
 	}
 
-	fmt.Println(bob)
-	for c := range bob.AddressBook.Iterator() {
-		cc := c.(*Contact)
-		cc.Send([]byte{2})
-	}
-	fmt.Println(charlie)
-	for c := range charlie.AddressBook.Iterator() {
-		cc := c.(*Contact)
-		cc.Send([]byte{2})
-	}
+	return ioutil.WriteFile(path, append(file, []byte(data)...), 644)
 }

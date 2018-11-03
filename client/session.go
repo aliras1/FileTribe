@@ -8,7 +8,8 @@ import (
 	"github.com/golang/glog"
 
 	. "ipfs-share/collections"
-	"ipfs-share/utils"
+	"github.com/pkg/errors"
+	"ipfs-share/client/fs"
 )
 
 
@@ -19,19 +20,20 @@ type ISession interface {
 	IsAlive() bool
 	Abort()
 	NextState(contact *Contact, data []byte)
-	GetState() uint8
+	State() uint8
 	Run()
+	Error() error
 }
 
-func NewServerSession(msg *Message, contact *Contact, ctx *UserContext) ISession {
+func NewServerSession(msg *Message, contact *Contact, user IUser, groups *ConcurrentCollection, closedChan chan ISession) (ISession, error) {
 	switch msg.Type {
 	case GetGroupKey:
 		{
-			return NewGetGroupKeySessionServer(msg, contact, ctx)
+			return NewGetGroupKeySessionServer(msg, contact, user, groups, closedChan)
 		}
 
 	default:
-		return nil
+		return nil, errors.New("invalid message type")
 	}
 }
 
@@ -39,20 +41,25 @@ type GetGroupKeySessionServer struct {
 	sessionId IIdentifier
 	state     uint8
 	contact   *Contact
-	groupId [32]byte
+	user IUser
+	group IGroup
 	challenge [32]byte
-	ctx  *UserContext
-	boxer *crypto.SymmetricKey
+	closedChan chan ISession
 	lock sync.RWMutex
 	stop chan bool
+	error error
+}
+
+func (session *GetGroupKeySessionServer) Error() error {
+	return session.error
 }
 
 func (session *GetGroupKeySessionServer) close() {
 	session.state = EndOfSession
-	session.ctx.P2P.SessionClosedChan <- session.Id()
+	session.closedChan <- session
 }
 
-func (session *GetGroupKeySessionServer) GetState() uint8 {
+func (session *GetGroupKeySessionServer) State() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
@@ -92,54 +99,38 @@ func (session *GetGroupKeySessionServer) NextState(contact *Contact, data []byte
 	switch session.state {
 	case 0:
 		{
-			groupId := NewBytesId(session.groupId)
-
-			groupCtxInterface := session.ctx.Groups.Get(groupId)
-			if groupCtxInterface == nil {
+			if !session.group.IsMember(session.contact.Address) {
 				session.close()
-				glog.Errorf("%s: no groupContext found", session.ctx.User.Name)
-				return
-			}
-
-			groupCtx := groupCtxInterface.(*GroupContext)
-
-			if err := groupCtx.Update(); err != nil {
-				session.close()
-				glog.Errorf("could not update the state of group %v", groupCtx.Group.Id.Data())
-				return
-			}
-
-			if _, ok := utils.InArray(groupCtx.Group.Members, session.contact.Address); !ok {
-				session.close()
-				glog.Errorf("non group member %s asked for key", session.contact.Address.String())
+				session.error = errors.New("non group member requested group key")
 				return
 			}
 
 			msg, err := NewMessage(
-				session.ctx.User.Address,
+				session.user.Address(),
 				GetGroupKey,
 				session.sessionId.Data().(uint32),
 				session.challenge[:],
-				session.ctx.User.Signer,
+				session.user.Signer(),
 			)
 			if err != nil {
-				glog.Errorf("could not create Message: %s", err)
+				session.error = errors.New("could not create message")
+				session.close()
 				return
 			}
 
 			encMsg, err := msg.Encode()
 			if err != nil {
-				glog.Errorf("could not encode Message: %s", err)
+				session.error = errors.Wrap(err, "could not encode message")
+				session.close()
 				return
 			}
 
 			if err := session.contact.Send(encMsg); err != nil {
+				session.error = errors.Wrap(err, "could not send message")
 				session.close()
-				glog.Errorf("could not send message to %s: %s", session.contact.Address.String(), err)
 				return
 			}
 
-			session.boxer = &groupCtx.Group.Boxer
 			session.state = 1
 
 			return
@@ -147,44 +138,46 @@ func (session *GetGroupKeySessionServer) NextState(contact *Contact, data []byte
 	case 1:
 		{
 			if !session.contact.VerifySignature(session.challenge[:], data) {
+				session.error = errors.New("invalid signature")
 				session.close()
-				glog.Errorf("invalid signature")
 				return
 			}
 
-			key, err := session.boxer.Encode()
+			boxer := session.group.Boxer()
+			key, err := boxer.Encode()
 			if err != nil {
+				session.error = errors.Wrap(err, "could not marshal group key")
 				session.close()
-				glog.Errorf("could not marshal group boxer: %s", err)
 				return
 			}
 
 			msg, err := NewMessage(
-				session.ctx.User.Address,
+				session.user.Address(),
 				GetGroupKey,
 				session.sessionId.Data().(uint32),
 				key,
-				session.ctx.User.Signer,
+				session.user.Signer(),
 			)
 			if err != nil {
-				glog.Errorf("could not create Message: %s", err)
+				session.error = errors.Wrap(err, "could not create message")
+				session.close()
 				return
 			}
 
 			encMsg, err := msg.Encode()
 			if err != nil {
-				glog.Errorf("could not encode Message: %s", err)
+				session.error = errors.Wrap(err, "could not encode message")
+				session.close()
 				return
 			}
 
 			if err := session.contact.Send(encMsg); err != nil {
+				session.error = errors.Wrap(err, "could not send message")
 				session.close()
-				glog.Errorf("could not send message: %s", err)
 				return
 			}
 
 			session.close()
-			glog.Errorf("session ended")
 		}
 
 	default:
@@ -194,41 +187,58 @@ func (session *GetGroupKeySessionServer) NextState(contact *Contact, data []byte
 	}
 }
 
-func NewGetGroupKeySessionServer(msg *Message, contact *Contact, ctx *UserContext) *GetGroupKeySessionServer {
+func NewGetGroupKeySessionServer(msg *Message, contact *Contact, user IUser, groups *ConcurrentCollection, closedChan chan ISession) (*GetGroupKeySessionServer, error) {
 	var challenge [32]byte
 	if _, err := rand.Read(challenge[:]); err != nil {
-		return nil
+		return nil, errors.Wrap(err, "could not read rand")
 	}
 
 	var groupId [32]byte
 	copy(groupId[:], msg.Payload)
 
+	groupInt := groups.Get(NewBytesId(groupId))
+	if groupInt == nil {
+		return nil, errors.New("no group found")
+	}
+
 	return &GetGroupKeySessionServer{
 		sessionId: NewUint32Id(msg.SessionId),
 		contact:   contact,
-		groupId: groupId,
+		user: user,
+		group: groupInt.(*GroupContext).Group,
+		closedChan: closedChan,
 		state:     0,
 		challenge: challenge,
-		ctx:  ctx,
-	}
+	}, nil
 }
 
 // ---------------------
+
+type GetGroupKeyOnSuccessCallback func(cap *fs.GroupAccessCap)
 
 type GetGroupKeySessionClient struct {
 	sessionId IIdentifier
 	state     uint8
 	contact   *Contact
-	ctx  *UserContext
 	groupId [32]byte
-	resultChannel chan crypto.SymmetricKey
+
+	storage *fs.Storage
+	user IUser
+	closedChan chan ISession
+
 	lock sync.RWMutex
 	stop chan bool
+	error error
+	onSuccessCallback GetGroupKeyOnSuccessCallback
+}
+
+func (session *GetGroupKeySessionClient) Error() error {
+	return session.error
 }
 
 func (session *GetGroupKeySessionClient) close() {
 	session.state = EndOfSession
-	session.ctx.P2P.SessionClosedChan <- session.Id()
+	session.closedChan <- session
 }
 
 func (session *GetGroupKeySessionClient) Abort() {
@@ -242,7 +252,7 @@ func (session *GetGroupKeySessionClient) Abort() {
 	session.close()
 }
 
-func (session *GetGroupKeySessionClient) GetState() uint8 {
+func (session *GetGroupKeySessionClient) State() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
@@ -272,26 +282,28 @@ func (session *GetGroupKeySessionClient) NextState(contact *Contact, data []byte
 	case 0:
 		{
 			msg, err := NewMessage(
-				session.ctx.User.Address,
+				session.user.Address(),
 				GetGroupKey,
 				session.sessionId.Data().(uint32),
 				session.groupId[:],
-				session.ctx.User.Signer,
+				session.user.Signer(),
 			)
 			if err != nil {
-				glog.Errorf("could not create Message: %s", err)
+				session.error = errors.Wrap(err, "could not create message")
+				session.close()
 				return
 			}
 
 			encMsg, err := msg.Encode()
 			if err != nil {
-				glog.Errorf("could not encode Message: %s", err)
+				session.error = errors.Wrap(err, "could not encode message")
+				session.close()
 				return
 			}
 
 			if err := session.contact.Send(encMsg); err != nil {
+				session.error = errors.Wrap(err, "could not send message")
 				session.close()
-				glog.Errorf("could not send message to %s: %s", session.contact.Address.String(), err)
 				return
 			}
 
@@ -302,32 +314,36 @@ func (session *GetGroupKeySessionClient) NextState(contact *Contact, data []byte
 	// Got the challenge
 	case 1:
 		{
-			sig, err := session.ctx.User.Signer.Sign(data)
+			signer := session.user.Signer()
+			sig, err := signer.Sign(data)
 			if err != nil {
-				glog.Errorf("could not sign challenge: %s", err)
+				session.error = errors.Wrap(err, "could not sign challange")
+				session.close()
 			}
 
 			msg, err := NewMessage(
-				session.ctx.User.Address,
+				session.user.Address(),
 				GetGroupKey,
 				session.sessionId.Data().(uint32),
 				sig,
-				session.ctx.User.Signer,
+				session.user.Signer(),
 			)
 			if err != nil {
-				glog.Errorf("could not create Message: %s", err)
+				session.error = errors.Wrap(err, "could not create message")
+				session.close()
 				return
 			}
 
 			encMsg, err := msg.Encode()
 			if err != nil {
-				glog.Errorf("could not encode Message: %s", err)
+				session.error = errors.Wrap(err, "could not encode Message")
+				session.close()
 				return
 			}
 
 			if err := session.contact.Send(encMsg); err != nil {
+				session.error = errors.Wrap(err, "could not send message")
 				session.close()
-				glog.Errorf("could not send message to %s: %s", session.contact.Address.String(), err)
 				return
 			}
 
@@ -339,40 +355,24 @@ func (session *GetGroupKeySessionClient) NextState(contact *Contact, data []byte
 		{
 			key, err := crypto.DecodeSymmetricKey(data)
 			if err != nil {
-				glog.Errorf("could not decode group key: %s", err)
+				session.error = errors.Wrap(err, "could not decode group key")
+				session.close()
 				return
 			}
 
-			groupCap := &GroupAccessCap{
+			groupCap := &fs.GroupAccessCap{
 				GroupId: session.groupId,
 				Boxer:   *key,
 			}
 
-			if err := groupCap.Save(session.ctx.Storage); err != nil {
-				glog.Errorf("could not save group access groupCap: %s", err)
+			if err := groupCap.Save(session.storage); err != nil {
+				session.error = errors.Wrap(err, "could not save group access cap")
+				session.close()
 				return
 			}
 
-			groupCtx, err := NewGroupContextFromCAP(
-				groupCap,
-				session.ctx.User,
-				session.ctx.P2P,
-				session.ctx.AddressBook,
-				session.ctx.Network,
-				session.ctx.Ipfs,
-				session.ctx.Storage,
-			)
-			if err != nil {
-				glog.Errorf("could not create group context: %s", err)
-				return
-			}
-
-			if err := session.ctx.Groups.Append(groupCtx); err != nil {
-				glog.Warningf("could not append elem: %s", err)
-			}
-
+			session.onSuccessCallback(groupCap)
 			session.close()
-
 			return
 		}
 
@@ -383,7 +383,15 @@ func (session *GetGroupKeySessionClient) NextState(contact *Contact, data []byte
 	}
 }
 
-func NewGetGroupKeySessionClient(groupId [32]byte, contact *Contact, ctx *UserContext) *GetGroupKeySessionClient {
+func NewGetGroupKeySessionClient(
+	groupId [32]byte,
+	contact *Contact,
+	user IUser,
+	storage *fs.Storage,
+	closedChan chan ISession,
+	onSuccess GetGroupKeyOnSuccessCallback,
+	) *GetGroupKeySessionClient {
+
 	sessionId := rand.Uint32()
 
 	return &GetGroupKeySessionClient{
@@ -391,7 +399,10 @@ func NewGetGroupKeySessionClient(groupId [32]byte, contact *Contact, ctx *UserCo
 		groupId:   groupId,
 		contact:   contact,
 		state:     0,
-		ctx:       ctx,
+		user:       user,
+		storage: storage,
+		closedChan: closedChan,
 		stop: make(chan bool),
+		onSuccessCallback: onSuccess,
 	}
 }

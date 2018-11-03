@@ -1,17 +1,16 @@
-package client
+package fs
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	ipfsapi "ipfs-share/ipfs"
-
 	"ipfs-share/crypto"
 	"github.com/pkg/errors"
 	"bytes"
 	"strings"
 	"crypto/rand"
-	"os"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"ipfs-share/utils"
 )
 
 type GroupAccessCap struct {
@@ -20,14 +19,15 @@ type GroupAccessCap struct {
 }
 
 func (cap *GroupAccessCap) Save(storage *Storage) error {
-	bytesJSON, err := json.Marshal(cap)
+	capJson, err := json.Marshal(cap)
 	if err != nil {
-		return fmt.Errorf("could not marshal group access capability: GroupAccessCap.Save: %s", err)
+		return fmt.Errorf("could not marshal group access capability: GroupAccessCap.SaveMetadata: %s", err)
 	}
 
 	groupIdBase64 := base64.URLEncoding.EncodeToString(cap.GroupId[:])
-	if err := storage.SaveGroupCap(groupIdBase64, bytesJSON); err != nil {
-		return fmt.Errorf("could not write group cap file: GroupAccessCapability.Save: %s", err)
+	path := storage.GroupAccessCapDir() + groupIdBase64 + CAP_EXT
+	if err := utils.WriteFile(path, capJson); err != nil {
+		return errors.Wrap(err, "could not write group cap file")
 	}
 
 	return nil
@@ -35,10 +35,11 @@ func (cap *GroupAccessCap) Save(storage *Storage) error {
 
 
 type FileCap struct {
-	Id [32]byte
-	FileName string
-	IpfsHash string
-	DataKey  crypto.FileBoxer
+	Id              [32]byte
+	FileName        string
+	IpfsHash        string
+	DataKey         crypto.FileBoxer
+	WriteAccessList []ethcommon.Address // if empty --> everyone has write access to it
 }
 
 func (cap *FileCap) Equal(other *FileCap) bool {
@@ -95,7 +96,7 @@ func DecodeFileCapList(data []byte) ([]*FileCap, error) {
 }
 
 
-func NewGroupFileCap(fileName string, filePath string, ipfs ipfsapi.IIpfs, storage *Storage) (*FileCap, error) {
+func NewGroupFileCap(fileName string, hasWriteAccess []ethcommon.Address) (*FileCap, error) {
 	var id [32]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return nil, errors.Wrap(err, "could not read from crypto/rand")
@@ -108,25 +109,11 @@ func NewGroupFileCap(fileName string, filePath string, ipfs ipfsapi.IIpfs, stora
 
 	boxer := crypto.FileBoxer{Key: key}
 
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not open file")
-	}
-
- 	encBuffer, err := boxer.Seal(file)
- 	if err != nil {
- 		return nil, errors.Wrap(err, "could not encrypt file")
-	}
-
-	hash, err := ipfs.Add(encBuffer)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not ipfs add file")
-	}
-
 	return &FileCap{
-		Id: id,
-		DataKey: boxer,
-		IpfsHash: hash,
-		FileName: fileName,
+		Id:              id,
+		DataKey:         boxer,
+		IpfsHash:        "",
+		FileName:        fileName,
+		WriteAccessList: hasWriteAccess,
 	}, nil
 }

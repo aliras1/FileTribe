@@ -18,8 +18,8 @@ import (
 type MessageType byte
 
 const (
-	GetGroupKey   MessageType = 0
-	AddFile MessageType = 1
+	GetGroupKey MessageType = 0
+	Commit      MessageType = 1
 )
 
 type Message struct {
@@ -30,25 +30,25 @@ type Message struct {
 	Sig     []byte	`json:"sig"`
 }
 
-type AddFileGroupMessage struct {
+type CommitGroupMessage struct {
 	NewFileCapIpfsHash string
-	OldGroupIpfsPath string
-	NewGroupIpfsPath string
+	OldGroupIpfsPath   string
+	NewGroupIpfsHash   []byte
 }
 
-func (msg *AddFileGroupMessage) Encode() ([]byte, error) {
+func (msg *CommitGroupMessage) Encode() ([]byte, error) {
 	enc, err := json.Marshal(msg)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not marshal AddFileGroupMessage")
+		return nil, errors.Wrapf(err, "could not marshal CommitGroupMessage")
 	}
 
 	return enc, nil
 }
 
-func DecodeAddFileGroupMessage(data []byte) (*AddFileGroupMessage, error) {
-	var msg AddFileGroupMessage
+func DecodeAddFileGroupMessage(data []byte) (*CommitGroupMessage, error) {
+	var msg CommitGroupMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
-		return nil, errors.Wrapf(err, "could not unmarshal AddFileGroupMessage")
+		return nil, errors.Wrapf(err, "could not unmarshal CommitGroupMessage")
 	}
 
 	return &msg, nil
@@ -73,7 +73,7 @@ func (approval *Approval) Id() IIdentifier {
 	return NewAddressId(&approval.From)
 }
 
-func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer *crypto.Signer) (*Message, error) {
+func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer crypto.Signer) (*Message, error) {
 	msg := &Message{
 		From: from,
 		Type: msgType,

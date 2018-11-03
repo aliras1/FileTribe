@@ -4,12 +4,34 @@ import (
 	"bytes"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"encoding/base64"
+	"strings"
 )
 
 type IIdentifier interface {
 	Equal(other IIdentifier) bool
 	Data() interface{}
 	ToString() string
+}
+
+type StringId struct {
+	data string
+}
+
+func (id *StringId) Equal(other IIdentifier) bool {
+	castedOther := other.(*StringId)
+	return strings.Compare(id.data, castedOther.data) == 0
+}
+
+func (id *StringId) Data() interface{} {
+	return id.data
+}
+
+func (id *StringId) ToString() string {
+	return id.data
+}
+
+func NewStringId(id string) IIdentifier {
+	return &StringId{data: id}
 }
 
 type Uint32Id struct {
