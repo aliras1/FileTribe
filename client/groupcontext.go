@@ -1,6 +1,8 @@
 package client
 
 import (
+	"bytes"
+	"crypto/rand"
 	"fmt"
 	// "github.com/golang/glog"
 	ipfsapi "ipfs-share/ipfs"
@@ -21,6 +23,7 @@ type IGroupFacade interface {
 	RevokeWriteAccess(filePath string, user ethcommon.Address) error
 	CommitChanges() error
 	Invite(user ethcommon.Address, hasInviteRigth bool) error
+	Leave() error
 	ListFiles() []string
 	ListMembers() []ethcommon.Address
 }
@@ -37,6 +40,7 @@ type GroupContext struct {
 	Storage          *fs.Storage
 	Transactions     *ConcurrentCollection
 	broadcastChannel *ipfsapi.PubSubSubscription
+	proposedKey [32]byte
 	lock sync.Mutex
 }
 
@@ -98,7 +102,7 @@ func NewGroupContextFromCAP(
 }
 
 func (groupCtx *GroupContext) Update() error {
-	name, members, encIpfsHash, err := groupCtx.Network.GetGroup(groupCtx.Group.Id().Data().([32]byte))
+	name, members, encIpfsHash, _, _, err := groupCtx.Network.GetGroup(groupCtx.Group.Id().Data().([32]byte))
 	if err != nil {
 		return errors.Wrapf(err, "could not get group %v", groupCtx.Group.Id().Data())
 	}
@@ -114,6 +118,17 @@ func (groupCtx *GroupContext) Update() error {
 	if err := groupCtx.Repo.update(groupCtx.Group.IpfsHash()); err != nil {
 		return errors.Wrap(err, "could not update group repo")
 	}
+
+	return nil
+}
+
+func (groupCtx *GroupContext) Leave() error {
+	tx, err := groupCtx.Network.LeaveGroup(groupCtx.Group.Id().Data().([32]byte))
+	if err != nil {
+		return errors.Wrap(err, "could not send leave group tx")
+	}
+
+	groupCtx.Transactions.Append(tx)
 
 	return nil
 }
@@ -229,6 +244,27 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 	}
 
 	return nil
+}
+
+func (groupCtx *GroupContext) OnKeyDirty() error {
+	leader, err := groupCtx.Network.GetGroupLeader(groupCtx.Group.Id().Data().([32]byte))
+	if err != nil {
+		return errors.Wrap(err, "could not get group leader")
+	}
+
+	// if user is not the leader --> return
+	if !bytes.Equal(leader.Bytes(), groupCtx.User.Address().Bytes()) {
+		return nil
+	}
+
+	var newKey [32]byte
+	if _, err := rand.Read(newKey[:]); err != nil {
+		return errors.Wrap(err, "could not read from crypto.rand")
+	}
+
+	groupCtx.proposedKey = newKey
+
+	groupCtx.Repo.Reencrypt(newKey)
 }
 
 func (groupCtx *GroupContext) ListFiles() []string {

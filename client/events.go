@@ -7,9 +7,10 @@ import (
 	"ipfs-share/eth"
 	"bytes"
 	. "ipfs-share/collections"
+	"github.com/pkg/errors"
 )
 
-func HandleDebugEvents(ch chan *eth.EthDebug) {
+func (ctx *UserContext) HandleDebugEvents(ch chan *eth.EthDebug) {
 	glog.Info("hadnling debug events...")
 
 	for debug := range ch {
@@ -17,37 +18,32 @@ func HandleDebugEvents(ch chan *eth.EthDebug) {
 	}
 }
 
-type OnGroupInvitationCallback func(registered *eth.EthGroupInvitation)
 
-func HandleGroupInvitationEvents(ch chan *eth.EthGroupInvitation, callback OnGroupInvitationCallback) {
+func (ctx *UserContext) HandleGroupInvitationEvents(ch chan *eth.EthGroupInvitation) {
 	glog.Info("groupInvitation handling...")
 
 	for groupInvitation := range ch {
-		callback(groupInvitation)
+		go ctx.onGroupInvitation(groupInvitation)
 	}
 }
 
-type OnGroupUpdateIpfsCallback func(registered *eth.EthGroupUpdateIpfsHash)
-
-func HandleGroupUpdateIpfsEvents(ch chan *eth.EthGroupUpdateIpfsHash, callback OnGroupUpdateIpfsCallback) {
+func (ctx *UserContext) HandleGroupUpdateIpfsEvents(ch chan *eth.EthGroupUpdateIpfsHash) {
 	glog.Info("groupUpdateIpfs handling...")
 
 	for updateIpfs := range ch {
-		callback(updateIpfs)
+		ctx.onGroupUpdateIpfs(updateIpfs)
 	}
 }
 
-type OnGroupRegisteredCallback func(registered *eth.EthGroupRegistered)
-
-func HandleGroupRegisteredEvents(ch chan *eth.EthGroupRegistered, callback OnGroupRegisteredCallback) {
+func (ctx *UserContext) HandleGroupRegisteredEvents(ch chan *eth.EthGroupRegistered) {
 	glog.Info("group registered handling...")
 
 	for groupRegistered := range ch {
-		callback(groupRegistered)
+		ctx.onGroupRegisteredCallback(groupRegistered)
 	}
 }
 
-func (ctx *UserContext) onGroupUpdateIpfsCallback(updateIpfs *eth.EthGroupUpdateIpfsHash) {
+func (ctx *UserContext) onGroupUpdateIpfs(updateIpfs *eth.EthGroupUpdateIpfsHash) {
 	ctx.lock.Lock()
 	defer ctx.lock.Unlock()
 
@@ -91,7 +87,7 @@ func (ctx *UserContext) onGroupRegisteredCallback(groupRegistered *eth.EthGroupR
 	glog.Infof("group '%s' registered", id.ToString())
 }
 
-func (ctx *UserContext) onGroupInvitationCallback(inv *eth.EthGroupInvitation) {
+func (ctx *UserContext) onGroupInvitation(inv *eth.EthGroupInvitation) {
 	ctx.lock.Lock()
 	defer ctx.lock.Unlock()
 
@@ -123,4 +119,35 @@ func (ctx *UserContext) onGroupInvitationCallback(inv *eth.EthGroupInvitation) {
 	if err := groupCtx.Update(); err != nil {
 		glog.Warningf("could not update group %s", err)
 	}
+}
+
+func (ctx *UserContext) HandleKeyDirtyEvents(ch chan *eth.EthKeyDirty) {
+	glog.Info("keyDirty handling...")
+
+	for keyDirty := range ch {
+		go ctx.onKeyDirty(keyDirty)
+	}
+}
+
+func (ctx *UserContext) onKeyDirty(keyDirty *eth.EthKeyDirty) error {
+	id := NewBytesId(keyDirty.GroupId)
+
+	groupCtxInt := ctx.groups.Get(id)
+	if groupCtxInt == nil {
+		return nil
+	}
+
+	groupCtx := groupCtxInt.(*GroupContext)
+	if err := groupCtx.Update(); err != nil {
+		return errors.Wrap(err, "could not update group context")
+	}
+
+	// left or kicked. maybe send a signal to somewhere?
+	if !groupCtx.Group.IsMember(ctx.user.Address()) {
+		ctx.groups.DeleteWithId(id)
+
+		return nil
+	}
+
+	groupCtx.On
 }
