@@ -48,11 +48,13 @@ type Approval struct {
 type INetwork interface {
 	GetUser(address common.Address) (*Contact, error)
 	RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error)
-	IsUserRegistered(common.Address) (bool, error)
-	CreateGroup(id [32]byte, name string, ipfsPath []byte) (*Transaction, error)
+	IsUserRegistered(id common.Address) (bool, error)
+	CreateGroup(id [32]byte, name string, ipfsHash []byte) (*Transaction, error)
 	InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) (*Transaction, error)
-	GetGroup(groupId [32]byte) (string, []common.Address, []byte, error)
-	UpdateGroupIpfsHash(groupId [32]byte, newIpfsPath []byte, approvals []*Approval) (*Transaction, error)
+	GetGroup(groupId [32]byte) (name string, members []common.Address, ipfsHash []byte, keySalt [32]byte, keyHash [32]byte, err error)
+	UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error)
+	LeaveGroup(groupId [32]byte) (*Transaction, error)
+	GetGroupLeader(groupId [32]byte) (common.Address, error)
 	TransactionReceipt(tx *types.Transaction) (*types.Receipt, error)
 
 	// contract events
@@ -67,6 +69,9 @@ type INetwork interface {
 
 	GetGroupRegisteredSub() *event.Subscription
 	GetGroupRegisteredChannel() chan *eth.EthGroupRegistered
+
+	GetKeyDirtySub() *event.Subscription
+	GetKeyDirtyChannel() chan *eth.EthKeyDirty
 
 	Close()
 }
@@ -88,6 +93,9 @@ type Network struct {
 
 	groupRegisteredSub     event.Subscription
 	groupRegisteredChannel chan *eth.EthGroupRegistered
+
+	keyDirtySub     event.Subscription
+	keyDirtyChannel chan *eth.EthKeyDirty
 
 	debugSub     event.Subscription
 	debugChannel chan *eth.EthDebug
@@ -181,6 +189,7 @@ func NewNetwork(wsAddress, ethKeyPath, contractAddress, password string) (INetwo
 		groupInvitationChannel: channelGroupInvitation,
 		groupUpdateIpfsChannel: channelGroupUpdateIpfs,
 		groupRegisteredChannel: make(chan *eth.EthGroupRegistered),
+		keyDirtyChannel: make(chan *eth.EthKeyDirty),
 
 		nonce: nonce,
 	}
@@ -215,11 +224,16 @@ func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 	if err != nil {
 		return err
 	}
+	subKeyDirty, err := network.Session.Contract.WatchKeyDirty(opts, network.keyDirtyChannel)
+	if err != nil {
+		return err
+	}
 
 	network.debugSub = subDebug
 	network.groupInvitationSub = subGroupInvitation
 	network.groupUpdateIpfsSub = subGroupUpdateIpfs
 	network.groupRegisteredSub = subGroupRegistered
+	network.keyDirtySub = subKeyDirty
 
 	return nil
 }
@@ -260,7 +274,14 @@ func (network *Network) GetDebugChannel() chan *eth.EthDebug {
 	return network.debugChannel
 }
 
-func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error) {
+func (network *Network) GetKeyDirtySub() *event.Subscription {
+	return &network.keyDirtySub
+}
+func (network *Network) GetKeyDirtyChannel() chan *eth.EthKeyDirty {
+	return network.keyDirtyChannel
+}
+
+func prepareApprovals(approvals []*Approval) ([]common.Address, [][32]byte, [][32]byte, []uint8, error) {
 	var members []common.Address
 	var rs [][32]byte
 	var ss [][32]byte
@@ -268,7 +289,7 @@ func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte
 
 	for _, approval := range approvals {
 		if len(approval.Signature) != 65 {
-			return nil, errors.New("signature length must be 65")
+			return nil, nil, nil, nil, errors.New("signature length must be 65")
 		}
 
 		members = append(members, approval.From)
@@ -288,12 +309,40 @@ func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte
 		vs = append(vs, v)
 	}
 
+	return members, rs, ss, vs, nil
+}
+
+func (network *Network) LeaveGroup(groupId [32]byte) (*Transaction, error) {
+
+	tx, err := network.Session.LeaveGroup(groupId)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not send leaveGroup transaction")
+	}
+
+	return &Transaction{tx: tx}, err
+}
+
+func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error) {
+	members, rs, ss, vs, err := prepareApprovals(approvals)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not prepare approvals")
+	}
+
 	tx, err := network.Session.UpdateGroupIpfsHash(groupId, newIpfsHash, members, rs, ss, vs)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not send updateGroupIpfsPath transaction")
 	}
 
 	return &Transaction{tx: tx}, err
+}
+
+func (network *Network) GetGroupLeader(groupId [32]byte) (common.Address, error) {
+	leader, err := network.Session.GetLeader(groupId)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	return leader, nil
 }
 
 func (network *Network) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error) {
@@ -351,7 +400,7 @@ func (network *Network) InviteUser(groupId [32]byte, newMember common.Address, c
 	return &Transaction{tx: tx}, err
 }
 
-func (network *Network) GetGroup(groupId [32]byte) (string, []common.Address, []byte, error) {
+func (network *Network) GetGroup(groupId [32]byte) (string, []common.Address, []byte, [32]byte, [32]byte, error) {
 	return network.Session.GetGroup(groupId)
 }
 

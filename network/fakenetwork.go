@@ -37,6 +37,9 @@ type FakeNetwork struct {
 	groupRegisteredSubs     []event.Subscription
 	groupRegisteredChannels []chan *eth.EthGroupRegistered
 
+	keyDirtySubs     []event.Subscription
+	keyDirtyChannels []chan *eth.EthKeyDirty
+
 	// Debug event
 	debugSubs     []event.Subscription
 	debugChannels []chan *eth.EthDebug
@@ -63,10 +66,10 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 
 	alloc := make(map[common.Address]core.GenesisAccount)
 	for _, auth := range auths {
-		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(1000000000000)}
+		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(1000000000000000)}
 	}
 
-	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 7000001)
+	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 9000000)
 
 	_, _, ethclient, err := eth.DeployEth(auths[0], simulator)
 	if err != nil {
@@ -79,12 +82,18 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 
 	var channelGroupInvitations []chan *eth.EthGroupInvitation
 	var subGroupInvitations []event.Subscription
+
 	var channelGroupUpdateIpfss []chan *eth.EthGroupUpdateIpfsHash
 	var subGroupUpdateIpfss []event.Subscription
+
 	var channelGroupRegistered []chan *eth.EthGroupRegistered
 	var subGroupGroupRegistered []event.Subscription
+
 	var channelDebugs []chan *eth.EthDebug
 	var subDebugs []event.Subscription
+
+	var channelKeyDirtys []chan *eth.EthKeyDirty
+	var subKeyDirtys []event.Subscription
 
 	for i := 0; i < accCount; i++ {
 		// Subscribing to events for each user...
@@ -122,6 +131,15 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 		}
 		channelDebugs = append(channelDebugs, chDebug)
 		subDebugs = append(subDebugs, subDebug)
+
+		// KeyDirty event
+		chKeyDirty := make(chan *eth.EthKeyDirty)
+		subKeyDirty, err := ethclient.WatchDebug(opts, chDebug)
+		if err != nil {
+			return nil, err
+		}
+		channelKeyDirtys = append(channelKeyDirtys, chKeyDirty)
+		subKeyDirtys = append(subKeyDirtys, subKeyDirty)
 	}
 
 
@@ -180,6 +198,13 @@ func (network *FakeNetwork) GetDebugChannel() chan *eth.EthDebug {
 	return network.debugChannels[network.currentAcc]
 }
 
+func (network *FakeNetwork) GetKeyDirtySub() *event.Subscription {
+	return &network.keyDirtySubs[network.currentAcc]
+}
+func (network *FakeNetwork) GetKeyDirtyChannel() chan *eth.EthKeyDirty {
+	return network.keyDirtyChannels[network.currentAcc]
+}
+
 func (network *FakeNetwork) IsUserRegistered(id common.Address) (bool, error) {
 	registered, err := network.Client.IsUserRegistered(&bind.CallOpts{Pending: true}, id)
 	if err != nil {
@@ -189,35 +214,31 @@ func (network *FakeNetwork) IsUserRegistered(id common.Address) (bool, error) {
 }
 
 
+func (network *FakeNetwork) LeaveGroup(groupId [32]byte) (*Transaction, error) {
+
+	tx, err := network.Client.LeaveGroup(network.auths[network.currentAcc], groupId)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not send leaveGroup transaction")
+	}
+
+	network.Simulator.Commit()
+
+	return &Transaction{tx: tx}, err
+}
+
+func (network *FakeNetwork) GetGroupLeader(groupId [32]byte) (common.Address, error) {
+	leader, err := network.Client.GetLeader(&bind.CallOpts{Pending: true}, groupId)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	return leader, nil
+}
 
 func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error) {
-	//network.Simulator.EstimateGas(network.Auth.Context, )
-
-	var members []common.Address
-	var rs [][32]byte
-	var ss [][32]byte
-	var vs []uint8
-
-	for _, approval := range approvals {
-		if len(approval.Signature) != 65 {
-			return nil, errors.New("signature length must be 65")
-		}
-
-		members = append(members, approval.From)
-
-		var r [32]byte
-		copy(r[:], approval.Signature[:32])
-		rs = append(rs, r)
-
-		var s [32]byte
-		copy(s[:], approval.Signature[32:64])
-		ss = append(ss, s)
-
-		v := approval.Signature[64]
-		if v < 27 {
-			v = v + 27;
-		}
-		vs = append(vs, v)
+	members, rs, ss, vs, err := prepareApprovals(approvals)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not prepare approvals")
 	}
 
 	auth := network.auths[network.currentAcc]
@@ -237,7 +258,7 @@ func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []
 
 func (network *FakeNetwork) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error) {
 	auth := network.auths[network.currentAcc]
-	auth.GasLimit = 3000000
+	auth.GasLimit = 2000000
 
 	tx, err := network.Client.RegisterUser(auth, username, ipfsPeerId, boxingKey)
 	if err != nil {
@@ -274,7 +295,7 @@ func (network *FakeNetwork) CreateGroup(id [32]byte, name string, ipfsHash []byt
 	return &Transaction{tx: tx}, nil
 }
 
-func (network *FakeNetwork) GetGroup(groupId [32]byte) (string, []common.Address, []byte, error) {
+func (network *FakeNetwork) GetGroup(groupId [32]byte) (string, []common.Address, []byte, [32]byte, [32]byte, error) {
 	return network.Client.GetGroup(&bind.CallOpts{Pending: true}, groupId)
 }
 

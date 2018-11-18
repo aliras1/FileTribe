@@ -4,17 +4,23 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	// "github.com/golang/glog"
-	ipfsapi "ipfs-share/ipfs"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-
-	nw "ipfs-share/network"
-	"github.com/pkg/errors"
-	. "ipfs-share/collections"
-	"sync"
+	"ipfs-share/client/fs/caps"
 	"path"
+	"sync"
+
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
+	"github.com/pkg/errors"
+
+	com "ipfs-share/client/communication"
+	sessclients "ipfs-share/client/communication/sessions/clients"
+	sesscommon "ipfs-share/client/communication/sessions/common"
 	"ipfs-share/client/fs"
+	"ipfs-share/client/interfaces"
+	. "ipfs-share/collections"
+	"ipfs-share/crypto"
+	ipfsapi "ipfs-share/ipfs"
+	nw "ipfs-share/network"
 )
 
 type IGroupFacade interface {
@@ -29,19 +35,19 @@ type IGroupFacade interface {
 }
 
 type GroupContext struct {
-	User             IUser
-	Group            IGroup
-	P2P *P2PServer
-	Repo             *GroupRepo
-	GroupConnection  *GroupConnection
-	AddressBook *ConcurrentCollection
+	User             interfaces.IUser
+	Group            interfaces.IGroup
+	P2P 			 *com.P2PServer
+	Repo             *fs.GroupRepo
+	GroupConnection  *com.GroupConnection
+	AddressBook		 *ConcurrentCollection
 	Network          nw.INetwork
 	Ipfs             ipfsapi.IIpfs
 	Storage          *fs.Storage
 	Transactions     *ConcurrentCollection
 	broadcastChannel *ipfsapi.PubSubSubscription
-	proposedKey [32]byte
-	lock sync.Mutex
+	proposedKey 	 crypto.SymmetricKey
+	lock 		     sync.Mutex
 }
 
 func (groupCtx *GroupContext) Id() IIdentifier {
@@ -49,9 +55,9 @@ func (groupCtx *GroupContext) Id() IIdentifier {
 }
 
 func NewGroupContext(
-	group IGroup,
-	user IUser,
-	p2p *P2PServer,
+	group interfaces.IGroup,
+	user interfaces.IUser,
+	p2p *com.P2PServer,
 	addressBook *ConcurrentCollection,
 	network nw.INetwork,
 	ipfs ipfsapi.IIpfs,
@@ -71,21 +77,33 @@ func NewGroupContext(
 		Transactions:    transactions,
 	}
 
-	repo, err := NewGroupRepo(group, user.Address(), storage, ipfs)
+	repo, err := fs.NewGroupRepo(group, user.Address(), storage, ipfs)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create group repo")
 	}
 
 	groupContext.Repo = repo
-	groupContext.GroupConnection = NewGroupConnection(groupContext)
+	groupContext.GroupConnection = com.NewGroupConnection(
+		group,
+		repo,
+		user,
+		addressBook,
+		onSessionClosed,
+		p2p,
+		ipfs,
+		network)
 
 	return groupContext, nil
 }
 
+func onSessionClosed(session sesscommon.ISession) {
+	glog.Infof("session %d closed with error: %s", session.Id().Data().(uint32), session.Error())
+}
+
 func NewGroupContextFromCAP(
-	cap *fs.GroupAccessCap,
-	user IUser,
-	p2p *P2PServer,
+	cap *caps.GroupAccessCap,
+	user interfaces.IUser,
+	p2p *com.P2PServer,
 	addressBook *ConcurrentCollection,
 	network nw.INetwork,
 	ipfs ipfsapi.IIpfs,
@@ -111,11 +129,11 @@ func (groupCtx *GroupContext) Update() error {
 		return errors.Wrap(err, "could not update group")
 	}
 
-	if err := groupCtx.Group.Save(groupCtx.Storage); err != nil {
-		return errors.Wrapf(err, "could not save group")
+	if err := groupCtx.Save(); err != nil {
+		return errors.Wrap(err, "could not save group")
 	}
 
-	if err := groupCtx.Repo.update(groupCtx.Group.IpfsHash()); err != nil {
+	if err := groupCtx.Repo.Update(groupCtx.Group.IpfsHash()); err != nil {
 		return errors.Wrap(err, "could not update group repo")
 	}
 
@@ -138,16 +156,16 @@ func (groupCtx *GroupContext) Stop() {
 }
 
 func (groupCtx *GroupContext) CommitChanges() error {
-	hash, err := groupCtx.Repo.CommitChanges()
+	hash, err := groupCtx.Repo.CommitChanges(groupCtx.Group.Boxer())
 	if err != nil {
 		return errors.Wrap(err, "could commit group repo's changes")
 	}
 
-	session := NewCommitChangesGroupSessionClient(
+	session := sessclients.NewCommitChangesGroupSessionClient(
 		hash,
 		groupCtx.User,
 		groupCtx.Group,
-		groupCtx.GroupConnection,
+		groupCtx.broadcast,
 		groupCtx.P2P.SessionClosedChan,
 		func(encIpfsHash []byte, approvals []*nw.Approval) {
 		groupId := groupCtx.Group.Id().Data().([32]byte)
@@ -166,6 +184,10 @@ func (groupCtx *GroupContext) CommitChanges() error {
 	return nil
 }
 
+func (groupCtx *GroupContext) broadcast(msg []byte) error {
+	return groupCtx.GroupConnection.Broadcast(msg)
+}
+
 func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight bool) error {
 	fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, groupCtx.Group.Name)
 
@@ -181,7 +203,16 @@ func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight
 
 
 func (groupCtx *GroupContext) Save() error {
-	return fmt.Errorf("not implemented: GroupContext.SaveMetadata")
+	cap := &caps.GroupAccessCap{
+		Boxer: groupCtx.Group.Boxer(),
+		GroupId: groupCtx.Group.Id().Data().([32]byte),
+	}
+
+	if err := groupCtx.Storage.SaveGroupAccessCap(cap); err != nil {
+		return errors.Wrap(err, "could not save group cap")
+	}
+
+	return nil
 }
 
 
@@ -195,9 +226,8 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 		return errors.New("can not grant write access to non group members")
 	}
 
-	var file *fs.File
-	fileInt := groupCtx.Repo.files.Get(NewStringId(path.Base(filePath)))
-	if fileInt == nil {
+	file := groupCtx.Repo.Get(NewStringId(path.Base(filePath)))
+	if file == nil {
 		tmpFile, err := fs.NewGroupFile(
 			filePath,
 			[]ethcommon.Address{groupCtx.User.Address()},
@@ -207,8 +237,6 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 			return errors.Wrap(err, "could not create new group file")
 		}
 		file = tmpFile
-	} else {
-		file = fileInt.(*fs.File)
 	}
 
 	if err := file.GrantWriteAccess(groupCtx.User.Address(), user); err != nil {
@@ -223,9 +251,8 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 		return errors.New("can not revoke write access from non group members")
 	}
 
-	var file *fs.File
-	fileInt := groupCtx.Repo.files.Get(NewStringId(path.Base(filePath)))
-	if fileInt == nil {
+	file := groupCtx.Repo.Get(NewStringId(path.Base(filePath)))
+	if file == nil {
 		tmpFile, err := fs.NewGroupFile(
 			filePath,
 			[]ethcommon.Address{groupCtx.User.Address()},
@@ -235,8 +262,6 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 			return errors.Wrap(err, "could not create new group file")
 		}
 		file = tmpFile
-	} else {
-		file = fileInt.(*fs.File)
 	}
 
 	if err := file.RevokeWriteAccess(groupCtx.User.Address(), user); err != nil {
@@ -262,13 +287,74 @@ func (groupCtx *GroupContext) OnKeyDirty() error {
 		return errors.Wrap(err, "could not read from crypto.rand")
 	}
 
-	groupCtx.proposedKey = newKey
+	groupCtx.proposedKey = crypto.SymmetricKey{Key: newKey}
 
-	groupCtx.Repo.Reencrypt(newKey)
+	hash, err := groupCtx.Repo.ReEncrypt(groupCtx.proposedKey)
+	if err != nil {
+		return errors.Wrap(err, "could not re-encrypt group repo")
+	}
+
+	session := sessclients.NewCommitChangesGroupSessionClient(
+		hash,
+		groupCtx.User,
+		groupCtx.Group,
+		groupCtx.broadcast,
+		groupCtx.P2P.SessionClosedChan,
+		func(encIpfsHash []byte, approvals []*nw.Approval) {
+			groupId := groupCtx.Group.Id().Data().([32]byte)
+			tx, err := groupCtx.Network.UpdateGroupIpfsHash(groupId, encIpfsHash, approvals)
+			if err != nil {
+				glog.Errorf("could not send update group ipfs hash transaction: %s", err)
+				return
+			}
+
+			groupCtx.Transactions.Append(tx)
+		})
+
+	groupCtx.P2P.AddSession(session)
+	go session.Run()
+
+	return nil
+}
+
+func (groupCtx *GroupContext) ReEncrpyt() error {
+	hash, err := groupCtx.Repo.ReEncrypt(groupCtx.Group.Boxer())
+	if err != nil {
+		return errors.Wrap(err, "could not re-encrypt group repo")
+	}
+
+	session := sessclients.NewCommitChangesGroupSessionClient(
+		hash,
+		groupCtx.User,
+		groupCtx.Group,
+		groupCtx.broadcast,
+		groupCtx.P2P.SessionClosedChan,
+		func(encIpfsHash []byte, approvals []*nw.Approval) {
+			groupId := groupCtx.Group.Id().Data().([32]byte)
+			tx, err := groupCtx.Network.UpdateGroupIpfsHash(groupId, encIpfsHash, approvals)
+			if err != nil {
+				glog.Errorf("could not send update group ipfs hash transaction: %s", err)
+				return
+			}
+
+			groupCtx.Transactions.Append(tx)
+		})
+
+	groupCtx.P2P.AddSession(session)
+	go session.Run()
+
+	return nil
 }
 
 func (groupCtx *GroupContext) ListFiles() []string {
-	return groupCtx.Repo.Files()
+	var fileNames []string
+	files := groupCtx.Repo.Files()
+
+	for _, file := range files {
+		fileNames = append(fileNames, file.Cap.FileName)
+	}
+
+	return fileNames
 }
 
 func (groupCtx *GroupContext) ListMembers() []ethcommon.Address {

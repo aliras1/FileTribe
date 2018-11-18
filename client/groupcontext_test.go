@@ -5,18 +5,18 @@ import (
 
 	nw "ipfs-share/network"
 
-	"github.com/golang/glog"
-	"fmt"
 	"flag"
+	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/golang/glog"
 	"github.com/golang/mock/gomock"
 	"time"
 
-	ipfsapi "ipfs-share/ipfs"
-	"github.com/libp2p/go-libp2p-peer"
 	"crypto/ecdsa"
-	"ipfs-share/utils"
+	"github.com/libp2p/go-libp2p-peer"
 	"io/ioutil"
+	ipfsapi "ipfs-share/ipfs"
+	"ipfs-share/utils"
 )
 
 type FakePubSubRecord struct {
@@ -208,7 +208,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	fmt.Println("----------- Alice init commit ------------")
 
 	fileAlice := "./alice/data/userdata/root/" + groupAtAlice.Group.Id().ToString() + "/rrrepo.go"
-	if err := utils.CopyFile("./grouprepo.go", fileAlice); err != nil {
+	if err := utils.CopyFile("./user.go", fileAlice); err != nil {
 		t.Fatal(err)
 	}
 	if err := groupAtAlice.CommitChanges(); err != nil {
@@ -216,6 +216,21 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	time.Sleep(5 * time.Second)
+	fmt.Println("----------- Re-encrypt repo ------------")
+	files := groupAtAlice.Repo.Files()
+	f := files[0]
+	fmt.Println(f.Cap.DataKey.Key)
+
+	if err := groupAtAlice.ReEncrpyt(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+
+	files = groupAtAlice.Repo.Files()
+	newF := files[0]
+	fmt.Println(newF.Cap.DataKey.Key)
+
 	fmt.Println("----------- Bob change file ------------")
 
 	bobGroups = bob.Groups()

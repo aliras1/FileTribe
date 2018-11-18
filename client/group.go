@@ -1,36 +1,23 @@
 package client
 
 import (
+	"bytes"
 	"crypto/rand"
-	"fmt"
+	"encoding/base64"
+	"ipfs-share/client/fs/caps"
+	"strings"
+	"sync"
 
-	"ipfs-share/crypto"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"bytes"
-	. "ipfs-share/collections"
-	"encoding/base64"
-	"sync"
-	"strings"
-	"ipfs-share/client/fs"
-)
 
-type IGroup interface {
-	Id() IIdentifier
-	Name() string
-	IpfsHash() string
-	SetIpfsHash(ipfsHash string, encIpfsHash []byte) error
-	EncryptedIpfsHash() []byte
-	AddMember(user ethcommon.Address)
-	RemoveMember(user ethcommon.Address)
-	IsMember(user ethcommon.Address) bool
-	CountMembers() int
-	Members() []ethcommon.Address
-	Boxer() crypto.SymmetricKey
-	Update(name string, members []ethcommon.Address, encIpfsHash []byte) error
-	Save(storage *fs.Storage) error
-}
+	comcommon "ipfs-share/client/communication/common"
+	sessclients "ipfs-share/client/communication/sessions/clients"
+	"ipfs-share/client/interfaces"
+	. "ipfs-share/collections"
+	"ipfs-share/crypto"
+)
 
 type Group struct {
 	id                IIdentifier
@@ -42,7 +29,7 @@ type Group struct {
 	lock sync.RWMutex
 }
 
-func NewGroup(groupName string) IGroup {
+func NewGroup(groupName string) interfaces.IGroup {
 	var id [32]byte
 	rand.Read(id[:])
 
@@ -62,7 +49,7 @@ func NewGroup(groupName string) IGroup {
 	}
 }
 
-func NewGroupFromCap(cap *fs.GroupAccessCap) IGroup {
+func NewGroupFromCap(cap *caps.GroupAccessCap) interfaces.IGroup {
 	return &Group {
 		id: NewBytesId(cap.GroupId),
 		boxer: cap.Boxer,
@@ -70,7 +57,7 @@ func NewGroupFromCap(cap *fs.GroupAccessCap) IGroup {
 }
 
 func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
-	_, members, _, err := ctx.network.GetGroup(groupId)
+	_, members, _, _, _, err := ctx.network.GetGroup(groupId)
 	if err != nil {
 		errors.Wrap(err, "could not get group from network")
 	}
@@ -85,12 +72,12 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 			continue
 		}
 
-		if err := ctx.addressBook.Append(NewContact(c, ctx.ipfs)); err != nil {
+		if err := ctx.addressBook.Append(comcommon.NewContact(c, ctx.ipfs)); err != nil {
 			glog.Warningf("could not append elem: %s", err)
 		}
-		contact := ctx.addressBook.Get(NewAddressId(&c.Address)).(*Contact)
+		contact := ctx.addressBook.Get(NewAddressId(&c.Address)).(*comcommon.Contact)
 
-		session := NewGetGroupKeySessionClient(groupId, contact, ctx.user, ctx.storage, ctx.p2p.SessionClosedChan, func(cap *fs.GroupAccessCap) {
+		session := sessclients.NewGetGroupKeySessionClient(groupId, contact, ctx.user, ctx.storage, ctx.p2p.SessionClosedChan, func(cap *caps.GroupAccessCap) {
 			groupCtx, err := NewGroupContextFromCAP(
 				cap,
 				ctx.user,
@@ -115,9 +102,8 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 				glog.Warningf("could not append elem: %s", err)
 			}
 		})
-		if err := ctx.p2p.sessions.Append(session); err != nil {
-			glog.Warningf("could not append elem: %s", err)
-		}
+
+		ctx.p2p.AddSession(session)
 
 		go session.Run()
 	}
@@ -125,18 +111,21 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 	return nil
 }
 
-func (g *Group) Save(storage *fs.Storage) error {
+func (g *Group) Encode() ([]byte, error) {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	cap := fs.GroupAccessCap{
+	cap := caps.GroupAccessCap{
 		GroupId: g.id.Data().([32]byte),
 		Boxer:   g.boxer,
 	}
-	if err := cap.Save(storage); err != nil {
-		return fmt.Errorf("could not store ga cap: Group.SaveMetadata: %s", err)
+
+	data, err := cap.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not encode group data")
 	}
-	return nil
+
+	return data, nil
 }
 
 // Note that it is not enough to only receive ipfsHash and

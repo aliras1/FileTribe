@@ -1,13 +1,13 @@
 package client
 
 import (
+	"bytes"
 
 	"github.com/golang/glog"
-
-	"ipfs-share/eth"
-	"bytes"
-	. "ipfs-share/collections"
 	"github.com/pkg/errors"
+
+	. "ipfs-share/collections"
+	"ipfs-share/eth"
 )
 
 func (ctx *UserContext) HandleDebugEvents(ch chan *eth.EthDebug) {
@@ -67,7 +67,7 @@ func (ctx *UserContext) onGroupUpdateIpfs(updateIpfs *eth.EthGroupUpdateIpfsHash
 		glog.Errorf("could not update group context: %s", err)
 	}
 
-	if err := groupCtx.Repo.update(string(newIpfsHash)); err != nil {
+	if err := groupCtx.Repo.Update(string(newIpfsHash)); err != nil {
 		glog.Errorf("could not update group %s's repo with ipfs hash %s: %s", groupCtx.Group.Id().ToString(), updateIpfs.IpfsHash, err)
 	}
 }
@@ -149,5 +149,5 @@ func (ctx *UserContext) onKeyDirty(keyDirty *eth.EthKeyDirty) error {
 		return nil
 	}
 
-	groupCtx.On
+	return nil
 }

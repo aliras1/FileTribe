@@ -1,18 +1,21 @@
 package fs
 
 import (
-	"github.com/sergi/go-diff/diffmatchpatch"
-	"encoding/json"
 	"bytes"
-	"ipfs-share/crypto"
+	"encoding/json"
 	"io"
+
 	"github.com/pkg/errors"
+	"github.com/sergi/go-diff/diffmatchpatch"
+
+	"ipfs-share/crypto"
 )
 
 type DiffNode struct {
-	Hash []byte
-	Diff []diffmatchpatch.Diff
-	Next string
+	Hash      []byte
+	Diff      []diffmatchpatch.Diff
+	Next      string
+	NextBoxer crypto.FileBoxer
 }
 
 func (diff *DiffNode) Encode() ([]byte, error) {

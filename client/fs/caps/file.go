@@ -1,38 +1,16 @@
-package fs
+package caps
 
 import (
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"ipfs-share/crypto"
-	"github.com/pkg/errors"
 	"bytes"
-	"strings"
 	"crypto/rand"
+	"encoding/json"
+	"strings"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"ipfs-share/utils"
+	"github.com/pkg/errors"
+
+	"ipfs-share/crypto"
 )
-
-type GroupAccessCap struct {
-	GroupId [32]byte
-	Boxer   crypto.SymmetricKey
-}
-
-func (cap *GroupAccessCap) Save(storage *Storage) error {
-	capJson, err := json.Marshal(cap)
-	if err != nil {
-		return fmt.Errorf("could not marshal group access capability: GroupAccessCap.SaveMetadata: %s", err)
-	}
-
-	groupIdBase64 := base64.URLEncoding.EncodeToString(cap.GroupId[:])
-	path := storage.GroupAccessCapDir() + groupIdBase64 + CAP_EXT
-	if err := utils.WriteFile(path, capJson); err != nil {
-		return errors.Wrap(err, "could not write group cap file")
-	}
-
-	return nil
-}
-
 
 type FileCap struct {
 	Id              [32]byte

@@ -2,9 +2,11 @@ package fs
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"ipfs-share/client/fs/caps"
 	"os"
 	"path"
 	"github.com/golang/glog"
@@ -101,12 +103,12 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) error
 
 // Gets all the locally stored group access capabilities from
 // directory data/userdata/caps/GA/
-func (storage *Storage) GetGroupCaps() ([]GroupAccessCap, error) {
-	var caps []GroupAccessCap
+func (storage *Storage) GetGroupCaps() ([]caps.GroupAccessCap, error) {
+	var capabilities []caps.GroupAccessCap
 	// read capabilities from caps and try to refresh them
 	groupCapFiles, err := ioutil.ReadDir(storage.capsGAPath)
 	if err != nil {
-		return caps, err
+		return capabilities, err
 	}
 	for _, groupCapFile := range groupCapFiles {
 		if groupCapFile.IsDir() {
@@ -118,15 +120,30 @@ func (storage *Storage) GetGroupCaps() ([]GroupAccessCap, error) {
 			glog.Warning("could not read file '%s': Storage.GetGroupCaps: %s", filePath, err)
 			continue
 		}
-		var cap GroupAccessCap
+		var cap caps.GroupAccessCap
 		if err := json.Unmarshal(capBytes, &cap); err != nil {
 			glog.Warning("could not unmarshal group cap: Storage.GetGroupCaps: %s", err)
 			continue
 		}
 		cap.Boxer.RNG = rand.Reader
-		caps = append(caps, cap)
+		capabilities = append(capabilities, cap)
 	}
-	return caps, nil
+	return capabilities, nil
+}
+
+func (storage *Storage) SaveGroupAccessCap(cap *caps.GroupAccessCap) error {
+	capJson, err := json.Marshal(cap)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal group access capability")
+	}
+
+	groupIdBase64 := base64.URLEncoding.EncodeToString(cap.GroupId[:])
+	path := storage.GroupAccessCapDir() + groupIdBase64 + CAP_EXT
+	if err := utils.WriteFile(path, capJson); err != nil {
+		return errors.Wrap(err, "could not write group cap file")
+	}
+
+	return nil
 }
 
 func (storage *Storage) GroupAccessCapDir() string {

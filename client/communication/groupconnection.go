@@ -1,16 +1,31 @@
-package client
+package communication
 
 import (
 	"github.com/golang/glog"
+	"ipfs-share/client/communication/common"
+	"ipfs-share/client/communication/sessions"
+	sesscommon "ipfs-share/client/communication/sessions/common"
+	"ipfs-share/client/fs"
+	"ipfs-share/client/interfaces"
+	"ipfs-share/collections"
 	ipfsapi "ipfs-share/ipfs"
 	"bytes"
 	"encoding/base64"
 	"github.com/pkg/errors"
+	"ipfs-share/network"
 )
 
 
 type GroupConnection struct {
-	groupCtx *GroupContext
+	group interfaces.IGroup
+	repo *fs.GroupRepo
+	user interfaces.IUser
+	addressBook *collections.ConcurrentCollection
+	sessionClosed sesscommon.SessionClosedCallback
+	p2p *P2PServer
+
+	ipfs ipfsapi.IIpfs
+	network network.INetwork
 
 	channelState  chan []byte
 	channelStop   chan bool
@@ -18,19 +33,36 @@ type GroupConnection struct {
 	groupSubscription ipfsapi.IPubSubSubscription
 }
 
-func NewGroupConnection(groupCtx *GroupContext) *GroupConnection {
+func NewGroupConnection(
+	group interfaces.IGroup,
+	repo *fs.GroupRepo,
+	user interfaces.IUser,
+	addressBook *collections.ConcurrentCollection,
+	sessionClosed sesscommon.SessionClosedCallback,
+	p2p *P2PServer,
+	ipfs ipfsapi.IIpfs,
+	network network.INetwork,
+	) *GroupConnection {
+
 	glog.Infof("Creating group connection...")
 
 	conn := GroupConnection{
-		groupCtx: groupCtx,
+		group: group,
+		repo: repo,
+		user: user,
+		addressBook: addressBook,
+		sessionClosed: sessionClosed,
+		p2p: p2p,
 		channelStop: make(chan bool),
+		ipfs: ipfs,
+		network: network,
 	}
 
-	glog.Infof("%s: subscribing to ipfs pubsub topic %s", groupCtx.User.Name, groupCtx.Group.Id().ToString())
+	glog.Infof("subscribing to ipfs pubsub topic %s", group.Id().ToString())
 
-	sub, err := groupCtx.Ipfs.PubSubSubscribe(groupCtx.Group.Id().ToString())
+	sub, err := ipfs.PubSubSubscribe(group.Id().ToString())
 	if err != nil {
-		glog.Errorf("%s: could not ipfs subscribe to topic %s", groupCtx.User.Name, groupCtx.Group.Id().ToString())
+		glog.Errorf("could not ipfs subscribe to topic %s", group.Id().ToString())
 		return nil
 	}
 
@@ -43,14 +75,14 @@ func NewGroupConnection(groupCtx *GroupContext) *GroupConnection {
 
 
 func (conn *GroupConnection) Broadcast(msg []byte) error {
-	id := conn.groupCtx.Group.Id().Data().([32]byte)
+	id := conn.group.Id().Data().([32]byte)
 	topic := base64.URLEncoding.EncodeToString(id[:])
 
-	boxer := conn.groupCtx.Group.Boxer()
+	boxer := conn.group.Boxer()
 	encMsg := boxer.BoxSeal(msg)
 	msgString := base64.URLEncoding.EncodeToString(encMsg)
 
-	if err := conn.groupCtx.Ipfs.PubSubPublish(topic, msgString); err != nil {
+	if err := conn.ipfs.PubSubPublish(topic, msgString); err != nil {
 		return errors.Wrap(err, "could not send group message to all members")
 	}
 
@@ -58,7 +90,7 @@ func (conn *GroupConnection) Broadcast(msg []byte) error {
 }
 
 func (conn *GroupConnection) connectionListener() {
-	glog.Infof("GroupConnection for user '%s' group '%s' is running...", conn.groupCtx.User.Name, conn.groupCtx.Group.Id().ToString())
+	glog.Infof("%s: GroupConnection for group '%s' is running...", conn.user.Name(), conn.group.Id().ToString())
 	for {
 		select {
 		case <- conn.channelStop:
@@ -75,7 +107,7 @@ func (conn *GroupConnection) connectionListener() {
 					continue
 				}
 
-				glog.Infof("%s got a group message", conn.groupCtx.User.Name)
+				glog.Infof("got a group message")
 
 				encMsg, err := base64.URLEncoding.DecodeString((string)(pubsubRecord.Data))
 				if err != nil {
@@ -83,32 +115,32 @@ func (conn *GroupConnection) connectionListener() {
 					continue
 				}
 
-				boxer := conn.groupCtx.Group.Boxer()
+				boxer := conn.group.Boxer()
 				msgData, ok := boxer.BoxOpen(encMsg)
 				if !ok {
 					glog.Warningf("could not decrypt pubsub message")
 					continue
 				}
 
-				msg, err := DecodeMessage(msgData)
+				msg, err := common.DecodeMessage(msgData)
 				if err != nil {
 					glog.Warning("could not decode pubsub record message")
 					continue
 				}
 
-				if !conn.groupCtx.Group.IsMember(msg.From) {
+				if !conn.group.IsMember(msg.From) {
 					glog.Warningf("non group member %v has written to the group channel", msg.From.Bytes())
 					continue
 				}
 
-				contact, err := msg.Validate(conn.groupCtx.Network, conn.groupCtx.Ipfs)
+				contact, err := msg.Validate(conn.network, conn.ipfs)
 				if err != nil {
-					glog.Warningf("invalid pubsub message to group %v from user %v", conn.groupCtx.Group.Id().Data(), msg.From.Bytes())
+					glog.Warningf("invalid pubsub message to group %v from user %v", conn.group.Id().Data(), msg.From.Bytes())
 					continue
 				}
 
 				// TODO: check this with Ipfs address at the beginning
-				address := conn.groupCtx.User.Address()
+				address := conn.user.Address()
 				if bytes.Equal(contact.Address.Bytes(), address.Bytes()) {
 					continue
 				}
@@ -116,24 +148,24 @@ func (conn *GroupConnection) connectionListener() {
 				// append new contact to address book. if one already exists, therefore
 				// it's P2P connection is not null, we will not try to create a new one
 				// later
-				if err := conn.groupCtx.AddressBook.Append(contact); err != nil {
+				if err := conn.addressBook.Append(contact); err != nil {
 					glog.Warningf("could not append elem: %s", err)
 				}
-				contact = conn.groupCtx.AddressBook.Get(contact.Id()).(*Contact)
+				contact = conn.addressBook.Get(contact.Id()).(*common.Contact)
 
-				session, err := NewGroupSessionServer(
+				session, err := sessions.NewGroupSessionServer(
 					msg,
 					contact,
-					conn.groupCtx.User,
-					conn.groupCtx.Group,
-					conn.groupCtx.Repo,
-					conn.groupCtx.P2P.SessionClosedChan)
+					conn.user,
+					conn.group,
+					conn.repo,
+					conn.sessionClosed)
 				if err != nil {
 					glog.Error("could not create new group session server: %s", err)
 					continue
 				}
 
-				conn.groupCtx.P2P.AddSession(session)
+				conn.p2p.AddSession(session)
 				go session.Run()
 			}
 		}

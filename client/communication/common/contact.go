@@ -1,19 +1,25 @@
-package client
+package common
 
 import (
+	"bytes"
 	"context"
-	"ipfs-share/network"
-	"ipfs-share/ipfs"
-	"strings"
 	"net"
-	"github.com/pkg/errors"
-	ma "github.com/multiformats/go-multiaddr"
-	"github.com/golang/glog"
+	"strings"
+
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/golang/glog"
+	ma "github.com/multiformats/go-multiaddr"
+	"github.com/pkg/errors"
 
 	. "ipfs-share/collections"
-	"bytes"
+	"ipfs-share/ipfs"
+	"ipfs-share/network"
 )
+
+const (
+	P2PProtocolName = "ipfsShareP2P"
+)
+
 
 type Contact struct {
 	*network.Contact
@@ -69,7 +75,7 @@ func (contact *Contact) dialP2PConn(ipfs ipfs.IIpfs) (*P2PConn, error) {
 	}
 
 	glog.Error(contact.IpfsPeerId)
-	stream, err := ipfs.P2PStreamDial(context.Background(), contact.IpfsPeerId, p2pProtocolName, "")
+	stream, err := ipfs.P2PStreamDial(context.Background(), contact.IpfsPeerId, P2PProtocolName, "")
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not dial to stream %s", contact.IpfsPeerId)
 	}

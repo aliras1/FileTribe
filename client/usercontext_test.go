@@ -301,7 +301,7 @@ func TestMessages(t *testing.T) {
 	// }
 
 	// // if err := network.DialP2PConn(
-	// // 	&bob.User.Boxer.PublicKey,
+	// // 	&bob.User.NextBoxer.PublicKey,
 	// // 	&alice.User.Signer,
 	// // 	alice.User.EthKey.Address,
 	// // 	"test_type",

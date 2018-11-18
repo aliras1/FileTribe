@@ -2,9 +2,10 @@ package client
 
 import (
 	"io/ioutil"
+	"ipfs-share/client/interfaces"
 
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/scrypt"
@@ -12,13 +13,6 @@ import (
 
 	"ipfs-share/crypto"
 )
-
-type IUser interface {
-	Address() ethcommon.Address
-	Name() string
-	Signer() crypto.Signer
-	Boxer() crypto.AnonymBoxer
-}
 
 type User struct {
 	address ethcommon.Address
@@ -43,7 +37,7 @@ func (user *User) Boxer() crypto.AnonymBoxer {
 	return user.boxer
 }
 
-func NewUser(username, password, ethKeyPath string) (IUser, error) {
+func NewUser(username, password, ethKeyPath string) (interfaces.IUser, error) {
 	passwordDigest := sha3.Sum256([]byte(password))
 	keySeeds, err := scrypt.Key(
 		passwordDigest[:],

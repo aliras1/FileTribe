@@ -17,13 +17,21 @@ contract Dipfshare {
         address[] members;
         bytes ipfsHash; // encrypted with group key
         mapping(address => bool) canInvite;
+        bool isKeyDirty;
+        bytes32 keySalt;
+        bytes32 keyHash;
         bool exists;
+
+        uint256 leaderIdx;
+        uint leaderStart;
     }
 
     address public owner;
     mapping(address => User) private users;
     mapping(bytes32 => Group) private groups;
 
+    event KeyDirty(bytes32 groupId);
+    event NewGroupKey(bytes32 groupId, bytes32 keySalt, bytes32 keyHash);
     event UserRegistered(address addr);
     event GroupRegistered(bytes32 id);
     event GroupInvitation(address from, address to, bytes32 groupId);
@@ -38,7 +46,7 @@ contract Dipfshare {
         string name,
         string ipfsPeerId,
         bytes32 boxingKey
-    ) 
+    )
         public
     {
         require(!users[msg.sender].exists, "Username already exists");
@@ -78,14 +86,112 @@ contract Dipfshare {
         groups[id].ipfsHash = ipfsHash;
         groups[id].exists = true;
         groups[id].canInvite[msg.sender] = true;
+        groups[id].leaderIdx = 0;
 
         emit GroupRegistered(id);
     }
 
-    function getGroup(bytes32 groupId) public view returns(string, address[], bytes) {
+    function getGroup(bytes32 groupId) public view returns(string, address[], bytes, bytes32 keySalt, bytes32 keyHash) {
         require(groups[groupId].exists, "Group does not exists");
 
-        return (groups[groupId].name, groups[groupId].members, groups[groupId].ipfsHash);
+        return (
+            groups[groupId].name,
+            groups[groupId].members,
+            groups[groupId].ipfsHash,
+            groups[groupId].keySalt,
+            groups[groupId].keyHash);
+    }
+
+    function leaveGroup(bytes32 groupId) public {
+        require(isUserInGroup(groupId, msg.sender), "User is not a member of the given group");
+
+        groups[groupId].isKeyDirty = true;
+
+        uint256 len = groups[groupId].members.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (groups[groupId].members[i] == msg.sender) {
+                groups[groupId].members[i] = groups[groupId].members[len - 1];
+                groups[groupId].members.length--;
+                break;
+            }
+        }
+
+        groups[groupId].leaderIdx++;
+        groups[groupId].leaderStart = now;
+
+        emit KeyDirty(groupId);
+    }
+
+    function getLeader(bytes32 groupId) public view returns(address) {
+        uint256 idx = groups[groupId].leaderIdx % groups[groupId].members.length;
+
+        return groups[groupId].members[idx];
+    }
+
+    function changeLeader(bytes32 groupId) public {
+        require(groups[groupId].exists, "group does not exist");
+        require(isUserInGroup(groupId, msg.sender), "user is not member of group");
+        require(groups[groupId].isKeyDirty, "can not change group leader: key is not dirty");
+        require(now >= groups[groupId].leaderStart + 5 minutes, "leader's time has not expired yet");
+
+        groups[groupId].leaderIdx++;
+        groups[groupId].leaderStart = now;
+    }
+
+    function checkGroupConsensus(
+        bytes32 groupId,
+        bytes32 digest,
+        address[] memory members,
+        bytes32[] memory rs,
+        bytes32[] memory ss,
+        uint8[] memory vs)
+    internal returns(bool) {
+        require(rs.length == members.length, "invalid r length");
+        require(ss.length == members.length, "invalid s length");
+        require(vs.length == members.length, "invalid v length");
+        require(members.length > groups[groupId].members.length / 2, "not enough approvals");
+
+        for (uint256 i = 0; i < members.length; i++) {
+            require(isUserInGroup(groupId, members[i]), "invalid approval: user is not a group member");
+            require(verify(members[i], digest, vs[i], rs[i], ss[i]), "invalid approval: invalid signature");
+        }
+
+        heapSort(members);
+        for (i = 0; i < members.length; i++) {
+            // in a sorted array we can be sure, that
+            // if there is no matching addresses next
+            // to each other than there is not any in
+            // the whole array
+            if (i == 0) {
+                continue;
+            }
+            require(members[i] != members[i - 1], "duplicate approvals detected");
+        }
+
+        return true;
+    }
+
+    function groupReplaceKey(
+        bytes32 groupId,
+        bytes32 newKeySalt,
+        bytes32 newKeyHash,
+        bytes newIpfsHash,
+        address[] members,
+        bytes32[] rs,
+        bytes32[] ss,
+        uint8[] vs)
+    public {
+        require(groups[groupId].exists, "group does not exist");
+
+        bytes32 digest = keccak256(groups[groupId].keyHash, newKeyHash, groups[groupId].ipfsHash, newIpfsHash);
+        require(checkGroupConsensus(groupId, digest, members, rs, ss, vs));
+
+        groups[groupId].keySalt = newKeySalt;
+        groups[groupId].keyHash = newKeyHash;
+        groups[groupId].ipfsHash = newIpfsHash;
+        groups[groupId].isKeyDirty = false;
+
+        emit NewGroupKey(groupId, newKeySalt, newKeyHash);
     }
 
     function inviteUser(bytes32 groupId, address newMember, bool hasInviteRight) public {
@@ -141,29 +247,8 @@ contract Dipfshare {
     {
         require(groups[groupId].exists, "group does not exist");
 
-        require(rs.length == members.length, "invalid r length");
-        require(ss.length == members.length, "invalid s length");
-        require(vs.length == members.length, "invalid v length");
-        require(members.length > groups[groupId].members.length / 2, "not enough approvals");
-
         bytes32 digest = keccak256(groups[groupId].ipfsHash, newIpfsHash);
-
-        for (uint256 i = 0; i < members.length; i++) {
-            require(isUserInGroup(groupId, members[i]), "invalid approval: user is not a group member");
-            require(verify(members[i], digest, vs[i], rs[i], ss[i]), "invalid approval: invalid signature");
-        }
-
-        heapSort(members);
-        for (i = 0; i < members.length; i++) {
-            // in a sorted array we can be sure, that
-            // if there is no matching addresses next
-            // to each other than there is not any in
-            // the whole array
-            if (i == 0) {
-                continue;
-            }
-            require(members[i] != members[i - 1], "duplicate approvals detected");
-        }
+        require(checkGroupConsensus(groupId, digest, members, rs, ss, vs));
 
         groups[groupId].ipfsHash = newIpfsHash;
 

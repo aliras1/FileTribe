@@ -1,16 +1,15 @@
-package client
+package common
 
 import (
+	"encoding/binary"
+	"encoding/json"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-
 	"github.com/pkg/errors"
-	"encoding/binary"
-	"ipfs-share/crypto"
-	"encoding/json"
-	"ipfs-share/network"
-	"ipfs-share/ipfs"
 
+	"ipfs-share/crypto"
+	"ipfs-share/ipfs"
+	"ipfs-share/network"
 	. "ipfs-share/collections"
 )
 
