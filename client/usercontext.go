@@ -1,6 +1,8 @@
 package client
 
 import (
+	"encoding/base64"
+	"ipfs-share/crypto"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -30,7 +32,7 @@ type UserContext struct {
 	network        nw.INetwork
 	ipfs           ipfsapi.IIpfs
 	storage        *fs.Storage
-	p2p            *com.P2PServer
+	p2p            *com.P2PManager
 	transactions   *ConcurrentCollection
 
 	channelStop chan int
@@ -111,11 +113,11 @@ func NewUserContext(dataPath string, user interfaces.IUser, network nw.INetwork,
 	ctx.groups = NewConcurrentCollection()
 	ctx.addressBook = NewConcurrentCollection()
 	ctx.transactions = NewConcurrentCollection()
-	p2p, err := com.NewP2PConnection(
+	p2p, err := com.NewP2PManager(
 		p2pPort,
 		user,
 		ctx.addressBook,
-		ctx.GetGroup,
+		&ctx,
 		ipfs,
 		network)
 	if err != nil {
@@ -129,6 +131,8 @@ func NewUserContext(dataPath string, user interfaces.IUser, network nw.INetwork,
 	go ctx.HandleGroupInvitationEvents(network.GetGroupInvitationChannel())
 	go ctx.HandleGroupUpdateIpfsEvents(network.GetGroupUpdateIpfsChannel())
 	go ctx.HandleGroupRegisteredEvents(network.GetGroupRegisteredChannel())
+	go ctx.HandleGroupKeyChangedEvents(network.GetGroupKeyChangedChannel())
+	go ctx.HandleKeyDirtyEvents(network.GetKeyDirtyChannel())
 
 	if err := ctx.BuildGroups(); err != nil {
 		return nil, errors.Wrap(err, "could not build groups")
@@ -137,15 +141,15 @@ func NewUserContext(dataPath string, user interfaces.IUser, network nw.INetwork,
 	return &ctx, nil
 }
 
-func (ctx *UserContext) GetGroup(id [32]byte) interfaces.IGroup {
+func (ctx *UserContext) GetGroupData(id [32]byte) (interfaces.IGroup, *fs.GroupRepo) {
 	groupCtxInt := ctx.groups.Get(NewBytesId(id))
 	if (groupCtxInt == nil) {
-		return nil
+		return nil, nil
 	}
 
 	groupCtx := groupCtxInt.(*GroupContext)
 
-	return groupCtx.Group
+	return groupCtx.Group, groupCtx.Repo
 }
 
 func (ctx *UserContext) User() interfaces.IUser {
@@ -247,6 +251,22 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 	return nil
 }
 
+func (ctx *UserContext) disposeGroup(groupId IIdentifier) error {
+	groupCtxInt := ctx.groups.DeleteWithId(groupId)
+	if groupCtxInt == nil {
+		return errors.New("no group found")
+	}
+
+	groupCtx := groupCtxInt.(*GroupContext)
+	groupCtx.Stop()
+
+	if err := ctx.storage.RemoveGroupDir(groupId.Data().([32]byte)); err != nil {
+		return errors.Wrap(err, "could not remove group dir")
+	}
+
+	return nil
+}
+
 func (ctx *UserContext) Groups() []IGroupFacade {
 	var groups []IGroupFacade
 
@@ -276,4 +296,23 @@ func (ctx *UserContext) Transactions() ([]*types.Receipt, error) {
 	}
 
 	return list, nil
+}
+
+func (ctx *UserContext) OnChangeGroupKeyServerSessionSuccess(args []interface{}, groupId IIdentifier) {
+	if len(args) < 2 {
+		glog.Error("error while OnServerSessionSuccess: invalid number of args")
+		return
+	}
+
+	boxer := args[1].(crypto.SymmetricKey)
+	encNewIpfsHash := args[0].([]byte)
+	encNewIpfsHashBase64 := base64.StdEncoding.EncodeToString(encNewIpfsHash)
+
+	groupCtxInt := ctx.groups.Get(groupId)
+	if groupCtxInt == nil {
+		glog.Error("no group found")
+	}
+
+	groupCtx := groupCtxInt.(*GroupContext)
+	groupCtx.proposedKeys[encNewIpfsHashBase64] = boxer
 }

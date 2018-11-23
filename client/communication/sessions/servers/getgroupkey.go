@@ -15,16 +15,16 @@ import (
 )
 
 type GetGroupKeySessionServer struct {
-	sessionId collections.IIdentifier
-	state     uint8
-	contact   *comcommon.Contact
-	user interfaces.IUser
-	group interfaces.IGroup
-	challenge [32]byte
-	closedChan chan common.ISession
-	lock sync.RWMutex
-	stop chan bool
-	error error
+	sessionId       collections.IIdentifier
+	state           uint8
+	contact         *comcommon.Contact
+	user            interfaces.IUser
+	group           interfaces.IGroup
+	challenge       [32]byte
+	onSessionClosed common.SessionClosedCallback
+	lock            sync.RWMutex
+	stop            chan bool
+	error           error
 }
 
 func (session *GetGroupKeySessionServer) Error() error {
@@ -33,7 +33,7 @@ func (session *GetGroupKeySessionServer) Error() error {
 
 func (session *GetGroupKeySessionServer) close() {
 	session.state = common.EndOfSession
-	session.closedChan <- session
+	session.onSessionClosed(session)
 }
 
 func (session *GetGroupKeySessionServer) State() uint8 {
@@ -168,8 +168,8 @@ func NewGetGroupKeySessionServer(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
 	user interfaces.IUser,
-	getGroup common.GetGroupCallback,
-	closedChan chan common.ISession,
+	getGroupData common.GetGroupDataCallback,
+	onSessionClosed common.SessionClosedCallback,
 ) (*GetGroupKeySessionServer, error) {
 
 	var challenge [32]byte
@@ -180,18 +180,18 @@ func NewGetGroupKeySessionServer(
 	var groupId [32]byte
 	copy(groupId[:], msg.Payload)
 
-	group := getGroup(groupId)
+	group, _ := getGroupData(groupId)
 	if group == nil {
 		return nil, errors.New("no group found")
 	}
 
 	return &GetGroupKeySessionServer{
-		sessionId: collections.NewUint32Id(msg.SessionId),
-		contact:   contact,
-		user: user,
-		group: group,
-		closedChan: closedChan,
-		state:     0,
-		challenge: challenge,
+		sessionId:       collections.NewUint32Id(msg.SessionId),
+		contact:         contact,
+		user:            user,
+		group:           group,
+		onSessionClosed: onSessionClosed,
+		state:           0,
+		challenge:       challenge,
 	}, nil
 }

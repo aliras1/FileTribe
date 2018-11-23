@@ -216,23 +216,17 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	time.Sleep(5 * time.Second)
-	fmt.Println("----------- Re-encrypt repo ------------")
-	files := groupAtAlice.Repo.Files()
-	f := files[0]
-	fmt.Println(f.Cap.DataKey.Key)
-
-	if err := groupAtAlice.ReEncrpyt(); err != nil {
+	fmt.Println("----------- Charlie leaves ------------")
+	fakeNetwork.SetAuth(CHARLIE)
+	groupAtCharlie := charlieGroups[0]
+	if err := groupAtCharlie.Leave(); err != nil {
 		t.Fatal(err)
 	}
 
 	time.Sleep(5 * time.Second)
 
-	files = groupAtAlice.Repo.Files()
-	newF := files[0]
-	fmt.Println(newF.Cap.DataKey.Key)
-
 	fmt.Println("----------- Bob change file ------------")
-
+	fakeNetwork.SetAuth(BOB)
 	bobGroups = bob.Groups()
 	groupAtBob := bobGroups[0].(*GroupContext)
 	fileBob := "./bob/data/userdata/root/" + groupAtBob.Group.Id().ToString() + "/rrrepo.go"
@@ -246,6 +240,7 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	time.Sleep(5 * time.Second)
 	fmt.Println("----------- Grant W access to only alice  ------------")
+	fakeNetwork.SetAuth(ALICE)
 
 	if err := groupAtAlice.GrantWriteAccess(fileAlice, bobUser.Address()); err != nil {
 		t.Fatal(err)
@@ -256,6 +251,7 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	time.Sleep(5 * time.Second)
 	fmt.Println("----------- Bob modif  ------------")
+	fakeNetwork.SetAuth(BOB)
 	if err := AppendToFile(fileBob, "Bob's modification\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -266,6 +262,7 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	time.Sleep(5 * time.Second)
 	fmt.Println("----------- Alice modif  ------------")
+	fakeNetwork.SetAuth(ALICE)
 	if err := AppendToFile(fileAlice, "Alice's modification\n"); err != nil {
 		t.Fatal(err)
 	}

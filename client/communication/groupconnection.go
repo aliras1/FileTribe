@@ -22,7 +22,7 @@ type GroupConnection struct {
 	user interfaces.IUser
 	addressBook *collections.ConcurrentCollection
 	sessionClosed sesscommon.SessionClosedCallback
-	p2p *P2PServer
+	p2p *P2PManager
 
 	ipfs ipfsapi.IIpfs
 	network network.INetwork
@@ -39,7 +39,7 @@ func NewGroupConnection(
 	user interfaces.IUser,
 	addressBook *collections.ConcurrentCollection,
 	sessionClosed sesscommon.SessionClosedCallback,
-	p2p *P2PServer,
+	p2p *P2PManager,
 	ipfs ipfsapi.IIpfs,
 	network network.INetwork,
 	) *GroupConnection {
@@ -153,7 +153,7 @@ func (conn *GroupConnection) connectionListener() {
 				}
 				contact = conn.addressBook.Get(contact.Id()).(*common.Contact)
 
-				session, err := sessions.NewGroupSessionServer(
+				session, err := sessions.NewGroupServerSession(
 					msg,
 					contact,
 					conn.user,

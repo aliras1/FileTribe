@@ -24,15 +24,29 @@ func (cap *FileCap) Equal(other *FileCap) bool {
 	if !bytes.Equal(cap.Id[:], other.Id[:]) {
 		return false
 	}
+
 	if strings.Compare(cap.FileName, other.FileName) != 0 {
 		return false
 	}
+
 	if strings.Compare(cap.IpfsHash, other.IpfsHash) != 0 {
 		return false
 	}
+
 	if !bytes.Equal(cap.DataKey.Key[:], other.DataKey.Key[:]) {
 		return false
 	}
+
+	if len(cap.WriteAccessList) != len(other.WriteAccessList) {
+		return false
+	}
+
+	for i := 0; i < len(cap.WriteAccessList); i++ {
+		if !bytes.Equal(cap.WriteAccessList[i].Bytes(), other.WriteAccessList[i].Bytes()) {
+			return false
+		}
+	}
+
 	return true
 }
 

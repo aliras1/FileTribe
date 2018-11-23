@@ -19,6 +19,8 @@ type IGroup interface {
 	CountMembers() int
 	Members() []ethcommon.Address
 	Boxer() crypto.SymmetricKey
-	Update(name string, members []ethcommon.Address, encIpfsHash []byte) error
+	SetBoxer(boxer crypto.SymmetricKey)
+	Update(name string, members []ethcommon.Address, encIpfsHash []byte, leader ethcommon.Address) error
 	Encode() ([]byte, error)
+	Leader() ethcommon.Address
 }

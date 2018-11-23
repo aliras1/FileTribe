@@ -19,6 +19,7 @@ type MessageType byte
 const (
 	GetGroupKey MessageType = 0
 	Commit      MessageType = 1
+	ChangeKey	MessageType = 2
 )
 
 type Message struct {

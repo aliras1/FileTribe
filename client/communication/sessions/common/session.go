@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"ipfs-share/client/communication/common"
-	"ipfs-share/client/interfaces"
 	. "ipfs-share/collections"
 )
 
@@ -20,8 +19,3 @@ type ISession interface {
 	Run()
 	Error() error
 }
-
-type SessionClosedCallback func(session ISession)
-
-type GetGroupCallback func(id [32]byte) (interfaces.IGroup)
-

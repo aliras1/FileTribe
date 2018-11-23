@@ -18,13 +18,13 @@ import (
 )
 
 type FakeNetwork struct {
-	accCount int
-	currentAcc int
+	accCount 				int
+	currentAcc 				int
 
-	Client *eth.Eth
-	Simulator *backends.SimulatedBackend
+	Client 					*eth.Eth
+	Simulator 				*backends.SimulatedBackend
 
-	auths    []*bind.TransactOpts
+	auths    				[]*bind.TransactOpts
 
 	// GroupInvitationEvent for users
 	groupInvitationSubs     []event.Subscription
@@ -37,12 +37,18 @@ type FakeNetwork struct {
 	groupRegisteredSubs     []event.Subscription
 	groupRegisteredChannels []chan *eth.EthGroupRegistered
 
-	keyDirtySubs     []event.Subscription
-	keyDirtyChannels []chan *eth.EthKeyDirty
+	keyDirtySubs     		[]event.Subscription
+	keyDirtyChannels 		[]chan *eth.EthKeyDirty
+
+	groupKeyChangedSubs     []event.Subscription
+	groupKeyChangedChannels []chan *eth.EthGroupKeyChanged
+
+	groupLeftSubs     		[]event.Subscription
+	groupLeftChannels	 	[]chan *eth.EthGroupLeft
 
 	// Debug event
-	debugSubs     []event.Subscription
-	debugChannels []chan *eth.EthDebug
+	debugSubs     			[]event.Subscription
+	debugChannels 			[]chan *eth.EthDebug
 }
 
 func (network *FakeNetwork) SetAuth(accNum int) {
@@ -95,6 +101,12 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 	var channelKeyDirtys []chan *eth.EthKeyDirty
 	var subKeyDirtys []event.Subscription
 
+	var groupKeyChangedChannels []chan *eth.EthGroupKeyChanged
+	var groupKeyChangedSubs []event.Subscription
+
+	var groupLeftChannels []chan *eth.EthGroupLeft
+	var groupLeftSubs []event.Subscription
+
 	for i := 0; i < accCount; i++ {
 		// Subscribing to events for each user...
 		chGroupInv := make(chan *eth.EthGroupInvitation)
@@ -134,12 +146,30 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 
 		// KeyDirty event
 		chKeyDirty := make(chan *eth.EthKeyDirty)
-		subKeyDirty, err := ethclient.WatchDebug(opts, chDebug)
+		subKeyDirty, err := ethclient.WatchKeyDirty(opts, chKeyDirty)
 		if err != nil {
 			return nil, err
 		}
 		channelKeyDirtys = append(channelKeyDirtys, chKeyDirty)
 		subKeyDirtys = append(subKeyDirtys, subKeyDirty)
+
+		// GroupKeyChanged event
+		chGroupKeyChanged := make(chan *eth.EthGroupKeyChanged)
+		subGroupKeyChanged, err := ethclient.WatchGroupKeyChanged(opts, chGroupKeyChanged)
+		if err != nil {
+			return nil, err
+		}
+		groupKeyChangedChannels = append(groupKeyChangedChannels, chGroupKeyChanged)
+		groupKeyChangedSubs = append(groupKeyChangedSubs, subGroupKeyChanged)
+
+		// GroupLeft event
+		chGroupLeft := make(chan *eth.EthGroupLeft)
+		subGroupLeft, err := ethclient.WatchGroupLeft(opts, chGroupLeft)
+		if err != nil {
+			return nil, err
+		}
+		groupLeftChannels = append(groupLeftChannels, chGroupLeft)
+		groupLeftSubs = append(groupLeftSubs, subGroupLeft)
 	}
 
 
@@ -151,12 +181,24 @@ func NewTestNetwork(keys []*ecdsa.PrivateKey) (*FakeNetwork, error) {
 
 		groupInvitationChannels: channelGroupInvitations,
 		groupInvitationSubs:     subGroupInvitations,
+
 		groupUpdateIpfsChannels: channelGroupUpdateIpfss,
 		groupUpdateIpfsSubs:     subGroupUpdateIpfss,
+
 		groupRegisteredChannels: channelGroupRegistered,
 		groupRegisteredSubs:     subGroupGroupRegistered,
+
+		groupKeyChangedChannels: groupKeyChangedChannels,
+		groupKeyChangedSubs:	 groupKeyChangedSubs,
+
 		debugSubs:               subDebugs,
 		debugChannels:           channelDebugs,
+
+		keyDirtyChannels:		 channelKeyDirtys,
+		keyDirtySubs:			 subKeyDirtys,
+
+		groupLeftChannels:		 groupLeftChannels,
+		groupLeftSubs:			 groupLeftSubs,
 	}
 
 	return testNetwork, nil
@@ -203,6 +245,22 @@ func (network *FakeNetwork) GetKeyDirtySub() *event.Subscription {
 }
 func (network *FakeNetwork) GetKeyDirtyChannel() chan *eth.EthKeyDirty {
 	return network.keyDirtyChannels[network.currentAcc]
+}
+
+func (network *FakeNetwork) GetGroupLeftSub() *event.Subscription {
+	return &network.groupLeftSubs[network.currentAcc]
+}
+
+func (network *FakeNetwork) GetGroupLeftChannel() chan *eth.EthGroupLeft {
+	return network.groupLeftChannels[network.currentAcc]
+}
+
+func (network *FakeNetwork) GetGroupKeyChangedSub() *event.Subscription {
+	return &network.groupKeyChangedSubs[network.currentAcc]
+}
+
+func (network *FakeNetwork) GetGroupKeyChangedChannel() chan *eth.EthGroupKeyChanged {
+	return network.groupKeyChangedChannels[network.currentAcc]
 }
 
 func (network *FakeNetwork) IsUserRegistered(id common.Address) (bool, error) {
@@ -256,6 +314,27 @@ func (network *FakeNetwork) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []
 	return &Transaction{tx: tx}, nil
 }
 
+func (network *FakeNetwork) ChangeGroupKey(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error) {
+	members, rs, ss, vs, err := prepareApprovals(approvals)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not prepare approvals")
+	}
+
+	auth := network.auths[network.currentAcc]
+	glog.Error("auth: " + auth.From.String())
+	tx, err := network.Client.ChangeGroupKey(auth, groupId, newIpfsHash, members, rs, ss, vs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not send changeGroupKey transaction")
+	}
+	glog.Error(tx.Nonce())
+
+	network.Simulator.Commit()
+
+	glog.Info("FakeNetwork.ChangeGroupKey ended")
+
+	return &Transaction{tx: tx}, nil
+}
+
 func (network *FakeNetwork) RegisterUser(username, ipfsPeerId string, boxingKey [32]byte) (*Transaction, error) {
 	auth := network.auths[network.currentAcc]
 	auth.GasLimit = 2000000
@@ -295,8 +374,9 @@ func (network *FakeNetwork) CreateGroup(id [32]byte, name string, ipfsHash []byt
 	return &Transaction{tx: tx}, nil
 }
 
-func (network *FakeNetwork) GetGroup(groupId [32]byte) (string, []common.Address, []byte, [32]byte, [32]byte, error) {
-	return network.Client.GetGroup(&bind.CallOpts{Pending: true}, groupId)
+func (network *FakeNetwork) GetGroup(groupId [32]byte) (string, []common.Address, []byte, common.Address, error) {
+	groupData, err := network.Client.GetGroup(&bind.CallOpts{Pending: true}, groupId)
+	return groupData.Name, groupData.Members, groupData.IpfsHash, groupData.Leader, err
 }
 
 func (network *FakeNetwork) InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) (*Transaction, error) {

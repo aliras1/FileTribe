@@ -51,10 +51,11 @@ type INetwork interface {
 	IsUserRegistered(id common.Address) (bool, error)
 	CreateGroup(id [32]byte, name string, ipfsHash []byte) (*Transaction, error)
 	InviteUser(groupId [32]byte, newMember common.Address, canInvite bool) (*Transaction, error)
-	GetGroup(groupId [32]byte) (name string, members []common.Address, ipfsHash []byte, keySalt [32]byte, keyHash [32]byte, err error)
+	GetGroup(groupId [32]byte) (name string, members []common.Address, ipfsHash []byte, leader common.Address, err error)
 	UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error)
 	LeaveGroup(groupId [32]byte) (*Transaction, error)
 	GetGroupLeader(groupId [32]byte) (common.Address, error)
+	ChangeGroupKey(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error)
 	TransactionReceipt(tx *types.Transaction) (*types.Receipt, error)
 
 	// contract events
@@ -73,34 +74,45 @@ type INetwork interface {
 	GetKeyDirtySub() *event.Subscription
 	GetKeyDirtyChannel() chan *eth.EthKeyDirty
 
+	GetGroupKeyChangedSub() *event.Subscription
+	GetGroupKeyChangedChannel() chan *eth.EthGroupKeyChanged
+
+	GetGroupLeftSub() *event.Subscription
+	GetGroupLeftChannel() chan *eth.EthGroupLeft
+
 	Close()
 }
 
 type Network struct {
-	Client *ethclient.Client
+	Client 					*ethclient.Client
+	Session 				*eth.EthSession
+	Auth   					*bind.TransactOpts
 
-	Session *eth.EthSession
-	Auth    *bind.TransactOpts
-
-	nonce *big.Int
+	nonce 					*big.Int
 
 	// contract events
-	groupInvitationSub     event.Subscription
-	groupInvitationChannel chan *eth.EthGroupInvitation
+	groupInvitationSub     	event.Subscription
+	groupInvitationChannel 	chan *eth.EthGroupInvitation
 
-	groupUpdateIpfsSub     event.Subscription
-	groupUpdateIpfsChannel chan *eth.EthGroupUpdateIpfsHash
+	groupUpdateIpfsSub     	event.Subscription
+	groupUpdateIpfsChannel 	chan *eth.EthGroupUpdateIpfsHash
 
-	groupRegisteredSub     event.Subscription
-	groupRegisteredChannel chan *eth.EthGroupRegistered
+	groupRegisteredSub     	event.Subscription
+	groupRegisteredChannel 	chan *eth.EthGroupRegistered
 
-	keyDirtySub     event.Subscription
-	keyDirtyChannel chan *eth.EthKeyDirty
+	keyDirtySub     		event.Subscription
+	keyDirtyChannel 		chan *eth.EthKeyDirty
 
-	debugSub     event.Subscription
-	debugChannel chan *eth.EthDebug
+	groupKeyChangedSub 		event.Subscription
+	groupKeyChangedChannel 	chan *eth.EthGroupKeyChanged
 
-	lock sync.Mutex
+	groupLeftSub     		event.Subscription
+	groupLeftChannel 		chan *eth.EthGroupLeft
+
+	debugSub     			event.Subscription
+	debugChannel 			chan *eth.EthDebug
+
+	lock 					sync.Mutex
 }
 
 func NewAccount(ks *keystore.KeyStore, ethKeyPath, password string) (*ecdsa.PrivateKey, error) {
@@ -174,22 +186,19 @@ func NewNetwork(wsAddress, ethKeyPath, contractAddress, password string) (INetwo
 		glog.Info("context is nil")
 	}
 
-	channelDebug := make(chan *eth.EthDebug)
-	channelGroupInvitation := make(chan *eth.EthGroupInvitation)
-	channelGroupUpdateIpfs := make(chan *eth.EthGroupUpdateIpfsHash)
-
 	network := Network{
 		Client: conn,
 
 		Session: session,
 		Auth:    auth,
 
-		debugChannel:       channelDebug,
-
-		groupInvitationChannel: channelGroupInvitation,
-		groupUpdateIpfsChannel: channelGroupUpdateIpfs,
+		debugChannel:           make(chan *eth.EthDebug),
+		groupInvitationChannel: make(chan *eth.EthGroupInvitation),
+		groupUpdateIpfsChannel: make(chan *eth.EthGroupUpdateIpfsHash),
 		groupRegisteredChannel: make(chan *eth.EthGroupRegistered),
-		keyDirtyChannel: make(chan *eth.EthKeyDirty),
+		groupKeyChangedChannel: make(chan *eth.EthGroupKeyChanged),
+		keyDirtyChannel:        make(chan *eth.EthKeyDirty),
+		groupLeftChannel:       make(chan *eth.EthGroupLeft),
 
 		nonce: nonce,
 	}
@@ -224,7 +233,15 @@ func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 	if err != nil {
 		return err
 	}
+	subGroupLeft, err := network.Session.Contract.WatchGroupLeft(opts, network.groupLeftChannel)
+	if err != nil {
+		return err
+	}
 	subKeyDirty, err := network.Session.Contract.WatchKeyDirty(opts, network.keyDirtyChannel)
+	if err != nil {
+		return err
+	}
+	subGroupKeyChanged, err := network.Session.Contract.WatchGroupKeyChanged(opts, network.groupKeyChangedChannel)
 	if err != nil {
 		return err
 	}
@@ -233,7 +250,9 @@ func (network *Network) SubscribeToEvents(latestBlock uint64) error {
 	network.groupInvitationSub = subGroupInvitation
 	network.groupUpdateIpfsSub = subGroupUpdateIpfs
 	network.groupRegisteredSub = subGroupRegistered
+	network.groupKeyChangedSub = subGroupKeyChanged
 	network.keyDirtySub = subKeyDirty
+	network.groupKeyChangedSub = subGroupLeft
 
 	return nil
 }
@@ -264,6 +283,22 @@ func (network *Network) GetGroupRegisteredSub() *event.Subscription {
 
 func (network *Network) GetGroupRegisteredChannel() chan *eth.EthGroupRegistered {
 	return network.groupRegisteredChannel
+}
+
+func (network *Network) GetGroupKeyChangedSub() *event.Subscription {
+	return &network.groupKeyChangedSub
+}
+
+func (network *Network) GetGroupKeyChangedChannel() chan *eth.EthGroupKeyChanged {
+	return network.groupKeyChangedChannel
+}
+
+func (network *Network) GetGroupLeftSub() *event.Subscription {
+	return &network.groupLeftSub
+}
+
+func (network *Network) GetGroupLeftChannel() chan *eth.EthGroupLeft {
+	return network.groupLeftChannel
 }
 
 func (network *Network) GetDebugSub() *event.Subscription {
@@ -336,6 +371,20 @@ func (network *Network) UpdateGroupIpfsHash(groupId [32]byte, newIpfsHash []byte
 	return &Transaction{tx: tx}, err
 }
 
+func (network *Network) ChangeGroupKey(groupId [32]byte, newIpfsHash []byte, approvals []*Approval) (*Transaction, error) {
+	members, rs, ss, vs, err := prepareApprovals(approvals)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not prepare approvals")
+	}
+
+	tx, err := network.Session.ChangeGroupKey(groupId, newIpfsHash, members, rs, ss, vs)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not send changeGroupKey transaction")
+	}
+
+	return &Transaction{tx: tx}, err
+}
+
 func (network *Network) GetGroupLeader(groupId [32]byte) (common.Address, error) {
 	leader, err := network.Session.GetLeader(groupId)
 	if err != nil {
@@ -400,8 +449,9 @@ func (network *Network) InviteUser(groupId [32]byte, newMember common.Address, c
 	return &Transaction{tx: tx}, err
 }
 
-func (network *Network) GetGroup(groupId [32]byte) (string, []common.Address, []byte, [32]byte, [32]byte, error) {
-	return network.Session.GetGroup(groupId)
+func (network *Network) GetGroup(groupId [32]byte) (string, []common.Address, []byte, common.Address, error) {
+	groupData, err := network.Session.GetGroup(groupId)
+	return groupData.Name, groupData.Members, groupData.IpfsHash, groupData.Leader, err
 }
 
 

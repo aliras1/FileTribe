@@ -68,7 +68,7 @@ func NewGroupRepoFromIpfs(ipfsHash string, group interfaces.IGroup, user ethcomm
 		user: user,
 	}
 
-	capabilities, err := repo.getGroupFileCapsFromIpfs(ipfsHash)
+	capabilities, err := repo.getGroupFileCapsFromIpfs(ipfsHash, repo.group.Boxer())
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get group file caps")
 	}
@@ -203,7 +203,7 @@ func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, address *ethcommon.A
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
-	newCaps, err := repo.getGroupFileCapsFromIpfs(newIpfsHash)
+	newCaps, err := repo.getGroupFileCapsFromIpfs(newIpfsHash, repo.group.Boxer())
 	if err != nil {
 		return errors.Wrap(err, "could not get requested group changes")
 	}
@@ -237,6 +237,57 @@ func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, address *ethcommon.A
 
 		if !hasWriteAccess {
 			return errors.New("member has no write access")
+		}
+
+		// check if new DiffNode is correct
+		if err := repo.checkDiffNode(file, newCap.DataKey, newCap.IpfsHash); err != nil {
+			return errors.Wrap(err, "invalid new DiffNode")
+		}
+	}
+
+	return nil
+}
+
+func (repo *GroupRepo) IsValidChangeKey(newIpfsHash string, address *ethcommon.Address, newBoxer crypto.SymmetricKey) error {
+	repo.lock.RLock()
+	defer repo.lock.RUnlock()
+
+	newCaps, err := repo.getGroupFileCapsFromIpfs(newIpfsHash, newBoxer)
+	if err != nil {
+		return errors.Wrap(err, "could not get requested group changes")
+	}
+
+	for _, newCap := range newCaps {
+		fileInt := repo.files.Get(NewStringId(newCap.FileName))
+		if fileInt == nil {
+			return errors.New("additional files found")
+		}
+
+		file := fileInt.(*File)
+		if strings.Compare(file.Cap.IpfsHash, newCap.IpfsHash) == 0 {
+			return errors.New("ipfs hash have not changed")
+		}
+
+		if bytes.Equal(file.Cap.DataKey.Key[:], newCap.DataKey.Key[:]) {
+			return errors.New("file data key have not changed")
+		}
+
+		if len(file.Cap.WriteAccessList) != len(newCap.WriteAccessList) {
+			return errors.New("lengths of WriteAccessLists do not match")
+		}
+
+		for i := 0; i < len(file.Cap.WriteAccessList); i++ {
+			if !bytes.Equal(file.Cap.WriteAccessList[i].Bytes(), newCap.WriteAccessList[i].Bytes()) {
+				return errors.New("users with write access do not match")
+			}
+		}
+
+		if !bytes.Equal(file.Cap.Id[:], newCap.Id[:]) {
+			return errors.New("id's do not match")
+		}
+
+		if strings.Compare(file.Cap.FileName, newCap.FileName) != 0 {
+			return errors.New("file names do not match")
 		}
 
 		// check if new DiffNode is correct
@@ -286,7 +337,7 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
-	caps, err := repo.getGroupFileCapsFromIpfs(newIpfsHash)
+	caps, err := repo.getGroupFileCapsFromIpfs(newIpfsHash, repo.group.Boxer())
 	if err != nil {
 		return errors.Wrap(err, "could not get group file caps from ipfs")
 	}
@@ -316,8 +367,8 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 	return nil
 }
 
-func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string) ([]*caps.FileCap, error) {
-	data, err := repo.storage.DownloadAndDecryptWithSymmetricKey(repo.group.Boxer(), ipfsHash, repo.ipfs)
+func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer crypto.SymmetricKey) ([]*caps.FileCap, error) {
+	data, err := repo.storage.DownloadAndDecryptWithSymmetricKey(boxer, ipfsHash, repo.ipfs)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not download group data")
 	}

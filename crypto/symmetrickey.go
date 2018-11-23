@@ -13,6 +13,15 @@ type SymmetricKey struct {
 	RNG io.Reader `json:"-"`
 }
 
+func NewSymmetricKey() (SymmetricKey, error) {
+	var k [32]byte
+	if _, err := rand.Read(k[:]); err != nil {
+		return SymmetricKey{}, errors.Wrap(err, "could not read from crypto.rand")
+	}
+
+	return SymmetricKey{Key: k, RNG: rand.Reader}, nil
+}
+
 func (k *SymmetricKey) GetNonce() [24]byte {
 	var nonce [24]byte
 	k.RNG.Read(nonce[:])

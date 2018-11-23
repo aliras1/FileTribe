@@ -83,14 +83,14 @@ func (c *ConcurrentCollection) DeleteItem(item interface{}) {
 	}
 }
 
-func (c *ConcurrentCollection) DeleteWithId(id IIdentifier) {
+func (c *ConcurrentCollection) DeleteWithId(id IIdentifier) interface{} {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	for i, elem := range c.list {
 		if elem.Id().Equal(id) {
 			c.list = append(c.list[:i], c.list[i+1: ]...)
-			return
+			return elem
 		}
 	}
 }

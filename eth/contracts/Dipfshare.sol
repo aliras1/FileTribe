@@ -18,8 +18,6 @@ contract Dipfshare {
         bytes ipfsHash; // encrypted with group key
         mapping(address => bool) canInvite;
         bool isKeyDirty;
-        bytes32 keySalt;
-        bytes32 keyHash;
         bool exists;
 
         uint256 leaderIdx;
@@ -31,9 +29,10 @@ contract Dipfshare {
     mapping(bytes32 => Group) private groups;
 
     event KeyDirty(bytes32 groupId);
-    event NewGroupKey(bytes32 groupId, bytes32 keySalt, bytes32 keyHash);
+    event GroupKeyChanged(bytes32 groupId, bytes ipfsHash);
     event UserRegistered(address addr);
     event GroupRegistered(bytes32 id);
+    event GroupLeft(bytes32 groupId, address user);
     event GroupInvitation(address from, address to, bytes32 groupId);
     event GroupUpdateIpfsHash(bytes32 groupId, bytes ipfsHash);
     event Debug(int msg);
@@ -91,15 +90,14 @@ contract Dipfshare {
         emit GroupRegistered(id);
     }
 
-    function getGroup(bytes32 groupId) public view returns(string, address[], bytes, bytes32 keySalt, bytes32 keyHash) {
+    function getGroup(bytes32 groupId) public view returns(string name, address[] members, bytes ipfsHash, address leader) {
         require(groups[groupId].exists, "Group does not exists");
 
         return (
             groups[groupId].name,
             groups[groupId].members,
             groups[groupId].ipfsHash,
-            groups[groupId].keySalt,
-            groups[groupId].keyHash);
+            getLeader(groupId));
     }
 
     function leaveGroup(bytes32 groupId) public {
@@ -119,6 +117,7 @@ contract Dipfshare {
         groups[groupId].leaderIdx++;
         groups[groupId].leaderStart = now;
 
+        emit GroupLeft(groupId, msg.sender);
         emit KeyDirty(groupId);
     }
 
@@ -132,7 +131,12 @@ contract Dipfshare {
         require(groups[groupId].exists, "group does not exist");
         require(isUserInGroup(groupId, msg.sender), "user is not member of group");
         require(groups[groupId].isKeyDirty, "can not change group leader: key is not dirty");
-        require(now >= groups[groupId].leaderStart + 5 minutes, "leader's time has not expired yet");
+
+        // do not punish users who were requesting change leader
+        // on timeout at the same time
+        if (now < groups[groupId].leaderStart + 5 minutes) {
+            return;
+        }
 
         groups[groupId].leaderIdx++;
         groups[groupId].leaderStart = now;
@@ -171,10 +175,8 @@ contract Dipfshare {
         return true;
     }
 
-    function groupReplaceKey(
+    function changeGroupKey(
         bytes32 groupId,
-        bytes32 newKeySalt,
-        bytes32 newKeyHash,
         bytes newIpfsHash,
         address[] members,
         bytes32[] rs,
@@ -183,15 +185,13 @@ contract Dipfshare {
     public {
         require(groups[groupId].exists, "group does not exist");
 
-        bytes32 digest = keccak256(groups[groupId].keyHash, newKeyHash, groups[groupId].ipfsHash, newIpfsHash);
+        bytes32 digest = keccak256(groups[groupId].ipfsHash, newIpfsHash, getLeader(groupId));
         require(checkGroupConsensus(groupId, digest, members, rs, ss, vs));
 
-        groups[groupId].keySalt = newKeySalt;
-        groups[groupId].keyHash = newKeyHash;
         groups[groupId].ipfsHash = newIpfsHash;
         groups[groupId].isKeyDirty = false;
 
-        emit NewGroupKey(groupId, newKeySalt, newKeyHash);
+        emit GroupKeyChanged(groupId, newIpfsHash);
     }
 
     function inviteUser(bytes32 groupId, address newMember, bool hasInviteRight) public {

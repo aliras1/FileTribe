@@ -13,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 
 	comcommon "ipfs-share/client/communication/common"
-	sessclients "ipfs-share/client/communication/sessions/clients"
 	"ipfs-share/client/interfaces"
 	. "ipfs-share/collections"
 	"ipfs-share/crypto"
@@ -24,9 +23,10 @@ type Group struct {
 	name              string
 	ipfsHash          string
 	encryptedIpfsHash []byte
+	leader            ethcommon.Address
 	members           []ethcommon.Address
 	boxer             crypto.SymmetricKey
-	lock sync.RWMutex
+	lock 			  sync.RWMutex
 }
 
 func NewGroup(groupName string) interfaces.IGroup {
@@ -57,7 +57,7 @@ func NewGroupFromCap(cap *caps.GroupAccessCap) interfaces.IGroup {
 }
 
 func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
-	_, members, _, _, _, err := ctx.network.GetGroup(groupId)
+	_, members, _, _, err := ctx.network.GetGroup(groupId)
 	if err != nil {
 		errors.Wrap(err, "could not get group from network")
 	}
@@ -77,7 +77,7 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 		}
 		contact := ctx.addressBook.Get(NewAddressId(&c.Address)).(*comcommon.Contact)
 
-		session := sessclients.NewGetGroupKeySessionClient(groupId, contact, ctx.user, ctx.storage, ctx.p2p.SessionClosedChan, func(cap *caps.GroupAccessCap) {
+		err = ctx.p2p.StartGetGroupKeySession(groupId, contact, ctx.user, ctx.storage, func(cap *caps.GroupAccessCap) {
 			groupCtx, err := NewGroupContextFromCAP(
 				cap,
 				ctx.user,
@@ -102,10 +102,9 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 				glog.Warningf("could not append elem: %s", err)
 			}
 		})
-
-		ctx.p2p.AddSession(session)
-
-		go session.Run()
+		if err != nil {
+			glog.Errorf("could not start get group key session: %s", err)
+		}
 	}
 
 	return nil
@@ -151,7 +150,7 @@ func (g *Group) SetIpfsHash(ipfsHash string, encIpfsHash []byte) error {
 	return nil
 }
 
-func (g *Group) Update(name string, members []ethcommon.Address, encIpfsHash []byte) error {
+func (g *Group) Update(name string, members []ethcommon.Address, encIpfsHash []byte, leader ethcommon.Address) error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
@@ -164,6 +163,7 @@ func (g *Group) Update(name string, members []ethcommon.Address, encIpfsHash []b
 	g.members = members
 	g.ipfsHash = string(ipfsHash)
 	g.encryptedIpfsHash = encIpfsHash
+	g.leader = leader
 
 	return nil
 }
@@ -253,4 +253,18 @@ func (g *Group) Boxer() crypto.SymmetricKey {
 	defer g.lock.RUnlock()
 
 	return g.boxer
+}
+
+func (g *Group) SetBoxer(boxer crypto.SymmetricKey) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	g.boxer = boxer
+}
+
+func (g *Group) Leader() ethcommon.Address {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
+	return  g.leader
 }

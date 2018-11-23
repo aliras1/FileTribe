@@ -60,6 +60,7 @@ func (contact *Contact) VerifySignature(digest, signature []byte) bool {
 	pk, err := ethcrypto.SigToPub(digest, signature)
 	if err != nil {
 		glog.Warningf("could not get pk from sig: %s", err)
+		return false
 	}
 
 	otherAddress := ethcrypto.PubkeyToAddress(*pk)

@@ -16,22 +16,20 @@ import (
 	"ipfs-share/crypto"
 )
 
-type GetGroupKeyOnSuccessCallback func(cap *caps.GroupAccessCap)
-
 type GetGroupKeySessionClient struct {
-	sessionId collections.IIdentifier
-	state     uint8
-	contact   *comcommon.Contact
-	groupId [32]byte
+	sessionId 			collections.IIdentifier
+	state     			uint8
+	contact  			*comcommon.Contact
+	groupId 			[32]byte
 
-	storage *fs.Storage
-	user interfaces.IUser
-	closedChan chan common.ISession
+	storage 			*fs.Storage
+	user 				interfaces.IUser
+	onSessionClosed 	common.SessionClosedCallback
 
-	lock sync.RWMutex
-	stop chan bool
-	error error
-	onSuccessCallback GetGroupKeyOnSuccessCallback
+	lock 				sync.RWMutex
+	stop			    chan bool
+	error				error
+	onSuccessCallback   common.OnGetGroupKeySuccessCallback
 }
 
 func (session *GetGroupKeySessionClient) Error() error {
@@ -40,7 +38,7 @@ func (session *GetGroupKeySessionClient) Error() error {
 
 func (session *GetGroupKeySessionClient) close() {
 	session.state = common.EndOfSession
-	session.closedChan <- session
+	session.onSessionClosed(session)
 }
 
 func (session *GetGroupKeySessionClient) Abort() {
@@ -190,21 +188,21 @@ func NewGetGroupKeySessionClient(
 	contact *comcommon.Contact,
 	user interfaces.IUser,
 	storage *fs.Storage,
-	closedChan chan common.ISession,
-	onSuccess GetGroupKeyOnSuccessCallback,
+	onSessionClosed common.SessionClosedCallback,
+	onSuccess common.OnGetGroupKeySuccessCallback,
 ) *GetGroupKeySessionClient {
 
 	sessionId := rand.Uint32()
 
 	return &GetGroupKeySessionClient{
-		sessionId: collections.NewUint32Id(sessionId),
-		groupId:   groupId,
-		contact:   contact,
-		state:     0,
-		user:       user,
-		storage: storage,
-		closedChan: closedChan,
-		stop: make(chan bool),
-		onSuccessCallback: onSuccess,
+		sessionId: 			collections.NewUint32Id(sessionId),
+		groupId:   			groupId,
+		contact:   			contact,
+		state:     			0,
+		user:       		user,
+		storage: 			storage,
+		onSessionClosed:	onSessionClosed,
+		stop: 				make(chan bool),
+		onSuccessCallback:  onSuccess,
 	}
 }

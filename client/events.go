@@ -14,7 +14,7 @@ func (ctx *UserContext) HandleDebugEvents(ch chan *eth.EthDebug) {
 	glog.Info("hadnling debug events...")
 
 	for debug := range ch {
-		glog.Infof("Eth Debug code: %v", debug.Msg.String())
+		glog.Infof("[*] Eth Debug code: %v", debug.Msg.String())
 	}
 }
 
@@ -39,7 +39,7 @@ func (ctx *UserContext) HandleGroupRegisteredEvents(ch chan *eth.EthGroupRegiste
 	glog.Info("group registered handling...")
 
 	for groupRegistered := range ch {
-		ctx.onGroupRegisteredCallback(groupRegistered)
+		ctx.onGroupRegistered(groupRegistered)
 	}
 }
 
@@ -72,7 +72,7 @@ func (ctx *UserContext) onGroupUpdateIpfs(updateIpfs *eth.EthGroupUpdateIpfsHash
 	}
 }
 
-func (ctx *UserContext) onGroupRegisteredCallback(groupRegistered *eth.EthGroupRegistered) {
+func (ctx *UserContext) onGroupRegistered(groupRegistered *eth.EthGroupRegistered) {
 	ctx.lock.Lock()
 	defer ctx.lock.Unlock()
 
@@ -125,29 +125,69 @@ func (ctx *UserContext) HandleKeyDirtyEvents(ch chan *eth.EthKeyDirty) {
 	glog.Info("keyDirty handling...")
 
 	for keyDirty := range ch {
+		glog.Info("got Dirty Key event")
 		go ctx.onKeyDirty(keyDirty)
 	}
 }
 
-func (ctx *UserContext) onKeyDirty(keyDirty *eth.EthKeyDirty) error {
+func (ctx *UserContext) onKeyDirty(keyDirty *eth.EthKeyDirty) {
 	id := NewBytesId(keyDirty.GroupId)
 
 	groupCtxInt := ctx.groups.Get(id)
 	if groupCtxInt == nil {
-		return nil
+		return
 	}
 
 	groupCtx := groupCtxInt.(*GroupContext)
 	if err := groupCtx.Update(); err != nil {
-		return errors.Wrap(err, "could not update group context")
+		glog.Errorf("could not update group context: %s", err)
+		return
 	}
 
-	// left or kicked. maybe send a signal to somewhere?
-	if !groupCtx.Group.IsMember(ctx.user.Address()) {
-		ctx.groups.DeleteWithId(id)
+	if err := groupCtx.OnKeyDirty(); err != nil {
+		glog.Errorf( "error while changing group key: %s", err)
+	}
+}
 
-		return nil
+func (ctx *UserContext) HandleGroupKeyChangedEvents(ch chan *eth.EthGroupKeyChanged) {
+	glog.Info("GroupKeyChanged handling...")
+
+	for groupKeyChanged := range ch {
+		glog.Info("got GroupKeyChanged event")
+		go ctx.onGroupKeyChanged(groupKeyChanged)
+	}
+}
+
+func (ctx *UserContext) onGroupKeyChanged(event *eth.EthGroupKeyChanged) {
+	id := NewBytesId(event.GroupId)
+
+	groupCtxInt := ctx.groups.Get(id)
+	if groupCtxInt == nil {
+		return
 	}
 
-	return nil
+	if err := groupCtxInt.(*GroupContext).GetKey(event.IpfsHash); err != nil {
+		glog.Errorf("could not get new group key: %s", err)
+	}
+}
+
+func (ctx *UserContext) HandleGroupLeftEvents(ch chan *eth.EthGroupLeft) {
+	glog.Info("GroupLeft handling...")
+
+	for groupLeft := range ch {
+		glog.Info("got GroupLeft event")
+		go ctx.onGroupLeft(groupLeft)
+	}
+}
+
+func (ctx *UserContext) onGroupLeft(event *eth.EthGroupLeft) {
+	if !bytes.Equal(event.User.Bytes(), ctx.user.Address().Bytes()) {
+		return
+	}
+
+	groupId := NewBytesId(event.GroupId)
+
+	if err := ctx.DeleteGroup(groupId); err != nil {
+		glog.Errorf("could not delete group: %s", err)
+	}
 }
