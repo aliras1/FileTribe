@@ -21,7 +21,7 @@ import (
 type IpfsAddOperation func(reader io.Reader) (string, error)
 
 type GroupRepo struct {
-	files *ConcurrentCollection
+	files *Map
 	group interfaces.IGroup
 	ipfs ipfs.IIpfs
 	storage *Storage
@@ -33,7 +33,7 @@ type GroupRepo struct {
 }
 
 func NewGroupRepo(group interfaces.IGroup, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
-	storage.MakeGroupDir(group.Id().ToString())
+	storage.MakeGroupDir(group.Address().String())
 
 	var capabilities []*caps.FileCap
 
@@ -50,12 +50,12 @@ func NewGroupRepo(group interfaces.IGroup, user ethcommon.Address, storage *Stor
 	}
 
 	return &GroupRepo{
-		group: group,
-		files: NewConcurrentCollection(),
+		group:    group,
+		files:    NewConcurrentMap(),
 		ipfsHash: ipfsHash,
-		storage: storage,
-		ipfs: ipfs,
-		user: user,
+		storage:  storage,
+		ipfs:     ipfs,
+		user:     user,
 	}, nil
 }
 
@@ -73,13 +73,13 @@ func NewGroupRepoFromIpfs(ipfsHash string, group interfaces.IGroup, user ethcomm
 		return nil, errors.Wrap(err, "could not get group file caps")
 	}
 
-	var files *ConcurrentCollection
+	var files *Map
 	for _, cap := range capabilities {
-		file, err := NewGroupFileFromCap(cap, group.Id().ToString(), storage)
+		file, err := NewGroupFileFromCap(cap, group.Address().String(), storage)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create new file from cap")
 		}
-		files.Append(file)
+		files.Put(file.Cap.Id, file)
 	}
 	repo.files = files
 
@@ -111,7 +111,7 @@ func (repo *GroupRepo) Files() []*File {
 
 	var files []*File
 
-	for fileInt := range repo.files.Iterator() {
+	for fileInt := range repo.files.VIterator() {
 		files = append(files, fileInt.(*File))
 	}
 
@@ -119,7 +119,7 @@ func (repo *GroupRepo) Files() []*File {
 }
 
 func (repo *GroupRepo) getPendingChanges() ([]*caps.FileCap, error) {
-	dir := repo.storage.GroupFileDataDir(repo.group.Id().ToString())
+	dir := repo.storage.GroupFileDataDir(repo.group.Address().String())
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open group file data dir")
@@ -134,11 +134,11 @@ func (repo *GroupRepo) getPendingChanges() ([]*caps.FileCap, error) {
 
 		// if current file is not in repo --> create new
 		if fileInt == nil {
-			file, err = NewGroupFile(filePath, []ethcommon.Address{repo.user}, repo.group.Id().ToString(), repo.storage)
+			file, err = NewGroupFile(filePath, []ethcommon.Address{repo.user}, repo.group.Address().String(), repo.storage)
 			if err != nil {
 				return nil, errors.Wrap(err, "could not create new group file")
 			}
-			repo.files.Append(file)
+			repo.files.Put(file.Cap.Id, file)
 		} else {
 			file = fileInt.(*File)
 		}
@@ -189,7 +189,7 @@ func (repo *GroupRepo) getFileCaps() []*caps.FileCap {
 	defer repo.lock.RUnlock()
 
 	var capabilities []*caps.FileCap
-	for fileInterface := range repo.files.Iterator() {
+	for fileInterface := range repo.files.VIterator() {
 		file := fileInterface.(*File)
 		var capCopy *caps.FileCap
 		deepcopy.Copy(capCopy, file.Cap)
@@ -199,7 +199,7 @@ func (repo *GroupRepo) getFileCaps() []*caps.FileCap {
 	return capabilities
 }
 
-func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, address *ethcommon.Address) error {
+func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, address ethcommon.Address) error {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
@@ -346,11 +346,11 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 		var file *File
 		fileInterface := repo.files.Get(NewStringId(cap.FileName))
 		if fileInterface == nil {
-			file, err := NewGroupFileFromCap(cap, repo.group.Id().ToString(), repo.storage)
+			file, err := NewGroupFileFromCap(cap, repo.group.Address().String(), repo.storage)
 			if err != nil {
 				return errors.Wrap(err, "could not create new group file from cap")
 			}
-			repo.files.Append(file)
+			repo.files.Put(file.Cap.Id, file)
 			go file.Download(repo.storage, repo.ipfs)
 		} else {
 			file = fileInterface.(*File)
@@ -382,7 +382,7 @@ func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer crypto.Sy
 }
 
 func (repo *GroupRepo) ReEncrypt(boxer crypto.SymmetricKey) (string, error) {
-	for fileInt := range repo.files.Iterator() {
+	for fileInt := range repo.files.VIterator() {
 		file := fileInt.(*File)
 		if err := file.ChangeKey(repo.ipfs); err != nil {
 			return "", errors.Wrap(err, "could not change file key")

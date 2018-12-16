@@ -3,6 +3,8 @@ package common
 import (
 	"bytes"
 	"context"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"ipfs-share/crypto"
 	"net"
 	"strings"
 
@@ -13,7 +15,6 @@ import (
 
 	. "ipfs-share/collections"
 	"ipfs-share/ipfs"
-	"ipfs-share/network"
 )
 
 const (
@@ -22,15 +23,30 @@ const (
 
 
 type Contact struct {
-	*network.Contact
+	AccAddr     ethcommon.Address
+	Address   ethcommon.Address
+	Name      string
+	IpfsPeerId string
+	Boxer     crypto.AnonymPublicKey
 	conn *P2PConn
 	ipfs ipfs.IIpfs
 }
 
-func NewContact(contact *network.Contact, ipfs ipfs.IIpfs) *Contact {
+func NewContact(
+	address ethcommon.Address,
+	accAddr ethcommon.Address,
+	name string,
+	ipfsPeerId string,
+	boxer crypto.AnonymPublicKey,
+	ipfs ipfs.IIpfs) *Contact {
+
 	return &Contact{
-		Contact:contact,
-		ipfs:ipfs,
+		AccAddr:accAddr,
+		Address: 	address,
+		Name: 		name,
+		IpfsPeerId: ipfsPeerId,
+		Boxer: 		boxer,
+		ipfs:		ipfs,
 	}
 }
 

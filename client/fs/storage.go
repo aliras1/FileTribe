@@ -2,20 +2,19 @@ package fs
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/golang/glog"
 	"io/ioutil"
 	"ipfs-share/client/fs/caps"
-	"os"
-	"path"
-	"github.com/golang/glog"
 	ipfsapi "ipfs-share/ipfs"
 	"ipfs-share/utils"
+	"os"
+	"path"
 
-	"ipfs-share/crypto"
-	"github.com/pkg/errors"
 	"bytes"
+	"github.com/pkg/errors"
+	"ipfs-share/crypto"
 )
 
 const (
@@ -96,6 +95,26 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) error
 	return utils.CopyFile(filePath, newFilePath)
 }
 
+func (storage *Storage) SaveAccountData(data []byte) error {
+	path := storage.userDataPath + "account.dat"
+
+	if err := utils.WriteFile(path, data); err != nil {
+		return errors.Wrapf(err, "could not write to file: %s", path)
+	}
+
+	return nil
+}
+
+func (storage *Storage) LoadAccountData() ([]byte, error) {
+	path := storage.userDataPath + "account.dat"
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not read file: %s", path)
+	}
+
+	return data, nil
+}
 
 // +------------------------------+
 // |   Group specific functions   |
@@ -137,8 +156,7 @@ func (storage *Storage) SaveGroupAccessCap(cap *caps.GroupAccessCap) error {
 		return errors.Wrap(err, "could not marshal group access capability")
 	}
 
-	groupIdBase64 := base64.URLEncoding.EncodeToString(cap.GroupId[:])
-	path := storage.GroupAccessCapDir() + groupIdBase64 + CAP_EXT
+	path := storage.GroupAccessCapDir() + cap.Address.String() + CAP_EXT
 	if err := utils.WriteFile(path, capJson); err != nil {
 		return errors.Wrap(err, "could not write group cap file")
 	}

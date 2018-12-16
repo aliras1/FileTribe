@@ -1,45 +1,44 @@
 package communication
 
 import (
-	"ipfs-share/client/communication/sessions"
-	"ipfs-share/client/communication/sessions/clients"
-	sesscommon "ipfs-share/client/communication/sessions/common"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/interfaces"
-	"ipfs-share/crypto"
-	ipfsapi "ipfs-share/ipfs"
 	"context"
-	"net"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"time"
-	"ipfs-share/network"
-	. "ipfs-share/collections"
 	"ipfs-share/client/communication/common"
+	"ipfs-share/client/communication/sessions/clients"
+	sesscommon "ipfs-share/client/communication/sessions/common"
+	"ipfs-share/client/communication/sessions/servers"
+	"ipfs-share/client/interfaces"
+	. "ipfs-share/collections"
+	"ipfs-share/crypto"
+	ipfsapi "ipfs-share/ipfs"
+	"net"
+	"time"
 )
 
 
-type P2PHandleConnection func(addressBook *ConcurrentCollection, conn *common.P2PConn, stop chan struct{})
+type P2PHandleConnection func(addressBook *Map, conn *common.P2PConn, stop chan struct{})
 
 type P2PManager struct {
-	user                 interfaces.IUser
-	sessions             *ConcurrentCollection
-	addressBook          *ConcurrentCollection
-	p2pListener          *ipfsapi.P2PListener
-	ctxCallback 		 sesscommon.CtxCallback
-	stop                 chan struct{}
-	stopConnection       chan struct{}
-	ipfs                 ipfsapi.IIpfs
-	network              network.INetwork
+	account        interfaces.IAccount
+	signer		   *crypto.Signer
+	sessions       *Map
+	addressBook    *common.AddressBook
+	p2pListener    *ipfsapi.P2PListener
+	ctxCallback    sesscommon.CtxCallback
+	stop           chan struct{}
+	stopConnection chan struct{}
+	ipfs           ipfsapi.IIpfs
 }
 
 func NewP2PManager(
 	port string,
-	user interfaces.IUser,
-	addressBook *ConcurrentCollection,
+	account interfaces.IAccount,
+	signer *crypto.Signer,
+	addressBook *common.AddressBook,
 	ctxCallback sesscommon.CtxCallback,
 	ipfs ipfsapi.IIpfs,
-	network network.INetwork,
 	) (*P2PManager, error) {
 
 	stop := make(chan struct{})
@@ -50,14 +49,14 @@ func NewP2PManager(
 	}
 
 	p2p := &P2PManager{
-		user:                 user,
-		addressBook:          addressBook,
-		ctxCallback: 		  ctxCallback,
-		sessions:             NewConcurrentCollection(),
-		p2pListener:          p2pListener,
-		stop:                 stop,
-		ipfs:                 ipfs,
-		network:              network,
+		account:     account,
+		signer:		 signer,
+		addressBook: addressBook,
+		ctxCallback: ctxCallback,
+		sessions:    NewConcurrentMap(),
+		p2pListener: p2pListener,
+		stop:        stop,
+		ipfs:        ipfs,
 	}
 
 	go p2p.connectionListener(port)
@@ -66,9 +65,7 @@ func NewP2PManager(
 }
 
 func (p2p *P2PManager) AddSession(session sesscommon.ISession) {
-	if err := p2p.sessions.Append(session); err != nil {
-		glog.Warningf("could not append elem: %s", err)
-	}
+	p2p.sessions.Put(session.Id(), session)
 }
 
 func (p2p *P2PManager) Stop() {
@@ -112,13 +109,13 @@ func (p2p *P2PManager) connectionListener(port string) {
 				conn.SetKeepAlive(true)
 				go p2p.handleConnection(p2p.addressBook, (*common.P2PConn)(conn), p2p.stop)
 
-				glog.Infof("%s is serving %s on %s", p2p.user.Name, conn.RemoteAddr().String(), conn.LocalAddr().String())
+				glog.Infof("%s is serving %s on %s", p2p.account.Name, conn.RemoteAddr().String(), conn.LocalAddr().String())
 			}
 		}
 	}
 }
 
-func (p2p *P2PManager) handleConnection(addressBook *ConcurrentCollection, conn *common.P2PConn, stop chan struct{}) {
+func (p2p *P2PManager) handleConnection(addressBook *common.AddressBook, conn *common.P2PConn, stop chan struct{}) {
 	defer func() {
 		close(stop)
 		conn.Close()
@@ -133,28 +130,32 @@ func (p2p *P2PManager) handleConnection(addressBook *ConcurrentCollection, conn 
 			}
 		default:
 			{
-				msg, contact, err := conn.ReadMessage(addressBook, p2p.network, p2p.ipfs)
+				msg, err := conn.ReadMessage(addressBook)
 				if err != nil {
 					glog.Errorf("could not read from connection: %s", err)
 					continue
 				}
 
-				address := p2p.user.Address()
-				glog.Infof("%s (%s): msg from: %s, sessid: %d", p2p.user.Name, address.String(), msg.From.String(), msg.SessionId)
+				contact, err := addressBook.Get(msg.From)
+				if err != nil {
+					glog.Errorf("could not get contact from address book: %s", err)
+					continue
+				}
 
-				sessionId := NewUint32Id(msg.SessionId)
+				address := p2p.account.ContractAddress()
+				glog.Infof("%s (%s): msg from: %s, sessid: %d", p2p.account.Name(), address.String(), msg.From.String(), msg.SessionId)
+
 				var session sesscommon.ISession
-				sessionInterface := p2p.sessions.Get(sessionId)
+				sessionInterface := p2p.sessions.Get(msg.SessionId)
 				if sessionInterface == nil {
-					session, err = sessions.NewServerSession(msg, contact, p2p.user, p2p.ctxCallback, p2p.onSessionClosed)
+					session, err = servers.NewGetGroupKeySessionServer(msg, contact, p2p.account.ContractAddress(), p2p.signer, p2p.ctxCallback, p2p.onSessionClosed)
 					if err != nil {
 						glog.Error("could not create new session: %s", err)
 						continue
 					}
 
-					if err := p2p.sessions.Append(session); err != nil {
-						glog.Warningf("could not append elem: %s", err)
-					}
+					p2p.sessions.Put(session.Id(), session)
+
 					go session.Run()
 					continue
 				}
@@ -167,75 +168,24 @@ func (p2p *P2PManager) handleConnection(addressBook *ConcurrentCollection, conn 
 }
 
 func (p2p *P2PManager) onSessionClosed(session sesscommon.ISession) {
-	glog.Infof("sid %v closed with error: %s", session.Id().Data(), session.Error())
+	glog.Infof("sid %v closed with error: %v", session.Id(), session.Error())
 }
 
-func (p2p *P2PManager) StartChangeGroupKeySession(
-	newBoxer crypto.SymmetricKey,
-	encNewIpfsHash []byte,
-	user interfaces.IUser,
-	group interfaces.IGroup,
-	broadcastFunction sesscommon.Broadcast,
-	onSuccess sesscommon.OnClientSuccessCallback,
-) error {
-	session, err := clients.NewChangeGroupKeySessionClient(
-		newBoxer,
-		encNewIpfsHash,
-		user,
-		group,
-		broadcastFunction,
-		p2p.onSessionClosed,
-		onSuccess)
 
-	if err != nil {
-		return errors.Wrap(err, "could not create NewChangeGroupKeySessionClient")
-	}
-
-	p2p.AddSession(session)
-
-	go session.Run()
-
-	return nil
-}
-
-func (p2p *P2PManager) StartCommitSession(
-	newIpfsHash string,
-	user interfaces.IUser,
-	group interfaces.IGroup,
-	broadcastFunction sesscommon.Broadcast,
-	onSuccess sesscommon.OnClientSuccessCallback,
-) error {
-	session, err := clients.NewCommitGroupSessionClient(
-		newIpfsHash,
-		user,
-		group,
-		broadcastFunction,
-		p2p.onSessionClosed,
-		onSuccess)
-
-	if err != nil {
-		return errors.Wrap(err, "could not create NewChangeGroupKeySessionClient")
-	}
-
-	p2p.AddSession(session)
-
-	go session.Run()
-
-	return nil
-}
 
 func (p2p *P2PManager) StartGetGroupKeySession(
-	groupId [32]byte,
-	contact *common.Contact,
-	user interfaces.IUser,
-	storage *fs.Storage,
+	msgType common.MessageType,
+	group ethcommon.Address,
+	receiver *common.Contact,
+	sender ethcommon.Address,
 	onSuccess sesscommon.OnGetGroupKeySuccessCallback,
 ) error {
 	session := clients.NewGetGroupKeySessionClient(
-		groupId,
-		contact,
-		user,
-		storage,
+		msgType,
+		group,
+		receiver,
+		sender,
+		p2p.signer,
 		p2p.onSessionClosed,
 		onSuccess)
 

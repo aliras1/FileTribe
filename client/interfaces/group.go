@@ -3,15 +3,14 @@ package interfaces
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
-	. "ipfs-share/collections"
 	"ipfs-share/crypto"
 )
 
 type IGroup interface {
-	Id() IIdentifier
+	Address() ethcommon.Address
 	Name() string
 	IpfsHash() string
-	SetIpfsHash(ipfsHash string, encIpfsHash []byte) error
+	SetIpfsHash(encIpfsHash []byte) error
 	EncryptedIpfsHash() []byte
 	AddMember(user ethcommon.Address)
 	RemoveMember(user ethcommon.Address)
@@ -20,7 +19,7 @@ type IGroup interface {
 	Members() []ethcommon.Address
 	Boxer() crypto.SymmetricKey
 	SetBoxer(boxer crypto.SymmetricKey)
-	Update(name string, members []ethcommon.Address, encIpfsHash []byte, leader ethcommon.Address) error
+	Update(name string, members []ethcommon.Address, encIpfsHash []byte) error
 	Encode() ([]byte, error)
-	Leader() ethcommon.Address
+	Save() error
 }

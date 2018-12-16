@@ -1,11 +1,11 @@
 package crypto
 
 import (
-	"golang.org/x/crypto/nacl/secretbox"
-	"io"
+	"crypto/rand"
 	"encoding/json"
 	"github.com/pkg/errors"
-	"crypto/rand"
+	"golang.org/x/crypto/nacl/secretbox"
+	"io"
 )
 
 type SymmetricKey struct {
@@ -13,13 +13,13 @@ type SymmetricKey struct {
 	RNG io.Reader `json:"-"`
 }
 
-func NewSymmetricKey() (SymmetricKey, error) {
+func NewSymmetricKey() (*SymmetricKey, error) {
 	var k [32]byte
 	if _, err := rand.Read(k[:]); err != nil {
-		return SymmetricKey{}, errors.Wrap(err, "could not read from crypto.rand")
+		return &SymmetricKey{}, errors.Wrap(err, "could not read from crypto.rand")
 	}
 
-	return SymmetricKey{Key: k, RNG: rand.Reader}, nil
+	return &SymmetricKey{Key: k, RNG: rand.Reader}, nil
 }
 
 func (k *SymmetricKey) GetNonce() [24]byte {

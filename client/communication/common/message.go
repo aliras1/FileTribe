@@ -3,23 +3,18 @@ package common
 import (
 	"encoding/binary"
 	"encoding/json"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
 	"ipfs-share/crypto"
-	"ipfs-share/ipfs"
-	"ipfs-share/network"
-	. "ipfs-share/collections"
 )
 
 // MessageType ...
 type MessageType byte
 
 const (
-	GetGroupKey MessageType = 0
-	Commit      MessageType = 1
-	ChangeKey	MessageType = 2
+	GetGroupKey 		MessageType = 0
+	GetProposedGroupKey MessageType = 1
 )
 
 type Message struct {
@@ -28,30 +23,6 @@ type Message struct {
 	SessionId uint32	`json:"session_id"`
 	Payload []byte `json:"payload"`
 	Sig     []byte	`json:"sig"`
-}
-
-type CommitGroupMessage struct {
-	NewFileCapIpfsHash string
-	OldGroupIpfsPath   string
-	NewGroupIpfsHash   []byte
-}
-
-func (msg *CommitGroupMessage) Encode() ([]byte, error) {
-	enc, err := json.Marshal(msg)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not marshal CommitGroupMessage")
-	}
-
-	return enc, nil
-}
-
-func DecodeAddFileGroupMessage(data []byte) (*CommitGroupMessage, error) {
-	var msg CommitGroupMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return nil, errors.Wrapf(err, "could not unmarshal CommitGroupMessage")
-	}
-
-	return &msg, nil
 }
 
 type HeartBeat struct {
@@ -67,13 +38,8 @@ type Proposal struct {
 	NewHash  [32]byte `json:"new_hash"`
 }
 
-type Approval network.Approval
 
-func (approval *Approval) Id() IIdentifier {
-	return NewAddressId(&approval.From)
-}
-
-func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer crypto.Signer) (*Message, error) {
+func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer *crypto.Signer) (*Message, error) {
 	msg := &Message{
 		From: from,
 		Type: msgType,
@@ -94,7 +60,7 @@ func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, p
 func (m *Message) Encode() ([]byte, error) {
 	enc, err := json.Marshal(m)
 	if err != nil {
-		errors.Wrap(err, "could not encode Message")
+		return nil, errors.Wrap(err, "could not encode Message")
 	}
 
 	return enc, nil
@@ -109,19 +75,12 @@ func DecodeMessage(data []byte) (*Message, error) {
 	return &m, nil
 }
 
-func (m *Message) Validate(network network.INetwork, ipfs ipfs.IIpfs) (*Contact, error) {
-	netContact, err := network.GetUser(m.From)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not get user %s", m.From.String())
-	}
-
-	contact := NewContact(netContact, ipfs)
-
+func (m *Message) Validate(contact *Contact) error {
 	if !contact.VerifySignature(m.Digest(), m.Sig) {
-		return nil, errors.New("invalid message")
+		return errors.New("invalid message")
 	}
 
-	return contact, nil
+	return nil
 }
 
 func (m *Message) Digest() []byte {

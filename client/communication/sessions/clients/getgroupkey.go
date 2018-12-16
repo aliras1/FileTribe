@@ -1,30 +1,28 @@
 package clients
 
 import (
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/golang/glog"
+	"github.com/pkg/errors"
 	"ipfs-share/client/fs/caps"
+	"ipfs-share/crypto"
 	"math/rand"
 	"sync"
 
-	"github.com/golang/glog"
-	"github.com/pkg/errors"
-
 	comcommon "ipfs-share/client/communication/common"
 	"ipfs-share/client/communication/sessions/common"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/interfaces"
-	"ipfs-share/collections"
-	"ipfs-share/crypto"
 )
 
 type GetGroupKeySessionClient struct {
-	sessionId 			collections.IIdentifier
-	state     			uint8
-	contact  			*comcommon.Contact
-	groupId 			[32]byte
+	sessionId uint32
+	msgType   comcommon.MessageType
+	state     uint8
+	receiver  *comcommon.Contact
+	groupAddr ethcommon.Address
 
-	storage 			*fs.Storage
-	user 				interfaces.IUser
-	onSessionClosed 	common.SessionClosedCallback
+	sender          ethcommon.Address
+	onSessionClosed common.SessionClosedCallback
+	signer          *crypto.Signer
 
 	lock 				sync.RWMutex
 	stop			    chan bool
@@ -59,7 +57,7 @@ func (session *GetGroupKeySessionClient) State() uint8 {
 	return session.state
 }
 
-func (session *GetGroupKeySessionClient) Id() collections.IIdentifier {
+func (session *GetGroupKeySessionClient) Id() uint32 {
 	return session.sessionId
 }
 
@@ -82,11 +80,11 @@ func (session *GetGroupKeySessionClient) NextState(contact *comcommon.Contact, d
 	case 0:
 		{
 			msg, err := comcommon.NewMessage(
-				session.user.Address(),
+				session.sender,
 				comcommon.GetGroupKey,
-				session.sessionId.Data().(uint32),
-				session.groupId[:],
-				session.user.Signer(),
+				session.sessionId,
+				session.groupAddr.Bytes(),
+				session.signer,
 			)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not create message")
@@ -101,7 +99,7 @@ func (session *GetGroupKeySessionClient) NextState(contact *comcommon.Contact, d
 				return
 			}
 
-			if err := session.contact.Send(encMsg); err != nil {
+			if err := session.receiver.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
 				session.close()
 				return
@@ -114,19 +112,18 @@ func (session *GetGroupKeySessionClient) NextState(contact *comcommon.Contact, d
 		// Got the challenge
 	case 1:
 		{
-			signer := session.user.Signer()
-			sig, err := signer.Sign(data)
+			sig, err := session.signer.Sign(data)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not sign challange")
 				session.close()
 			}
 
 			msg, err := comcommon.NewMessage(
-				session.user.Address(),
+				session.sender,
 				comcommon.GetGroupKey,
-				session.sessionId.Data().(uint32),
+				session.sessionId,
 				sig,
-				session.user.Signer(),
+				session.signer,
 			)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not create message")
@@ -141,7 +138,7 @@ func (session *GetGroupKeySessionClient) NextState(contact *comcommon.Contact, d
 				return
 			}
 
-			if err := session.contact.Send(encMsg); err != nil {
+			if err := session.receiver.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
 				session.close()
 				return
@@ -161,14 +158,8 @@ func (session *GetGroupKeySessionClient) NextState(contact *comcommon.Contact, d
 			}
 
 			groupCap := &caps.GroupAccessCap{
-				GroupId: session.groupId,
+				Address: session.groupAddr,
 				Boxer:   *key,
-			}
-
-			if err := session.storage.SaveGroupAccessCap(groupCap); err != nil {
-				session.error = errors.Wrap(err, "could not save group access cap")
-				session.close()
-				return
 			}
 
 			session.onSuccessCallback(groupCap)
@@ -184,25 +175,25 @@ func (session *GetGroupKeySessionClient) NextState(contact *comcommon.Contact, d
 }
 
 func NewGetGroupKeySessionClient(
-	groupId [32]byte,
+	msgType comcommon.MessageType,
+	groupAddr ethcommon.Address,
 	contact *comcommon.Contact,
-	user interfaces.IUser,
-	storage *fs.Storage,
+	sender ethcommon.Address,
+	signer *crypto.Signer,
 	onSessionClosed common.SessionClosedCallback,
 	onSuccess common.OnGetGroupKeySuccessCallback,
 ) *GetGroupKeySessionClient {
 
-	sessionId := rand.Uint32()
-
 	return &GetGroupKeySessionClient{
-		sessionId: 			collections.NewUint32Id(sessionId),
-		groupId:   			groupId,
-		contact:   			contact,
-		state:     			0,
-		user:       		user,
-		storage: 			storage,
-		onSessionClosed:	onSessionClosed,
-		stop: 				make(chan bool),
-		onSuccessCallback:  onSuccess,
+		sessionId:         rand.Uint32(),
+		msgType:		   msgType,
+		groupAddr:         groupAddr,
+		receiver:          contact,
+		state:             0,
+		sender:            sender,
+		signer:			   signer,
+		onSessionClosed:   onSessionClosed,
+		stop:              make(chan bool),
+		onSuccessCallback: onSuccess,
 	}
 }

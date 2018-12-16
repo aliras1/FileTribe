@@ -1,8 +1,12 @@
 package client
 
 import (
-	"encoding/base64"
+	"context"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/chequebook"
+	"ipfs-share/client/communication/common"
 	"ipfs-share/crypto"
+	ethinv "ipfs-share/eth/gen/Invitation"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -13,137 +17,175 @@ import (
 	"ipfs-share/client/fs"
 	"ipfs-share/client/interfaces"
 	. "ipfs-share/collections"
+	ethApp "ipfs-share/eth/gen/Dipfshare"
 	ipfsapi "ipfs-share/ipfs"
-	nw "ipfs-share/network"
 )
 
 type IUserFacade interface {
 	CreateGroup(groupname string) error
-	User() interfaces.IUser
+	User() interfaces.IAccount
 	Groups() []IGroupFacade
 	SignOut()
 	Transactions() ([]*types.Receipt, error)
 }
 
 type UserContext struct {
-	user           interfaces.IUser
-	groups         *ConcurrentCollection
-	addressBook    *ConcurrentCollection
-	network        nw.INetwork
-	ipfs           ipfsapi.IIpfs
-	storage        *fs.Storage
-	p2p            *com.P2PManager
-	transactions   *ConcurrentCollection
+	account      	interfaces.IAccount
+	eth             *Eth
+	groups       	*Map
+	addressBook  	*common.AddressBook
+	ipfs         	ipfsapi.IIpfs
+	storage      	*fs.Storage
+	p2p          	*com.P2PManager
+	p2pPort 		string
 
-	channelStop chan int
-	lock sync.RWMutex
+	transactions 	*List
+	invitations     *List
+	subs 			*List
+
+	channelStop 	chan int
+	lock 			sync.RWMutex
 }
 
-func NewUserContextFromSignUp(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (IUserFacade, error) {
-	glog.Infof("[*] User '%s' signing up...", username)
 
-	ipfsPeerId, err := ipfs.ID()
+func (ctx *UserContext) SignUp(username string) error {
+	glog.Infof("[*] Account '%s' signing in...", username)
+
+	acc, err := NewAccount(username, ctx.storage)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get ipfs peer id")
+		return errors.Wrap(err, "could not create new account")
 	}
 
-	user, err := NewUser(username, password, ethKeyPath)
+	if err := acc.Save(); err != nil {
+		return errors.Wrap(err, "could not save account")
+	}
+
+	ipfsId, err := ctx.ipfs.ID()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create new user")
+		return errors.Wrap(err, "could not get ipfs id")
 	}
 
-	// check if user is registered
-	registered, err := network.IsUserRegistered(user.Address())
+	tx, err := ctx.eth.App.CreateAccount(ctx.eth.Auth.TxOpts, username, ipfsId.ID, acc.Boxer().PublicKey.Value)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not check if user is registered")
-	}
-	if registered {
-		return nil, errors.New("user is already registered")
+		return errors.Wrap(err, "could not send create account tx")
 	}
 
-	uc, err := NewUserContext(dataPath, user, network, ipfs, p2pPort)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create new user context")
-	}
+	ctx.transactions.Add(tx)
 
-	boxer := user.Boxer()
-	tx, err := network.RegisterUser(username, ipfsPeerId.ID, boxer.PublicKey.Value)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not start transaction")
-	}
-
-	uc.transactions.Append(tx)
-
-	return uc, nil
+	return nil
 }
 
-func NewUserContextFromSignIn(username, password, ethKeyPath, dataPath string, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (IUserFacade, error) {
-	glog.Infof("[*] User '%s' signing in...", username)
+func (ctx *UserContext) SignIn(username string) error {
+	//auth, err := NewAuth(ethKeyPath, password)
+	//if err != nil {
+	//	return errors.Wrap(err, "could not create Auth")
+	//}
+	//
+	//acc, err := NewAccount()
 
-	user, err := NewUser(username, password, ethKeyPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create new user")
-	}
-
-	registered, err := network.IsUserRegistered(user.Address())
-	if err != nil {
-		return nil, errors.Wrap(err, "could not check if user is registered")
-	}
-	if !registered {
-		return nil, errors.New("user is not registered")
-	}
-
-	uc, err := NewUserContext(dataPath, user, network, ipfs, p2pPort)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create new user context")
-	}
-
-	glog.Info("[*] Signed in")
-
-	return uc, nil
+	return errors.New("not implemented")
 }
 
-func NewUserContext(dataPath string, user interfaces.IUser, network nw.INetwork, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
-	var err error
-	var ctx UserContext
-	ctx.user = user
-	ctx.network = network
-	ctx.ipfs = ipfs
-	ctx.storage = fs.NewStorage(dataPath)
-	ctx.groups = NewConcurrentCollection()
-	ctx.addressBook = NewConcurrentCollection()
-	ctx.transactions = NewConcurrentCollection()
+func (ctx *UserContext) IsMember(group ethcommon.Address, account ethcommon.Address) error {
+	groupInt := ctx.groups.Get(group)
+	if groupInt == nil {
+		return errors.New("no group found")
+	}
+
+	if !groupInt.(*GroupContext).Group.IsMember(account) {
+		return errors.New("account is not member of group")
+	}
+
+	return nil
+}
+
+func (ctx *UserContext) Boxer(group ethcommon.Address) (crypto.SymmetricKey, error) {
+	groupInt := ctx.groups.Get(group)
+	if groupInt == nil {
+		return crypto.SymmetricKey{}, errors.New("no group found")
+	}
+
+	return groupInt.(*GroupContext).Group.Boxer(), nil
+}
+
+func (ctx *UserContext) ProposedBoxer(group ethcommon.Address) (crypto.SymmetricKey, error) {
+	groupInt := ctx.groups.Get(group)
+	if groupInt == nil {
+		return crypto.SymmetricKey{}, errors.New("no group found")
+	}
+
+	return *groupInt.(*GroupContext).proposedKey, nil
+}
+
+func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	p2p, err := com.NewP2PManager(
-		p2pPort,
-		user,
+		ctx.p2pPort,
+		acc,
+		ctx.eth.Auth.Signer,
 		ctx.addressBook,
-		&ctx,
-		ipfs,
-		network)
+		ctx,
+		ctx.ipfs)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create P2P connection")
+		return errors.Wrap(err, "could not create P2P connection")
 	}
+
+	ctx.account = acc
 	ctx.p2p = p2p
 
-	ctx.channelStop = make(chan int)
-
-	go ctx.HandleDebugEvents(network.GetDebugChannel())
-	go ctx.HandleGroupInvitationEvents(network.GetGroupInvitationChannel())
-	go ctx.HandleGroupUpdateIpfsEvents(network.GetGroupUpdateIpfsChannel())
-	go ctx.HandleGroupRegisteredEvents(network.GetGroupRegisteredChannel())
-	go ctx.HandleGroupKeyChangedEvents(network.GetGroupKeyChangedChannel())
-	go ctx.HandleKeyDirtyEvents(network.GetKeyDirtyChannel())
+	// Account events
+	//go ctx.HandleDebugEvents(network.GetDebugChannel())
+	go ctx.HandleGroupInvitationEvents(acc.Contract())
+	//go ctx.HandleGroupConsensusSuccessfulEvents(network.GetGroupUpdateIpfsChannel())
+	go ctx.HandleGroupCreatedEvents(acc.Contract())
+	go ctx.HandleInvitationAcceptedEvents(acc.Contract())
+	//go ctx.HandleGroupKeyChangedEvents(network.GetGroupKeyChangedChannel())
+	//go ctx.HandleKeyDirtyEvents(network.GetKeyDirtyChannel())
 
 	if err := ctx.BuildGroups(); err != nil {
-		return nil, errors.Wrap(err, "could not build groups")
+		return errors.Wrap(err, "could not build groups")
 	}
+
+	return nil
+}
+
+func NewUserContext(ethKeyPath string, password string, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
+	var err error
+	var ctx UserContext
+
+	auth, err := NewAuth(ethKeyPath, password)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create Auth")
+	}
+
+	appContract, err := ethApp.NewDipfshare(appContractAddress, backend)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create account contract instance")
+	}
+
+	ctx.eth = &Eth{
+		Backend:	backend,
+		App:		appContract,
+		Auth:		auth,
+	}
+	ctx.p2pPort = p2pPort
+	ctx.ipfs = ipfs
+	ctx.groups = NewConcurrentMap()
+	ctx.addressBook = common.NewAddressBook(backend, appContract, ipfs)
+	ctx.transactions = NewConcurrentList()
+	ctx.invitations = NewConcurrentList()
+	ctx.subs = NewConcurrentList()
+	ctx.channelStop = make(chan int)
+	ctx.storage = fs.NewStorage(auth.Address.String())
+
+	// app events
+	go ctx.HandleAccountCreatedEvents(ctx.eth.App)
 
 	return &ctx, nil
 }
 
-func (ctx *UserContext) GetGroupData(id [32]byte) (interfaces.IGroup, *fs.GroupRepo) {
-	groupCtxInt := ctx.groups.Get(NewBytesId(id))
-	if (groupCtxInt == nil) {
+func (ctx *UserContext) GetGroupData(addr ethcommon.Address) (interfaces.IGroup, *fs.GroupRepo) {
+	groupCtxInt := ctx.groups.Get(addr)
+	if groupCtxInt == nil {
 		return nil, nil
 	}
 
@@ -152,8 +194,8 @@ func (ctx *UserContext) GetGroupData(id [32]byte) (interfaces.IGroup, *fs.GroupR
 	return groupCtx.Group, groupCtx.Repo
 }
 
-func (ctx *UserContext) User() interfaces.IUser {
-	return ctx.user
+func (ctx *UserContext) User() interfaces.IAccount {
+	return ctx.account
 }
 
 func (ctx *UserContext) Save() error {
@@ -165,12 +207,10 @@ func (ctx *UserContext) Save() error {
 }
 
 func (ctx *UserContext) SignOut() {
-	glog.Infof("[*] User '%s' signing out...\n", ctx.user.Name())
-	for groupCtx := range ctx.groups.Iterator() {
+	glog.Infof("[*] Account '%s' signing out...\n", ctx.account.Name())
+	for groupCtx := range ctx.groups.VIterator() {
 		groupCtx.(*GroupContext).Stop()
 	}
-
-	ctx.network.Close()
 
 	if err := ctx.Save(); err != nil {
 		glog.Errorf("could not save context state: UserContext.SignOut: %s", err)
@@ -178,81 +218,60 @@ func (ctx *UserContext) SignOut() {
 }
 
 func (ctx *UserContext) BuildGroups() error {
-	glog.Infof("Building Groups for user '%s'...", ctx.user.Name())
-	caps, err := ctx.storage.GetGroupCaps()
-	if err != nil {
-		return errors.Wrap(err, "could not get group caps")
-	}
-	for _, cap := range caps {
-		groupCtx, err := NewGroupContextFromCAP(
-			&cap,
-			ctx.user,
-			ctx.p2p,
-			ctx.addressBook,
-			ctx.network,
-			ctx.ipfs,
-			ctx.storage,
-			ctx.transactions,
-		)
-		if err != nil {
-			return errors.Wrap(err, "could not create new group context")
-		}
-		if err := ctx.groups.Append(groupCtx); err != nil {
-			glog.Warningf("could not append elem: %s", err)
-		}
-	}
-	glog.Infof("Building Groups ended")
+	//glog.Infof("Building Groups for account '%s'...", ctx.account.Name())
+	//caps, err := ctx.storage.GetGroupCaps()
+	//if err != nil {
+	//	return errors.Wrap(err, "could not get group caps")
+	//}
+	//
+	//for _, cap := range caps {
+	//	groupContract, err := ethGroup.NewGroup(cap.Address, ctx.backend)
+	//
+	//	groupCtx, err := NewGroupContextFromCAP(
+	//		&cap,
+	//		ctx.account,
+	//		ctx.p2p,
+	//		ctx.addressBook,
+	//		groupContract,
+	//		ctx.ipfs,
+	//		ctx.storage,
+	//		ctx.transactions,
+	//	)
+	//	if err != nil {
+	//		return errors.Wrap(err, "could not create new group context")
+	//	}
+	//	if err := ctx.groups.Put(groupCtx); err != nil {
+	//		glog.Warningf("could not append elem: %s", err)
+	//	}
+	//}
+	//glog.Infof("Building Groups ended")
 	return nil
 }
 
 func (ctx *UserContext) CreateGroup(groupname string) error {
-	group := NewGroup(groupname)
-	groupCtx, err := NewGroupContext(
-		group,
-		ctx.user,
-		ctx.p2p,
-		ctx.addressBook,
-		ctx.network,
-		ctx.ipfs,
-		ctx.storage,
-		ctx.transactions,
-	)
+	tx, err := ctx.account.Contract().CreateGroup(ctx.eth.Auth.TxOpts, groupname)
 	if err != nil {
-		return errors.Wrap(err, "could not create new group context")
+		return errors.Wrap(err, "could not send create group tx")
 	}
 
-	boxer := groupCtx.Group.Boxer()
-	ipfsHash := groupCtx.Repo.IpfsHash()
-	encIpfsHash := boxer.BoxSeal([]byte(ipfsHash))
-
-	if err := group.SetIpfsHash(ipfsHash, encIpfsHash); err != nil {
-		return errors.Wrap(err, "could not set ipfs hash of group")
-	}
-
-	if err := groupCtx.Save(); err != nil {
-		return errors.Wrap(err, "could not save group")
-	}
-
-	tx, err := groupCtx.Network.CreateGroup(
-		group.Id().Data().([32]byte),
-		group.Name(),
-		group.EncryptedIpfsHash(),
-	)
-	if err != nil {
-		return errors.Wrap(err, "could not register group")
-	}
-
-	ctx.transactions.Append(tx)
-
-	if err := ctx.groups.Append(groupCtx); err != nil {
-		glog.Warningf("could not append elem: %s", err)
-	}
+	ctx.transactions.Add(tx)
 
 	return nil
 }
 
-func (ctx *UserContext) disposeGroup(groupId IIdentifier) error {
-	groupCtxInt := ctx.groups.DeleteWithId(groupId)
+func (ctx *UserContext) AcceptInvitation(inv *ethinv.Invitation) error {
+	tx, err := inv.Accept(ctx.eth.Auth.TxOpts)
+	if err != nil {
+		return errors.Wrap(err, "could not send accept invitation tx")
+	}
+
+	ctx.transactions.Add(tx)
+
+	return nil
+}
+
+func (ctx *UserContext) disposeGroup(groupAddr ethcommon.Address) error {
+	groupCtxInt := ctx.groups.Delete(groupAddr)
 	if groupCtxInt == nil {
 		return errors.New("no group found")
 	}
@@ -260,9 +279,9 @@ func (ctx *UserContext) disposeGroup(groupId IIdentifier) error {
 	groupCtx := groupCtxInt.(*GroupContext)
 	groupCtx.Stop()
 
-	if err := ctx.storage.RemoveGroupDir(groupId.Data().([32]byte)); err != nil {
-		return errors.Wrap(err, "could not remove group dir")
-	}
+	//if err := ctx.storage.RemoveGroupDir(groupId.Data().([32]byte)); err != nil {
+	//	return errors.Wrap(err, "could not remove group dir")
+	//}
 
 	return nil
 }
@@ -270,14 +289,14 @@ func (ctx *UserContext) disposeGroup(groupId IIdentifier) error {
 func (ctx *UserContext) Groups() []IGroupFacade {
 	var groups []IGroupFacade
 
-	for groupCtxInt := range ctx.groups.Iterator() {
+	for groupCtxInt := range ctx.groups.VIterator() {
 		groups = append(groups, groupCtxInt.(IGroupFacade))
 	}
 
 	return groups
 }
 
-// Files lists the content of the user's repository
+// Files lists the content of the account's repository
 func (ctx *UserContext) List() map[string][]string {
 	list := make(map[string][]string)
 	return list
@@ -287,7 +306,7 @@ func (ctx *UserContext) Transactions() ([]*types.Receipt, error) {
 	var list []*types.Receipt
 
 	for txInt := range ctx.transactions.Iterator() {
-		r, err := txInt.(*nw.Transaction).Receipt(ctx.network)
+		r, err := ctx.eth.Backend.TransactionReceipt(context.Background(), txInt.(*types.Transaction).Hash())
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get tx receipt")
 		}
@@ -299,20 +318,20 @@ func (ctx *UserContext) Transactions() ([]*types.Receipt, error) {
 }
 
 func (ctx *UserContext) OnChangeGroupKeyServerSessionSuccess(args []interface{}, groupId IIdentifier) {
-	if len(args) < 2 {
-		glog.Error("error while OnServerSessionSuccess: invalid number of args")
-		return
-	}
-
-	boxer := args[1].(crypto.SymmetricKey)
-	encNewIpfsHash := args[0].([]byte)
-	encNewIpfsHashBase64 := base64.StdEncoding.EncodeToString(encNewIpfsHash)
-
-	groupCtxInt := ctx.groups.Get(groupId)
-	if groupCtxInt == nil {
-		glog.Error("no group found")
-	}
-
-	groupCtx := groupCtxInt.(*GroupContext)
-	groupCtx.proposedKeys[encNewIpfsHashBase64] = boxer
+	//if len(args) < 2 {
+	//	glog.Error("error while OnServerSessionSuccess: invalid number of args")
+	//	return
+	//}
+	//
+	//boxer := args[1].(crypto.SymmetricKey)
+	//encNewIpfsHash := args[0].([]byte)
+	//encNewIpfsHashBase64 := base64.StdEncoding.EncodeToString(encNewIpfsHash)
+	//
+	//groupCtxInt := ctx.groups.Get(groupId)
+	//if groupCtxInt == nil {
+	//	glog.Error("no group found")
+	//}
+	//
+	//groupCtx := groupCtxInt.(*GroupContext)
+	//groupCtx.proposedKeys[encNewIpfsHashBase64] = boxer
 }

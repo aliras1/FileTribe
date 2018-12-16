@@ -3,40 +3,34 @@ package common
 import (
 	"net"
 
-	"github.com/golang/glog"
 	"github.com/pkg/errors"
-
-	"ipfs-share/collections"
-	ipfsapi "ipfs-share/ipfs"
-	"ipfs-share/network"
 )
 
 type P2PConn net.TCPConn
 
-func (conn *P2PConn) ReadMessage(addressBook *collections.ConcurrentCollection, network network.INetwork, ipfs ipfsapi.IIpfs) (*Message, *Contact, error) {
+func (conn *P2PConn) ReadMessage(addressBook *AddressBook) (*Message, error) {
 	data := make([]byte, 4096)
 
 	length, err := conn.Read(data)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "could not read from net.Conn")
+		return nil, errors.Wrapf(err, "could not read from net.Conn")
 	}
 
 	data = data[:length]
 
 	msg, err := DecodeMessage(data)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not unmarshal Message")
+		return nil, errors.Wrap(err, "could not unmarshal Message")
 	}
 
-	contact, err := msg.Validate(network, ipfs)
+	contact, err := addressBook.Get(msg.From)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "invalid message")
+		return nil, errors.Wrap(err, "could not get contact from address book")
 	}
 
-	if err := addressBook.Append(contact); err != nil {
-		glog.Warningf("could not append elem: %s", err)
+	if err := msg.Validate(contact); err != nil {
+		return nil, errors.Wrapf(err, "invalid message")
 	}
-	contact = addressBook.Get(contact.Id()).(*Contact)
 
-	return msg, contact, nil
+	return msg, nil
 }

@@ -7,3 +7,4 @@ test/*
 .scannerwork
 eth/build
 node_modules
+eth/out

@@ -1,11 +1,10 @@
 package client
 
 import (
-	"bytes"
-	"encoding/base64"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
 	"ipfs-share/client/communication/common"
-	"ipfs-share/client/fs/caps"
 	"path"
 	"sync"
 
@@ -20,11 +19,10 @@ import (
 	. "ipfs-share/collections"
 	"ipfs-share/crypto"
 	ipfsapi "ipfs-share/ipfs"
-	nw "ipfs-share/network"
 )
 
 type IGroupFacade interface {
-	Id() IIdentifier
+	Address() ethcommon.Address
 	GrantWriteAccess(filePath string, user ethcommon.Address) error
 	RevokeWriteAccess(filePath string, user ethcommon.Address) error
 	CommitChanges() error
@@ -35,102 +33,104 @@ type IGroupFacade interface {
 }
 
 type GroupContext struct {
-	User             interfaces.IUser
+	account          interfaces.IAccount
 	Group            interfaces.IGroup
-	P2P 			 *com.P2PManager
+	P2P              *com.P2PManager
 	Repo             *fs.GroupRepo
 	GroupConnection  *com.GroupConnection
-	AddressBook		 *ConcurrentCollection
-	Network          nw.INetwork
+	AddressBook      *common.AddressBook
+	eth              *GroupEth
 	Ipfs             ipfsapi.IIpfs
 	Storage          *fs.Storage
-	Transactions     *ConcurrentCollection
+	Transactions     *List
 	broadcastChannel *ipfsapi.PubSubSubscription
-	proposedKeys 	 map[string]crypto.SymmetricKey
-	lock 		     sync.Mutex
+	proposedKey      *crypto.SymmetricKey
+	subs             *List
+	lock             sync.Mutex
 }
 
-func (groupCtx *GroupContext) Id() IIdentifier {
-	return groupCtx.Group.Id()
+type GroupContextConfig struct {
+	Group 			interfaces.IGroup
+	Account 		interfaces.IAccount
+	P2P 			*com.P2PManager
+	AddressBook 	*common.AddressBook
+	Eth 			*GroupEth
+	Ipfs 			ipfsapi.IIpfs
+	Storage 		*fs.Storage
+	Transactions 	*List
 }
 
-func NewGroupContext(
-	group interfaces.IGroup,
-	user interfaces.IUser,
-	p2p *com.P2PManager,
-	addressBook *ConcurrentCollection,
-	network nw.INetwork,
-	ipfs ipfsapi.IIpfs,
-	storage *fs.Storage,
-	transactions *ConcurrentCollection,
-) (*GroupContext, error) {
+func (groupCtx *GroupContext) Address() ethcommon.Address {
+	return groupCtx.Group.Address()
+}
+
+func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 
 	groupContext := &GroupContext{
-		User:            user,
-		Group:           group,
-		P2P: p2p,
+		account:         config.Account,
+		Group:           config.Group,
+		P2P:             config.P2P,
 		GroupConnection: nil,
-		AddressBook:     addressBook,
-		Network:         network,
-		Ipfs:            ipfs,
-		Storage:         storage,
-		Transactions:    transactions,
-		proposedKeys:    make(map[string]crypto.SymmetricKey),
+		AddressBook:     config.AddressBook,
+		eth:             config.Eth,
+		Ipfs:            config.Ipfs,
+		Storage:         config.Storage,
+		Transactions:    config.Transactions,
+		subs:            NewConcurrentList(),
 	}
 
-	repo, err := fs.NewGroupRepo(group, user.Address(), storage, ipfs)
+	repo, err := fs.NewGroupRepo(config.Group, config.Account.ContractAddress(), config.Storage, config.Ipfs)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create group repo")
 	}
 
 	groupContext.Repo = repo
 	groupContext.GroupConnection = com.NewGroupConnection(
-		group,
+		config.Group,
 		repo,
-		user,
-		addressBook,
+		config.Account,
+		config.AddressBook,
 		onSessionClosed,
-		p2p,
-		ipfs,
-		network)
+		config.P2P,
+		config.Ipfs)
+
+	go groupContext.HandleGroupInvitationSentEvents(config.Eth.Group)
+	go groupContext.HandleGroupInvitationAcceptedEvents(config.Eth.Group)
+	go groupContext.HandleNewConsensusEvents(config.Eth.Group)
+	go groupContext.HandleIpfsHashChangedEvents(config.Eth.Group)
+	go groupContext.HandleKeyDirtyEvents(config.Eth.Group)
 
 	return groupContext, nil
 }
 
 func onSessionClosed(session sesscommon.ISession) {
-	glog.Infof("session %d closed with error: %s", session.Id().Data().(uint32), session.Error())
-}
-
-func NewGroupContextFromCAP(
-	cap *caps.GroupAccessCap,
-	user interfaces.IUser,
-	p2p *com.P2PManager,
-	addressBook *ConcurrentCollection,
-	network nw.INetwork,
-	ipfs ipfsapi.IIpfs,
-	storage *fs.Storage,
-	transactions *ConcurrentCollection,
-) (*GroupContext, error) {
-	group := NewGroupFromCap(cap)
-	gc, err := NewGroupContext(group, user, p2p, addressBook, network, ipfs, storage, transactions)
-	if err != nil {
-		return nil, fmt.Errorf("could not create group context: NewGroupContextFromCAP: %s", err)
-	}
-
-	return gc, nil
+	glog.Infof("session %d closed with error: %s", session.Id(), session.Error())
 }
 
 func (groupCtx *GroupContext) Update() error {
-	name, members, encIpfsHash, leader, err := groupCtx.Network.GetGroup(groupCtx.Group.Id().Data().([32]byte))
+	contract := groupCtx.eth.Group
+
+	name, err := contract.Name(&bind.CallOpts{Pending:true})
 	if err != nil {
-		return errors.Wrapf(err, "could not get group %v", groupCtx.Group.Id().Data())
+		return errors.Wrap(err, "could not get group name")
 	}
 
-	if err := groupCtx.Group.Update(name, members, encIpfsHash, leader); err != nil {
+	members, err := contract.Members(&bind.CallOpts{Pending:true})
+	if err != nil {
+		return errors.Wrap(err, "could not get group members")
+	}
+
+	encIpfsHash, err := contract.IpfsHash(&bind.CallOpts{Pending: true})
+	if err != nil {
+		return errors.Wrap(err, "could not get group ipfs hash")
+	}
+
+
+	if err := groupCtx.Group.Update(name, members, encIpfsHash); err != nil {
 		return errors.Wrap(err, "could not update group")
 	}
 
-	if err := groupCtx.Save(); err != nil {
+	if err := groupCtx.Group.Save(); err != nil {
 		return errors.Wrap(err, "could not save group")
 	}
 
@@ -142,12 +142,12 @@ func (groupCtx *GroupContext) Update() error {
 }
 
 func (groupCtx *GroupContext) Leave() error {
-	tx, err := groupCtx.Network.LeaveGroup(groupCtx.Group.Id().Data().([32]byte))
+	tx, err := groupCtx.eth.Group.Leave(groupCtx.eth.Auth.TxOpts)
 	if err != nil {
 		return errors.Wrap(err, "could not send leave group tx")
 	}
 
-	groupCtx.Transactions.Append(tx)
+	groupCtx.Transactions.Add(tx)
 
 	return nil
 }
@@ -162,42 +162,37 @@ func (groupCtx *GroupContext) CommitChanges() error {
 		return errors.Wrap(err, "could commit group repo's changes")
 	}
 
-	if err := groupCtx.P2P.StartCommitSession(
-		hash,
-		groupCtx.User,
-		groupCtx.Group,
-		groupCtx.broadcast,
-		groupCtx.OnCommitClientSuccess,
-	); err != nil {
-		return errors.Wrap(err, "could not start session")
+	key := groupCtx.Group.Boxer()
+	encIpfsHash := key.BoxSeal([]byte(hash))
+
+	tx, err := groupCtx.eth.Group.ChangeIpfsHash(groupCtx.eth.Auth.TxOpts, encIpfsHash)
+	if err != nil {
+		return errors.Wrap(err, "could not send change ipfs hash tx")
 	}
+
+	groupCtx.Transactions.Add(tx)
 
 	return nil
 }
 
 
 func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight bool) error {
-	fmt.Printf("[*] Inviting user '%s' into group '%s'...\n", newMember, groupCtx.Group.Name)
+	glog.Infof("[*] Inviting account '%s' into group '%s'...\n", newMember, groupCtx.Group.Name)
 
-	tx, err := groupCtx.Network.InviteUser(groupCtx.Group.Id().Data().([32]byte), newMember, hasInviteRight)
+	tx, err := groupCtx.eth.Group.Invite(groupCtx.eth.Auth.TxOpts, newMember)
 	if err != nil {
-		return errors.Wrap(err, "could not send invite user tx")
+		return errors.Wrap(err, "could not send invite account tx")
 	}
 
-	groupCtx.Transactions.Append(tx)
+	groupCtx.Transactions.Add(tx)
 
 	return nil
 }
 
 
 func (groupCtx *GroupContext) Save() error {
-	cap := &caps.GroupAccessCap{
-		Boxer: groupCtx.Group.Boxer(),
-		GroupId: groupCtx.Group.Id().Data().([32]byte),
-	}
-
-	if err := groupCtx.Storage.SaveGroupAccessCap(cap); err != nil {
-		return errors.Wrap(err, "could not save group cap")
+	if err := groupCtx.Group.Save(); err != nil {
+		return errors.Wrap(err, "could not save group")
 	}
 
 	return nil
@@ -218,8 +213,8 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 	if file == nil {
 		tmpFile, err := fs.NewGroupFile(
 			filePath,
-			[]ethcommon.Address{groupCtx.User.Address()},
-			groupCtx.Group.Id().ToString(),
+			[]ethcommon.Address{groupCtx.account.ContractAddress()},
+			groupCtx.Group.Address().String(),
 			groupCtx.Storage,)
 		if err != nil {
 			return errors.Wrap(err, "could not create new group file")
@@ -227,8 +222,8 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 		file = tmpFile
 	}
 
-	if err := file.GrantWriteAccess(groupCtx.User.Address(), user); err != nil {
-		return errors.Wrap(err, "could not grant write access to user")
+	if err := file.GrantWriteAccess(groupCtx.account.ContractAddress(), user); err != nil {
+		return errors.Wrap(err, "could not grant write access to account")
 	}
 
 	return nil
@@ -243,8 +238,8 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 	if file == nil {
 		tmpFile, err := fs.NewGroupFile(
 			filePath,
-			[]ethcommon.Address{groupCtx.User.Address()},
-			groupCtx.Group.Id().ToString(),
+			[]ethcommon.Address{groupCtx.account.ContractAddress()},
+			groupCtx.Group.Address().String(),
 			groupCtx.Storage,)
 		if err != nil {
 			return errors.Wrap(err, "could not create new group file")
@@ -252,113 +247,103 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 		file = tmpFile
 	}
 
-	if err := file.RevokeWriteAccess(groupCtx.User.Address(), user); err != nil {
-		return errors.Wrap(err, "could not revoke write access to user")
+	if err := file.RevokeWriteAccess(groupCtx.account.ContractAddress(), user); err != nil {
+		return errors.Wrap(err, "could not revoke write access to account")
 	}
 
 	return nil
 }
 
-func (groupCtx *GroupContext) OnKeyDirty() error {
-	leader, err := groupCtx.Network.GetGroupLeader(groupCtx.Group.Id().Data().([32]byte))
-	if err != nil {
-		return errors.Wrap(err, "could not get group leader")
-	}
+func (groupCtx *GroupContext) onKeyDirty() {
+	glog.Info("KEY DIRTY")
 
-	// if user is not the leader --> return
-	if !bytes.Equal(leader.Bytes(), groupCtx.User.Address().Bytes()) {
-		return nil
+	groupCtx.proposedKey = nil
+
+	if err := groupCtx.Update(); err != nil {
+		glog.Errorf("could not update group: %s", err)
+		return
 	}
 
 	newBoxer, err := crypto.NewSymmetricKey()
 	if err != nil {
-		return errors.Wrap(err, "could not create new group key")
+		glog.Errorf("could not create new group key: %s", err)
+		return
 	}
 
-	newIpfsHash, err := groupCtx.Repo.ReEncrypt(newBoxer)
+	groupCtx.proposedKey = newBoxer
+
+	newIpfsHash, err := groupCtx.Repo.ReEncrypt(*newBoxer)
 	if err != nil {
-		return errors.Wrap(err, "could not re-encrypt group repo")
+		glog.Errorf("could not re-encrypt group repo: %s", err)
+		return
 	}
 
 	encNewIpfsHash := newBoxer.BoxSeal([]byte(newIpfsHash))
-	encNewIpfsHashBase64 := base64.StdEncoding.EncodeToString(encNewIpfsHash)
 
-	// TODO: use a cache class instead and save state
-	groupCtx.proposedKeys[encNewIpfsHashBase64] = newBoxer
-
-	err = groupCtx.P2P.StartChangeGroupKeySession(
-		newBoxer,
-		encNewIpfsHash,
-		groupCtx.User,
-		groupCtx.Group,
-		groupCtx.p2pBroadcast,
-		groupCtx.OnChangeGroupKeyClientSuccess)
-
+	tx, err := groupCtx.eth.Group.ChangeKey(groupCtx.eth.Auth.TxOpts, encNewIpfsHash)
 	if err != nil {
-		return errors.Wrap(err, "could not start new session")
+		glog.Errorf("could not send change key tx: %s", err)
+
+		groupCtx.proposedKey = nil
+
+		return
 	}
 
-	return nil
+	simInt := interface{}(groupCtx.eth.Backend)
+	x := simInt.(*backends.SimulatedBackend)
+	x.Commit()
+
+	groupCtx.Transactions.Add(tx)
 }
 
 func (groupCtx *GroupContext) ReEncrpyt() error {
-	hash, err := groupCtx.Repo.ReEncrypt(groupCtx.Group.Boxer())
-	if err != nil {
-		return errors.Wrap(err, "could not re-encrypt group repo")
-	}
+	//hash, err := groupCtx.Repo.ReEncrypt(groupCtx.Group.Boxer())
+	//if err != nil {
+	//	return errors.Wrap(err, "could not re-encrypt group repo")
+	//}
+	//
+	//if err := groupCtx.P2P.StartCommitSession(
+	//	hash,
+	//	groupCtx.account,
+	//	groupCtx.Group,
+	//	groupCtx.broadcast,
+	//	groupCtx.OnCommitClientSuccess,
+	//); err != nil {
+	//	return errors.Wrap(err, "could not start new session")
+	//}
 
-	if err := groupCtx.P2P.StartCommitSession(
-		hash,
-		groupCtx.User,
-		groupCtx.Group,
-		groupCtx.broadcast,
-		groupCtx.OnCommitClientSuccess,
-	); err != nil {
-		return errors.Wrap(err, "could not start new session")
-	}
-
-	return nil
+	return errors.New("not implemented")
 }
 
 func (groupCtx *GroupContext) GetKey(encNewIpfsHash []byte) error {
-	encNewIpfsHashBase64 := base64.StdEncoding.EncodeToString(encNewIpfsHash)
-	newBoxer, ok := groupCtx.proposedKeys[encNewIpfsHashBase64]
-	if ok {
-		groupCtx.onGetKeySuccess(newBoxer)
-	} else {
-		for _, member := range groupCtx.Group.Members() {
-			if bytes.Equal(member.Bytes(), groupCtx.User.Address().Bytes()) {
-				continue
-			}
-
-			var contact *common.Contact
-			contactInt := groupCtx.AddressBook.Get(NewAddressId(&member))
-			if contactInt == nil {
-				c, err := groupCtx.Network.GetUser(member)
-				if err != nil {
-					glog.Warningf("could not get user in Group.GetKey(): %s", err)
-					continue
-				}
-
-				contact = common.NewContact(c, groupCtx.Ipfs)
-				groupCtx.AddressBook.Append(contact)
-			} else {
-				contact = contactInt.(*common.Contact)
-			}
-
-			err := groupCtx.P2P.StartGetGroupKeySession(
-				groupCtx.Group.Id().Data().([32]byte),
-				contact,
-				groupCtx.User,
-				groupCtx.Storage,
-				func(cap *caps.GroupAccessCap) {
-					groupCtx.onGetKeySuccess(cap.Boxer)
-				})
-			if err != nil {
-				glog.Errorf("could not start get group key session: %s", err)
-			}
-		}
-	}
+	//newBoxer, ok := groupCtx.proposedKeys[encNewIpfsHashBase64]
+	//
+	//if ok {
+	//	groupCtx.onGetKeySuccess(newBoxer)
+	//} else {
+	//	for _, member := range groupCtx.Group.Members() {
+	//		if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
+	//			continue
+	//		}
+	//
+	//		c, err := groupCtx.AddressBook.Get(member)
+	//		if err != nil {
+	//			glog.Warningf("could not get contact for member: %s", member.String())
+	//			continue
+	//		}
+	//
+	//		if err := groupCtx.P2P.StartGetGroupKeySession(
+	//			groupCtx.Group.Address(),
+	//			c,
+	//			groupCtx.account.ContractAddress(),
+	//			func(cap *caps.GroupAccessCap) {
+	//				groupCtx.onGetKeySuccess(cap.Boxer)
+	//			},
+	//		);	err != nil {
+	//			glog.Errorf("could not start get group key session: %s", err)
+	//		}
+	//	}
+	//}
 
 	return nil
 }
@@ -391,38 +376,36 @@ func (groupCtx *GroupContext) ListMembers() []ethcommon.Address {
 	return groupCtx.Group.Members()
 }
 
-func (groupCtx *GroupContext) OnChangeGroupKeyClientSuccess(args []interface{}, approvals []*nw.Approval) {
+func (groupCtx *GroupContext) OnChangeGroupKeyClientSuccess(args []interface{}) {
 	if len(args) < 1 {
 		glog.Error("args should be min. of length 1")
 	}
 
 	encNewIpfsHash := args[0].([]byte)
 
-	groupId := groupCtx.Group.Id().Data().([32]byte)
-	tx, err := groupCtx.Network.ChangeGroupKey(groupId, encNewIpfsHash, approvals)
+	tx, err := groupCtx.eth.Group.ChangeKey(groupCtx.eth.Auth.TxOpts, encNewIpfsHash)
 	if err != nil {
 		glog.Errorf("could not send change group key transaction: %s", err)
 		return
 	}
 
-	groupCtx.Transactions.Append(tx)
+	groupCtx.Transactions.Add(tx)
 }
 
-func (groupCtx *GroupContext) OnCommitClientSuccess(args []interface{}, approvals []*nw.Approval) {
+func (groupCtx *GroupContext) OnCommitClientSuccess(args []interface{}) {
 	if len(args) < 1 {
 		glog.Error("args should be of length 1")
 	}
 
 	encNewIpfsHash := args[0].([]byte)
 
-	groupId := groupCtx.Group.Id().Data().([32]byte)
-	tx, err := groupCtx.Network.UpdateGroupIpfsHash(groupId, encNewIpfsHash, approvals)
+	tx, err := groupCtx.eth.Group.ChangeIpfsHash(groupCtx.eth.Auth.TxOpts, encNewIpfsHash)
 	if err != nil {
 		glog.Errorf("could not send update group ipfs hash transaction: %s", err)
 		return
 	}
 
-	groupCtx.Transactions.Append(tx)
+	groupCtx.Transactions.Add(tx)
 }
 
 func (groupCtx *GroupContext) broadcast(msg []byte) error {
@@ -431,23 +414,14 @@ func (groupCtx *GroupContext) broadcast(msg []byte) error {
 
 func (groupCtx *GroupContext) p2pBroadcast(msg []byte) error {
 	for _, member := range groupCtx.Group.Members() {
-		var contact *common.Contact
-		contactInt := groupCtx.AddressBook.Get(NewAddressId(&member))
-		if contactInt == nil {
-			netContact, err := groupCtx.Network.GetUser(member)
-			if err != nil {
-				glog.Errorf("could not get user from network: %s", err)
-				continue
-			}
 
-			contact = common.NewContact(netContact, groupCtx.Ipfs)
-			groupCtx.AddressBook.Append(contact)
-		} else {
-			contact = contactInt.(*common.Contact)
+		c, err := groupCtx.AddressBook.Get(member)
+		if err != nil {
+			glog.Warningf("could not get contact for member: %s", member)
 		}
 
 		go func() {
-			if err := contact.Send(msg); err != nil {
+			if err := c.Send(msg); err != nil {
 				glog.Errorf("error while sending p2p message: %s", err)
 			}
 		}()

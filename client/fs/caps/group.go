@@ -2,13 +2,14 @@ package caps
 
 import (
 	"encoding/json"
+	ethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
 	"ipfs-share/crypto"
 )
 
 type GroupAccessCap struct {
-	GroupId [32]byte
+	Address ethCommon.Address
 	Boxer   crypto.SymmetricKey
 }
 

@@ -1,14 +1,14 @@
 package sessions
 
 import (
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"ipfs-share/client/fs"
-	"ipfs-share/collections"
-
 	comcommon "ipfs-share/client/communication/common"
 	"ipfs-share/client/communication/sessions/common"
 	"ipfs-share/client/communication/sessions/servers"
+	"ipfs-share/client/fs"
 	"ipfs-share/client/interfaces"
+	"ipfs-share/crypto"
 )
 
 
@@ -16,61 +16,53 @@ import (
 func NewServerSession(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
-	user interfaces.IUser,
+	account ethcommon.Address,
+	signer *crypto.Signer,
 	callback common.CtxCallback,
 	sessionClosed common.SessionClosedCallback,
 ) (common.ISession, error) {
+
 	switch msg.Type {
 	case comcommon.GetGroupKey:
-		{
-			return servers.NewGetGroupKeySessionServer(
-				msg,
-				contact,
-				user,
-				callback.GetGroupData,
-				sessionClosed)
-		}
-	case comcommon.ChangeKey:
-		{
-			return servers.NewChangeGroupKeySessionServer(
-				msg,
-				contact,
-				user,
-				callback.GetGroupData,
-				callback.OnChangeGroupKeyServerSessionSuccess,
-				sessionClosed)
-		}
+		fallthrough
+	case comcommon.GetProposedGroupKey:
+		return servers.NewGetGroupKeySessionServer(
+			msg,
+			contact,
+			account,
+			signer,
+			callback,
+			sessionClosed)
 	default:
-		{
-			return nil, errors.New("invalid message type")
-		}
+		return nil, errors.New("invalid message type")
 	}
 }
 
 func NewGroupServerSession(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
-	user interfaces.IUser,
+	user interfaces.IAccount,
 	group interfaces.IGroup,
 	repo *fs.GroupRepo,
 	sessionClosed common.SessionClosedCallback,
 ) (common.ISession, error) {
-	switch msg.Type {
-
-	case comcommon.Commit:
-		{
-			return servers.NewCommitChangesGroupSessionServer(
-				msg,
-				contact,
-				user,
-				group,
-				repo,
-				func(args []interface{}, groupId collections.IIdentifier) {},
-				sessionClosed)
-		}
-	default:
-		{
-			return nil, errors.New("invalid message type")
-		}
-	}
+	//switch msg.Type {
+	//
+	//case comcommon.Commit:
+	//	{
+	//		return servers.NewCommitChangesGroupSessionServer(
+	//			msg,
+	//			contact,
+	//			user,
+	//			group,
+	//			repo,
+	//			func(args []interface{}, groupId collections.IIdentifier) {},
+	//			sessionClosed)
+	//	}
+	//default:
+	//	{
+	//		return nil, errors.New("invalid message type")
+	//	}
+	//}
+	return nil, errors.New("not implemented")
 }

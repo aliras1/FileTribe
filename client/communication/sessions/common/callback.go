@@ -1,27 +1,30 @@
 package common
 
 import (
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"ipfs-share/client/fs"
 	"ipfs-share/client/fs/caps"
 	"ipfs-share/client/interfaces"
 	"ipfs-share/collections"
-	"ipfs-share/network"
+	"ipfs-share/crypto"
 )
 
 type OnGetGroupKeySuccessCallback func(cap *caps.GroupAccessCap)
 
-type OnClientSuccessCallback func(args []interface{}, approvals []*network.Approval)
+type OnClientSuccessCallback func(args []interface{})
 
 type OnServerSuccessCallback func(args []interface{}, groupId collections.IIdentifier)
 
 type SessionClosedCallback func(session ISession)
 
-type GetGroupDataCallback func(id [32]byte) (interfaces.IGroup, *fs.GroupRepo)
+type GetGroupDataCallback func(addr ethcommon.Address) (interfaces.IGroup, *fs.GroupRepo)
 
 type Broadcast func(msg []byte) error
 
 type CtxCallback interface {
-	OnChangeGroupKeyServerSessionSuccess(args []interface{}, groupId collections.IIdentifier)
+	IsMember(group ethcommon.Address, account ethcommon.Address) error
 
-	GetGroupData(id [32]byte) (interfaces.IGroup, *fs.GroupRepo)
+	Boxer(group ethcommon.Address) (crypto.SymmetricKey, error)
+
+	ProposedBoxer(group ethcommon.Address) (crypto.SymmetricKey, error)
 }

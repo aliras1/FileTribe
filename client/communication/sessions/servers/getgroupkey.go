@@ -2,29 +2,31 @@ package servers
 
 import (
 	"crypto/rand"
-	"math"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/golang/glog"
+	"ipfs-share/crypto"
 	"sync"
 
-	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
-	comcommon"ipfs-share/client/communication/common"
+	comcommon "ipfs-share/client/communication/common"
 	"ipfs-share/client/communication/sessions/common"
-	"ipfs-share/client/interfaces"
-	"ipfs-share/collections"
 )
 
 type GetGroupKeySessionServer struct {
-	sessionId       collections.IIdentifier
+	sessionId       uint32
 	state           uint8
 	contact         *comcommon.Contact
-	user            interfaces.IUser
-	group           interfaces.IGroup
+	sender          ethcommon.Address
+	group           ethcommon.Address
+	callback        common.CtxCallback
+	signer          *crypto.Signer
 	challenge       [32]byte
 	onSessionClosed common.SessionClosedCallback
 	lock            sync.RWMutex
 	stop            chan bool
 	error           error
+	keyType         comcommon.MessageType
 }
 
 func (session *GetGroupKeySessionServer) Error() error {
@@ -43,15 +45,12 @@ func (session *GetGroupKeySessionServer) State() uint8 {
 	return session.state
 }
 
-func (session *GetGroupKeySessionServer) Id() collections.IIdentifier {
+func (session *GetGroupKeySessionServer) Id() uint32 {
 	return session.sessionId
 }
 
 func (session *GetGroupKeySessionServer) Abort() {
-	session.lock.Lock()
-	defer session.lock.Unlock()
-
-	if !session.IsAlive() {
+	if !session.isAlive() {
 		return
 	}
 
@@ -62,7 +61,11 @@ func (session *GetGroupKeySessionServer) IsAlive() bool {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
-	return session.state == math.MaxUint8
+	return session.isAlive()
+}
+
+func (session *GetGroupKeySessionServer) isAlive() bool {
+	return session.state != common.EndOfSession
 }
 
 func (session *GetGroupKeySessionServer) Run() {
@@ -76,35 +79,35 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 	switch session.state {
 	case 0:
 		{
-			if !session.group.IsMember(session.contact.Address) {
-				session.close()
-				session.error = errors.New("non group member requested group key")
+			if err := session.callback.IsMember(session.group, session.contact.AccAddr); err != nil {
+				session.error = errors.Wrap(err, "could not verify group membership")
+				session.Abort()
 				return
 			}
 
 			msg, err := comcommon.NewMessage(
-				session.user.Address(),
+				session.sender,
 				comcommon.GetGroupKey,
-				session.sessionId.Data().(uint32),
+				session.sessionId,
 				session.challenge[:],
-				session.user.Signer(),
+				session.signer,
 			)
 			if err != nil {
 				session.error = errors.New("could not create message")
-				session.close()
+				session.Abort()
 				return
 			}
 
 			encMsg, err := msg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encode message")
-				session.close()
+				session.Abort()
 				return
 			}
 
 			if err := session.contact.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
-				session.close()
+				session.Abort()
 				return
 			}
 
@@ -116,45 +119,72 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 		{
 			if !session.contact.VerifySignature(session.challenge[:], data) {
 				session.error = errors.New("invalid signature")
-				session.close()
+				session.Abort()
 				return
 			}
 
-			boxer := session.group.Boxer()
-			key, err := boxer.Encode()
-			if err != nil {
-				session.error = errors.Wrap(err, "could not marshal group key")
-				session.close()
-				return
+			var key []byte
+
+			switch session.keyType {
+			case comcommon.GetGroupKey:
+				boxer, err := session.callback.Boxer(session.group)
+				if err != nil {
+					session.error = errors.Wrap(err, "could not get group boxer")
+					session.Abort()
+					return
+				}
+
+				data, err := boxer.Encode()
+				if err != nil {
+					session.error = errors.Wrap(err, "could not marshal group key")
+					session.Abort()
+					return
+				}
+				key = data
+			case comcommon.GetProposedGroupKey:
+				boxer, err := session.callback.ProposedBoxer(session.group)
+				if err != nil {
+					session.error = errors.Wrap(err, "could not get proposed group boxer")
+					session.Abort()
+					return
+				}
+				data, err := boxer.Encode()
+				if err != nil {
+					session.error = errors.Wrap(err, "could not marshal group key")
+					session.Abort()
+					return
+				}
+				key = data
 			}
+
 
 			msg, err := comcommon.NewMessage(
-				session.user.Address(),
+				session.sender,
 				comcommon.GetGroupKey,
-				session.sessionId.Data().(uint32),
+				session.sessionId,
 				key,
-				session.user.Signer(),
+				session.signer,
 			)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not create message")
-				session.close()
+				session.Abort()
 				return
 			}
 
 			encMsg, err := msg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encode message")
-				session.close()
+				session.Abort()
 				return
 			}
 
 			if err := session.contact.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
-				session.close()
+				session.Abort()
 				return
 			}
 
-			session.close()
+			session.Abort()
 		}
 
 	default:
@@ -167,8 +197,9 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 func NewGetGroupKeySessionServer(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
-	user interfaces.IUser,
-	getGroupData common.GetGroupDataCallback,
+	sender ethcommon.Address,
+	signer *crypto.Signer,
+	callback common.CtxCallback,
 	onSessionClosed common.SessionClosedCallback,
 ) (*GetGroupKeySessionServer, error) {
 
@@ -177,18 +208,15 @@ func NewGetGroupKeySessionServer(
 		return nil, errors.Wrap(err, "could not read rand")
 	}
 
-	var groupId [32]byte
-	copy(groupId[:], msg.Payload)
-
-	group, _ := getGroupData(groupId)
-	if group == nil {
-		return nil, errors.New("no group found")
-	}
+	group := ethcommon.BytesToAddress(msg.Payload)
 
 	return &GetGroupKeySessionServer{
-		sessionId:       collections.NewUint32Id(msg.SessionId),
+		sessionId:       msg.SessionId,
+		keyType:		 msg.Type,
 		contact:         contact,
-		user:            user,
+		callback:		 callback,
+		sender:          sender,
+		signer:			 signer,
 		group:           group,
 		onSessionClosed: onSessionClosed,
 		state:           0,
