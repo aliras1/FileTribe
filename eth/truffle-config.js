@@ -4,8 +4,9 @@ module.exports = {
   networks: {
     development: {
       host: "localhost",
-      port: 8000,
-      network_id: "*" // Match any network id
+      port: 8545,
+      network_id: "*", // Match any network id
+      websockets: true
     }
   }
 };

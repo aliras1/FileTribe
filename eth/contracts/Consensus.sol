@@ -26,24 +26,26 @@ contract Consensus {
         _group = group;
         _digest = digest;
         _payload = payload;
+
+        _membersThatApproved.push(proposer);
     }
 
     function approve(bytes32 r, bytes32 s, uint8 v) public onlyMembers {
         require(memberNotApprovedYet(msg.sender), "member already approved");
         // require(verify(msg.sender, _digest, v, r, s), "invalid approval: invalid signature");
 
-        approveInternal(msg.sender, r, s, v);
+        approveInternal(msg.sender);
     }
 
-    function approve(address sender, bytes32 r, bytes32 s, uint8 v) external {
+    function approveExternal(address sender, bytes32 r, bytes32 s, uint8 v) external {
         require(IGroup(_group).isMember(msg.sender), "user is not member of group");
         require(memberNotApprovedYet(sender), "member already approved");
         // require(verify(msg.sender, _digest, v, r, s), "invalid approval: invalid signature");
 
-        approveInternal(sender, r, s, v);
+        approveInternal(sender);
     }
 
-    function approveInternal(address sender, bytes32 r, bytes32 s, uint8 v) private {
+    function approveInternal(address sender) private {
         if (_membersThatApproved.length + 1 > IGroup(_group).threshold()) {
             emit Debug(101);
 

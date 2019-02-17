@@ -83,7 +83,7 @@ contract Group is Ownable, Invitable, Governable {
 
         emit ApprovedChangeLeader(msg.sender);
 
-        IConsensus(_leaderConsensus).approve(msg.sender, r, s, v);
+        IConsensus(_leaderConsensus).approveExternal(msg.sender, r, s, v);
     }
 
     function onChangeLeaderConsensus() external {
@@ -149,12 +149,10 @@ contract Group is Ownable, Invitable, Governable {
     // no need for onlyMembers modifier because we have to
     // iterate over the array to get the user's index anyway
     function leave() public {
-        uint256 idx = 0;
         uint256 i;
 
         for (i = 0; i < _members.length; i++){
             if (IAccount(_members[i]).owner() == msg.sender) {
-                idx = i;
                 break;
             }
         }
@@ -162,6 +160,27 @@ contract Group is Ownable, Invitable, Governable {
         require(i < _members.length, "msg.sender is not group member");
 
         IAccount(_members[i]).onGroupLeft(address(this));
+
+        _members[i] = _members[_members.length - 1];
+        _members.length--;
+
+        _state = State.KEY_DIRTY;
+        clearConsensuses();
+
+        emit KeyDirty(address(this));
+    }
+
+    function kick(address member) public onlyMembers {
+        uint256 i;
+
+        for (i = 0; i < _members.length; i++){
+            if (_members[i] == member) {
+                break;
+            }
+        }
+        require(i < _members.length, "msg.sender is not group member");
+
+        IAccount(member).onGroupLeft(address(this));
 
         _members[i] = _members[_members.length - 1];
         _members.length--;

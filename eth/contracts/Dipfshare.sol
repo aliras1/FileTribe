@@ -38,8 +38,9 @@ contract Dipfshare is Ownable {
     }
 
     function createAccount(string memory name, string memory ipfsPeerId, bytes32 boxingKey) public {
-        address acc = IAccountFactory(_accountFactory).create(msg.sender, name, ipfsPeerId, boxingKey);
+        require(_accounts[msg.sender] == address(0), "Account already exists");
 
+        address acc = IAccountFactory(_accountFactory).create(msg.sender, name, ipfsPeerId, boxingKey);
         _accounts[msg.sender] = acc;
 
         emit AccountCreated(msg.sender, acc);

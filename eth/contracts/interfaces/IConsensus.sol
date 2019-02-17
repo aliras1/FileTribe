@@ -7,5 +7,5 @@ interface IConsensus {
         LEADER
     }
 
-    function approve(address sender, bytes32 r, bytes32 s, uint8 v) external;
+    function approveExternal(address sender, bytes32 r, bytes32 s, uint8 v) external;
 }
