@@ -1,4 +1,4 @@
-package crypto
+package tribecrypto
 
 import (
 	"crypto/rand"
@@ -35,6 +35,10 @@ func (k *SymmetricKey) BoxSeal(message []byte) []byte {
 }
 
 func (k *SymmetricKey) BoxOpen(bytesBox []byte) ([]byte, bool) {
+	if len(bytesBox) < 24 {
+		return []byte{}, false
+	}
+
 	var nonce [24]byte
 	copy(nonce[:], bytesBox[:24])
 	return secretbox.Open(nil, bytesBox[24:], &nonce, &k.Key)
@@ -43,7 +47,7 @@ func (k *SymmetricKey) BoxOpen(bytesBox []byte) ([]byte, bool) {
 func (k *SymmetricKey) Encode() ([]byte, error) {
 	enc, err := json.Marshal(k)
 	if err != nil {
-		errors.Wrap(err, "could not encode SymmetricKey")
+		return []byte{}, errors.Wrap(err, "could not encode SymmetricKey")
 	}
 
 	return enc, nil

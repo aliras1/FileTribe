@@ -22,7 +22,7 @@ type P2PHandleConnection func(addressBook *Map, conn *common.P2PConn, stop chan 
 
 type P2PManager struct {
 	account        interfaces.IAccount
-	signer		   *crypto.Signer
+	signer		   *tribecrypto.Signer
 	sessions       *Map
 	addressBook    *common.AddressBook
 	p2pListener    *ipfsapi.P2PListener
@@ -35,7 +35,7 @@ type P2PManager struct {
 func NewP2PManager(
 	port string,
 	account interfaces.IAccount,
-	signer *crypto.Signer,
+	signer *tribecrypto.Signer,
 	addressBook *common.AddressBook,
 	ctxCallback sesscommon.CtxCallback,
 	ipfs ipfsapi.IIpfs,

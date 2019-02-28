@@ -160,7 +160,7 @@ func (repo *GroupRepo) getPendingChanges() ([]*caps.FileCap, error) {
 	return listPendingChanges, nil
 }
 
-func (repo *GroupRepo) CommitChanges(boxer crypto.SymmetricKey) (string, error) {
+func (repo *GroupRepo) CommitChanges(boxer tribecrypto.SymmetricKey) (string, error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -248,7 +248,7 @@ func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, address ethcommon.Ad
 	return nil
 }
 
-func (repo *GroupRepo) IsValidChangeKey(newIpfsHash string, address *ethcommon.Address, newBoxer crypto.SymmetricKey) error {
+func (repo *GroupRepo) IsValidChangeKey(newIpfsHash string, address *ethcommon.Address, newBoxer tribecrypto.SymmetricKey) error {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
@@ -299,7 +299,7 @@ func (repo *GroupRepo) IsValidChangeKey(newIpfsHash string, address *ethcommon.A
 	return nil
 }
 
-func (repo *GroupRepo) checkDiffNode(file *File, newBoxer crypto.FileBoxer, newIpfsHash string) error {
+func (repo *GroupRepo) checkDiffNode(file *File, newBoxer tribecrypto.FileBoxer, newIpfsHash string) error {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
@@ -323,7 +323,7 @@ func (repo *GroupRepo) checkDiffNode(file *File, newBoxer crypto.FileBoxer, newI
 		return errors.Wrap(err, "could not read orig file")
 	}
 
-	hasher := crypto.NewKeccak256Hasher()
+	hasher := tribecrypto.NewKeccak256Hasher()
 	hash := hasher.Sum(fileData)
 
 	if !bytes.Equal(newDiff.Hash, hash) {
@@ -367,7 +367,7 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 	return nil
 }
 
-func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer crypto.SymmetricKey) ([]*caps.FileCap, error) {
+func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer tribecrypto.SymmetricKey) ([]*caps.FileCap, error) {
 	data, err := repo.storage.DownloadAndDecryptWithSymmetricKey(boxer, ipfsHash, repo.ipfs)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not download group data")
@@ -381,7 +381,7 @@ func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer crypto.Sy
 	return capabilities, nil
 }
 
-func (repo *GroupRepo) ReEncrypt(boxer crypto.SymmetricKey) (string, error) {
+func (repo *GroupRepo) ReEncrypt(boxer tribecrypto.SymmetricKey) (string, error) {
 	for fileInt := range repo.files.VIterator() {
 		file := fileInt.(*File)
 		if err := file.ChangeKey(repo.ipfs); err != nil {

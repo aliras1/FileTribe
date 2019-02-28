@@ -5,60 +5,73 @@ import "./interfaces/IConsensus.sol";
 
 contract Consensus {
     IConsensus.Type private _type;
+    bool private _isActive;
     address private _proposer;
     address private _group;
     bytes32 _digest;
     bytes _payload;
-    address[] _membersThatApproved;
+    address[] _membersThatVoted;
+    uint256 _numAccept;
+    uint256 _numDecline;
 
     event Debug(uint256 state);
     event DebugCons(bytes msg);
 
-    constructor (
-        IConsensus.Type cType,
-        address proposer,
-        address group,
-        bytes32 digest,
-        bytes memory payload)
-    public {
+    constructor (IConsensus.Type cType, address proposer, address group) public {
         _type = cType;
         _proposer = proposer;
         _group = group;
+    }
+
+    function propose(bytes32 digest, bytes calldata payload) external {
+        require(msg.sender == _group, "msg.sender is not group owner");
+
         _digest = digest;
         _payload = payload;
 
-        _membersThatApproved.push(proposer);
+        delete _membersThatVoted;
+        _membersThatVoted.push(_proposer);
+        _isActive = true;
+        _numAccept = 1;
+        _numDecline = 0;
     }
 
-    function approve(bytes32 r, bytes32 s, uint8 v) public onlyMembers {
-        require(memberNotApprovedYet(msg.sender), "member already approved");
+    function setProposer(address proposer) external {
+        require(msg.sender == _group, "msg.sender is not group owner");
+
+        _proposer = proposer;
+    }
+
+    function invalidate() external {
+        require(msg.sender == _group, "msg.sender is not group owner");
+
+        _isActive = false;
+    }
+
+    function approve(bytes32 r, bytes32 s, uint8 v) public onlyMembers onlyWhenActive {
+        require(memberNotVotedYet(msg.sender), "member already voted");
         // require(verify(msg.sender, _digest, v, r, s), "invalid approval: invalid signature");
+        _membersThatVoted.push(msg.sender);
 
-        approveInternal(msg.sender);
-    }
-
-    function approveExternal(address sender, bytes32 r, bytes32 s, uint8 v) external {
-        require(IGroup(_group).isMember(msg.sender), "user is not member of group");
-        require(memberNotApprovedYet(sender), "member already approved");
-        // require(verify(msg.sender, _digest, v, r, s), "invalid approval: invalid signature");
-
-        approveInternal(sender);
-    }
-
-    function approveInternal(address sender) private {
-        if (_membersThatApproved.length + 1 > IGroup(_group).threshold()) {
-            emit Debug(101);
-
+        if (++_numAccept > IGroup(_group).threshold()) {
             if (_type == IConsensus.Type.IPFS_HASH) {
                 IGroup(_group).onChangeIpfsHashConsensus(_payload);
             } else if (_type == IConsensus.Type.KEY) {
                 IGroup(_group).onChangeKeyConsensus(_payload);
-            } else if (_type == IConsensus.Type.LEADER) {
-                IGroup(_group).onChangeLeaderConsensus();
             }
-        } else {
-            emit Debug(102);
-            _membersThatApproved.push(sender);
+        }
+    }
+
+    function decline(bytes32 r, bytes32 s, uint8 v) public onlyMembers onlyWhenActive {
+        require(_type == IConsensus.Type.KEY, "Non Key-Consensus contracts can not be declined");
+        require(memberNotVotedYet(msg.sender), "member already voted");
+        // require(verify(msg.sender, _digest, v, r, s), "invalid approval: invalid signature");
+
+        _membersThatVoted.push(msg.sender);
+
+        if (++_numDecline > IGroup(_group).threshold()) {
+            _isActive = false;
+            IGroup(_group).onKeyDeclined(_proposer);
         }
     }
 
@@ -66,9 +79,9 @@ contract Consensus {
         return ecrecover(hash, v, r, s) == addr;
     }
 
-    function memberNotApprovedYet(address member) private view returns(bool) {
-        for (uint256 i = 0; i < _membersThatApproved.length; i++) {
-            if (_membersThatApproved[i] == member) {
+    function memberNotVotedYet(address member) private view returns(bool) {
+        for (uint256 i = 0; i < _membersThatVoted.length; i++) {
+            if (_membersThatVoted[i] == member) {
                 return false;
             }
         }
@@ -78,6 +91,11 @@ contract Consensus {
 
     modifier onlyMembers() {
         require(IGroup(_group).isMember(msg.sender), "user is not member of group");
+        _;
+    }
+
+    modifier onlyWhenActive() {
+        require(_isActive, "consensus is not active");
         _;
     }
 

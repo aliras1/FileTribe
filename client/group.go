@@ -20,15 +20,15 @@ type Group struct {
 	ipfsHash          string
 	encryptedIpfsHash []byte
 	members           []ethcommon.Address
-	boxer             crypto.SymmetricKey
-	lock 			  sync.RWMutex
+	boxer             tribecrypto.SymmetricKey
+	lock              sync.RWMutex
 	storage           *fs.Storage
 }
 
 func NewGroup(address ethcommon.Address, groupName string, storage *fs.Storage) interfaces.IGroup {
 	var secretKeyBytes [32]byte
 	rand.Read(secretKeyBytes[:])
-	boxer := crypto.SymmetricKey{
+	boxer := tribecrypto.SymmetricKey{
 		Key: secretKeyBytes,
 		RNG: rand.Reader,
 	}
@@ -259,14 +259,14 @@ func (g *Group) EncryptedIpfsHash() []byte {
 	return g.encryptedIpfsHash
 }
 
-func (g *Group) Boxer() crypto.SymmetricKey {
+func (g *Group) Boxer() tribecrypto.SymmetricKey {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
 	return g.boxer
 }
 
-func (g *Group) SetBoxer(boxer crypto.SymmetricKey) {
+func (g *Group) SetBoxer(boxer tribecrypto.SymmetricKey) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 

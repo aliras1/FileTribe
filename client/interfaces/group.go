@@ -17,8 +17,8 @@ type IGroup interface {
 	IsMember(user ethcommon.Address) bool
 	CountMembers() int
 	Members() []ethcommon.Address
-	Boxer() crypto.SymmetricKey
-	SetBoxer(boxer crypto.SymmetricKey)
+	Boxer() tribecrypto.SymmetricKey
+	SetBoxer(boxer tribecrypto.SymmetricKey)
 	Update(name string, members []ethcommon.Address, encIpfsHash []byte) error
 	Encode() ([]byte, error)
 	Save() error

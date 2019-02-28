@@ -11,14 +11,8 @@ contract ConsensusFactory is Ownable {
 
     }
 
-    function create(
-        IConsensus.Type cType,
-        address proposer,
-        address group,
-        bytes32 digest,
-        bytes calldata payload)
-    external returns(address) {
-        return address(new Consensus(cType, proposer, group, digest, payload));
+    function create(IConsensus.Type cType, address proposer, address group) external returns(address) {
+        return address(new Consensus(cType, proposer, group));
     }
 
     function setParent(address parent) public onlyOwner {

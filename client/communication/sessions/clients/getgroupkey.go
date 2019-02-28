@@ -22,7 +22,7 @@ type GetGroupKeySessionClient struct {
 
 	sender          ethcommon.Address
 	onSessionClosed common.SessionClosedCallback
-	signer          *crypto.Signer
+	signer          *tribecrypto.Signer
 
 	lock 				sync.RWMutex
 	stop			    chan bool
@@ -150,7 +150,7 @@ func (session *GetGroupKeySessionClient) NextState(contact *comcommon.Contact, d
 		}
 	case 2:
 		{
-			key, err := crypto.DecodeSymmetricKey(data)
+			key, err := tribecrypto.DecodeSymmetricKey(data)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not decode group key")
 				session.close()
@@ -179,7 +179,7 @@ func NewGetGroupKeySessionClient(
 	groupAddr ethcommon.Address,
 	contact *comcommon.Contact,
 	sender ethcommon.Address,
-	signer *crypto.Signer,
+	signer *tribecrypto.Signer,
 	onSessionClosed common.SessionClosedCallback,
 	onSuccess common.OnGetGroupKeySuccessCallback,
 ) *GetGroupKeySessionClient {

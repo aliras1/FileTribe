@@ -1,20 +1,20 @@
 package main
 
 import (
-	"encoding/base64"
+	"bytes"
 	"encoding/json"
 	"flag"
-	"net/http"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/chequebook"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
+	"net/http"
+	"os"
 
-	ipfs_share "ipfs-share/client"
-	nw "ipfs-share/network"
-	ipfsapi "ipfs-share/ipfs"
 	"fmt"
-	"ipfs-share/collections"
+	ipfs_share "ipfs-share/client"
+	ipfsapi "ipfs-share/ipfs"
 )
 
 const (
@@ -22,87 +22,62 @@ const (
 	port           = "3333"
 	ipfsAPIAddress = "http://127.0.0.1:5001"
 	//ethWSAddress   = "ws://127.0.0.1:8001"
+	password = "pwd"
 	ethWSAddress   = "ws://172.18.0.2:8001"
-	// ethKeyPath = "../misc/eth/ethkeystore/UTC--2018-05-19T19-06-19.498239404Z--c4f45f1822b614116ea5b68d4020f3ae1a0179e5"
-	contractAddress = "0x41cf9ed28c99cc5ebd531bd1929a7e99c122fed8"
+	ethKeyPath = "../misc/eth/ethkeystore/UTC--2018-05-19T19-06-19.498239404Z--c4f45f1822b614116ea5b68d4020f3ae1a0179e5"
+	contractAddress = "0x41cf9ED28C99cC5eBd531bD1929a7E99c122fED8"
 )
 
 var client ipfs_share.IUserFacade
-var network nw.INetwork
 var ipfs ipfsapi.IIpfs
-
-func stringToAddress(addressString string) ethcommon.Address {
-	addressBytes := ethcommon.FromHex(addressString)
-	address := ethcommon.BytesToAddress(addressBytes)
-
-	return address
-}
+var ethNode chequebook.Backend
+var auth *ipfs_share.Auth
 
 func signUp(w http.ResponseWriter, r *http.Request) {
-	if client != nil {
-		client.SignOut()
-		client = nil
-	}
-
 	params := mux.Vars(r)
-	var err error
 
-	var ethKeyPath string
-	json.NewDecoder(r.Body).Decode(&ethKeyPath)
-	
-	network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
+	username := params["username"]
+	err := client.SignUp(username)
+	glog.Flush()
 	if err != nil {
-		errorHandler (w, r, fmt.Sprintf( "could not connect to ethereum network: %s", err))
+		errorHandler(w, r, fmt.Sprintf("could not sign up: %s: %s", username, err))
 		return
-	}
-
-	client, err = ipfs_share.NewUserContextFromSignUp(
-		params["username"],
-		params["password"],
-		ethKeyPath,
-		params["username"], // data directory
-		network,
-		ipfs,
-		"2001",
-	)
-	if err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not signup: %s", err))
 	}
 }
 
 func signIn(w http.ResponseWriter, r *http.Request) {
-	if client != nil {
-		client.SignOut()
-		client = nil
-	}
-
-	params := mux.Vars(r)
-	var err error
-
-	var ethKeyPath string
-	if err := json.NewDecoder(r.Body).Decode(&ethKeyPath); err != nil {
-		errorHandler(w, r, "could not decode ethkeypath")
-		return
-	}
-	
-	network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
-	if err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not connect to ethereum network: %s", err))
-		return
-	}
-
-	client, err = ipfs_share.NewUserContextFromSignIn(
-		params["username"],
-		params["password"],
-		ethKeyPath,
-		params["username"], // data directory
-		network,
-		ipfs,
-		"2001",
-	)
-	if err != nil {
-		glog.Error(err)
-	}
+	//if client != nil {
+	//	client.SignOut()
+	//	client = nil
+	//}
+	//
+	//params := mux.Vars(r)
+	//var err error
+	//
+	//var ethKeyPath string
+	//if err := json.NewDecoder(r.Body).Decode(&ethKeyPath); err != nil {
+	//	errorHandler(w, r, "could not decode ethkeypath")
+	//	return
+	//}
+	//
+	//network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
+	//if err != nil {
+	//	errorHandler(w, r, fmt.Sprintf("could not connect to ethereum network: %s", err))
+	//	return
+	//}
+	//
+	//client, err = ipfs_share.NewUserContextFromSignIn(
+	//	params["username"],
+	//	params["password"],
+	//	ethKeyPath,
+	//	params["username"], // data directory
+	//	network,
+	//	ipfs,
+	//	"2001",
+	//)
+	//if err != nil {
+	//	glog.Error(err)
+	//}
 }
 
 func signOut(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +107,23 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func joinGroup(w http.ResponseWriter, r *http.Request) {
+	if client == nil {
+		errorHandler(w, r, "user context is null")
+		return
+	}
+
+	var groupAddressStr string
+	if err := json.NewDecoder(r.Body).Decode(&groupAddressStr); err != nil {
+		errorHandler(w, r, "argument not found")
+		return
+	}
+
+	if err := client.AcceptInvitation(ethcommon.HexToAddress(groupAddressStr)); err != nil {
+		errorHandler(w, r, err.Error())
+	}
+}
+
 func invite(w http.ResponseWriter, r *http.Request) {
 	if client == nil {
 		errorHandler(w, r, "user context is null")
@@ -139,13 +131,7 @@ func invite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 
 	var member string
 	if err := json.NewDecoder(r.Body).Decode(&member); err != nil {
@@ -153,11 +139,33 @@ func invite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	address := ethcommon.HexToAddress(member)
+	glog.Infof("inviting address: %s", address.String())
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			if err := group.Invite(address, true); err != nil {
 				errorHandler(w, r, fmt.Sprintf("could not invite user: %s", err.Error()))
+			}
+			return
+		}
+	}
+
+	errorHandler(w, r, "no group found")
+}
+
+func leave(w http.ResponseWriter, r *http.Request) {
+	if client == nil {
+		errorHandler(w, r, "user context is null")
+		return
+	}
+
+	params := mux.Vars(r)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
+
+	for _, group := range client.Groups() {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
+			if err := group.Leave(); err != nil {
+				errorHandler(w, r, fmt.Sprintf("could not leave group: %s", err.Error()))
 			}
 			return
 		}
@@ -176,16 +184,10 @@ func groupRepoCommit(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&path)
 
 	params := mux.Vars(r)
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			if err := group.CommitChanges(); err != nil {
 				errorHandler(w, r, fmt.Sprintf("could not add group file: %s", err.Error()))
 			}
@@ -203,16 +205,10 @@ func groupRepoListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			list := group.ListFiles()
 
 			if err := json.NewEncoder(w).Encode(list); err != nil {
@@ -232,16 +228,10 @@ func groupListMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			var list []string
 			for _, address := range group.ListMembers() {
 				list = append(list, address.String())
@@ -267,20 +257,12 @@ func groupRepoGrantWriteAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
-
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 	file := params["file"]
 	address := ethcommon.HexToAddress(params["member"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			if err := group.GrantWriteAccess(file, address); err != nil {
 				errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
 			}
@@ -299,20 +281,12 @@ func groupRepoRevokeWriteAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
-
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 	file := params["file"]
 	address := ethcommon.HexToAddress(params["member"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			if err := group.RevokeWriteAccess(file, address); err != nil {
 				errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
 			}
@@ -332,7 +306,7 @@ func lsGroups(w http.ResponseWriter, r *http.Request) {
 
 	var list []string
 	for _, group := range client.Groups() {
-		list = append(list, group.Id().ToString())
+		list = append(list, group.Address().String())
 	}
 
 	if err := json.NewEncoder(w).Encode(list); err != nil {
@@ -363,9 +337,39 @@ func errorHandler(w http.ResponseWriter, r *http.Request, msg string) {
 }
 
 func main() {
+	var err error
+
 	flag.Parse()
 
+	fmt.Println(os.Args)
+	if len(os.Args) < 5 {
+		panic(fmt.Sprintf("not enough arguments"))
+	}
+
+	auth, err := ipfs_share.NewAuth(os.Args[4], password)
+	if err != nil {
+		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
+	}
+
 	ipfs = ipfsapi.NewIpfs(ipfsAPIAddress)
+
+	ethNode, err := ethclient.Dial(ethWSAddress)
+	if err != nil {
+		if err != nil {
+			panic(fmt.Sprintf("could not connect to ethereum node: %s", err))
+		}
+	}
+
+	client, err = ipfs_share.NewUserContext(
+		auth,
+		ethNode,
+		ethcommon.HexToAddress(contractAddress),
+		ipfs,
+		"2001",
+	)
+	if err != nil {
+		panic(fmt.Sprintf("could not signup: %s", err))
+	}
 
 	router := mux.NewRouter()
 	
@@ -374,12 +378,14 @@ func main() {
 	router.HandleFunc("/signout", signOut).Methods("GET")
 	
 	router.HandleFunc("/group/create", createGroup).Methods("POST")
-	router.HandleFunc("/group/invite/{groupId}", invite).Methods("POST")
-	router.HandleFunc("/group/ls/{groupId}", groupListMembers).Methods("GET")
-	router.HandleFunc("/group/repo/commit/{groupId}", groupRepoCommit).Methods("POST")
-	router.HandleFunc("/group/repo/ls/{groupId}", groupRepoListFiles).Methods("GET")
-	router.HandleFunc("/group/repo/grant/{groupId}/{file}/{member}", groupRepoGrantWriteAccess).Methods("POST")
-	router.HandleFunc("/group/repo/revoke/{groupId}/{file}/{member}", groupRepoRevokeWriteAccess).Methods("POST")
+	router.HandleFunc("/group/join", joinGroup).Methods("POST")
+	router.HandleFunc("/group/invite/{groupAddress}", invite).Methods("POST")
+	router.HandleFunc("/group/leave/{groupAddress}", leave).Methods("POST")
+	router.HandleFunc("/group/ls/{groupAddress}", groupListMembers).Methods("GET")
+	router.HandleFunc("/group/repo/commit/{groupAddress}", groupRepoCommit).Methods("POST")
+	router.HandleFunc("/group/repo/ls/{groupAddress}", groupRepoListFiles).Methods("GET")
+	router.HandleFunc("/group/repo/grant/{groupAddress}/{file}/{member}", groupRepoGrantWriteAccess).Methods("POST")
+	router.HandleFunc("/group/repo/revoke/{groupAddress}/{file}/{member}", groupRepoRevokeWriteAccess).Methods("POST")
 
 	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")
 	router.HandleFunc("/ls/tx", listTransactions).Methods("GET")

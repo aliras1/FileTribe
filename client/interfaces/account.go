@@ -11,7 +11,7 @@ type IAccount interface {
 	ContractAddress() ethcommon.Address
 	Contract() *ethacc.Account
 	Name() string
-	Boxer() crypto.AnonymBoxer
+	Boxer() tribecrypto.AnonymBoxer
 	SetContract(contract *ethacc.Account)
 	SetContractAddress(addr ethcommon.Address)
 	Save() error

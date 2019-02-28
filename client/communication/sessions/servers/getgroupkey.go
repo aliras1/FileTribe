@@ -20,7 +20,7 @@ type GetGroupKeySessionServer struct {
 	sender          ethcommon.Address
 	group           ethcommon.Address
 	callback        common.CtxCallback
-	signer          *crypto.Signer
+	signer          *tribecrypto.Signer
 	challenge       [32]byte
 	onSessionClosed common.SessionClosedCallback
 	lock            sync.RWMutex
@@ -198,7 +198,7 @@ func NewGetGroupKeySessionServer(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
 	sender ethcommon.Address,
-	signer *crypto.Signer,
+	signer *tribecrypto.Signer,
 	callback common.CtxCallback,
 	onSessionClosed common.SessionClosedCallback,
 ) (*GetGroupKeySessionServer, error) {

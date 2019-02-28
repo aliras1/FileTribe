@@ -4,11 +4,5 @@ import "../IConsensus.sol";
 
 interface IConsensusFactory {
 
-    function create(
-        IConsensus.Type cType,
-        address proposer,
-        address group,
-        bytes32 digest,
-        bytes calldata payload)
-    external returns(address);
+    function create(IConsensus.Type cType, address proposer, address group) external returns(address);
 }

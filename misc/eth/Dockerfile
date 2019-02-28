@@ -14,6 +14,9 @@ RUN \
 
 RUN npm install -g truffle
 
+#RUN cd /ethcode
+RUN npm rebuild scrypt --update-binary
+
 EXPOSE 8000
 EXPOSE 8001
 EXPOSE 30304

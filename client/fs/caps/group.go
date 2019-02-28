@@ -10,7 +10,7 @@ import (
 
 type GroupAccessCap struct {
 	Address ethCommon.Address
-	Boxer   crypto.SymmetricKey
+	Boxer   tribecrypto.SymmetricKey
 }
 
 func (cap *GroupAccessCap) Encode() ([]byte, error) {

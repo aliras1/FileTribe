@@ -16,4 +16,7 @@ interface IGroup {
     function onInvitationDeclined(address account) external;
 
     function threshold() external view returns(uint256);
+
+    function onKeyDeclined(address proposer) external;
+
 }

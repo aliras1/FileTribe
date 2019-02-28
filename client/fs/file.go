@@ -175,7 +175,7 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 			return
 		}
 
-		hasher := crypto.NewKeccak256Hasher()
+		hasher := tribecrypto.NewKeccak256Hasher()
 		origHash = hasher.Sum(origData)
 
 		currentStr = string(origData)
@@ -312,7 +312,7 @@ func (f *File) RevokeWriteAccess(user, target ethcommon.Address) error {
 	return nil
 }
 
-func (f *File) diff(boxer crypto.FileBoxer) (*DiffNode, error) {
+func (f *File) diff(boxer tribecrypto.FileBoxer) (*DiffNode, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
@@ -332,7 +332,7 @@ func (f *File) diff(boxer crypto.FileBoxer) (*DiffNode, error) {
 			return nil, errors.Wrap(err, "could not read original file")
 		}
 
-		hasher := crypto.NewKeccak256Hasher()
+		hasher := tribecrypto.NewKeccak256Hasher()
 		hash := hasher.Sum(originalData)
 
 		diff.Hash = hash
@@ -382,7 +382,7 @@ func (f *File) ChangeKey(ipfs ipfsapi.IIpfs) error {
 		return errors.Wrap(err, "could not read from crypto.rand")
 	}
 
-	f.PendingChanges.DataKey = crypto.FileBoxer{Key: newKey}
+	f.PendingChanges.DataKey = tribecrypto.FileBoxer{Key: newKey}
 
 	ipfsHash, err := f.UploadDiff(ipfs)
 	if err != nil {

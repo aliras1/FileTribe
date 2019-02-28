@@ -195,7 +195,7 @@ func (storage *Storage) DownloadTmpFile(ipfsHash string, ipfs ipfsapi.IIpfs) (st
 	return filePath, nil
 }
 
-func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer crypto.SymmetricKey, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
+func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer tribecrypto.SymmetricKey, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
 	path := storage.tmpPath + ipfsHash
 	if err := ipfs.Get(ipfsHash, path); err != nil {
 		return nil, errors.Wrapf(err, "could not ipfs get ipfs hash %s", ipfsHash)
@@ -219,7 +219,7 @@ func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer crypto.Symmetri
 	return data, nil
 }
 
-func (storage *Storage) DownloadAndDecryptWithFileBoxer(boxer crypto.FileBoxer, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
+func (storage *Storage) DownloadAndDecryptWithFileBoxer(boxer tribecrypto.FileBoxer, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
 	tmpFilePath, err := storage.DownloadTmpFile(ipfsHash, ipfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not ipfs get '%s'", ipfsHash)

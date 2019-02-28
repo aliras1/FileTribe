@@ -3,14 +3,14 @@ package client
 import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
-	"ipfs-share/client/communication/common"
-	"path"
-	"sync"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
+	"ipfs-share/client/communication/common"
+	"math/rand"
+	"path"
+	"sync"
+	"time"
 
 	com "ipfs-share/client/communication"
 	sesscommon "ipfs-share/client/communication/sessions/common"
@@ -44,7 +44,7 @@ type GroupContext struct {
 	Storage          *fs.Storage
 	Transactions     *List
 	broadcastChannel *ipfsapi.PubSubSubscription
-	proposedKey      *crypto.SymmetricKey
+	proposedKey      *tribecrypto.SymmetricKey
 	subs             *List
 	lock             sync.Mutex
 }
@@ -177,7 +177,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 
 
 func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight bool) error {
-	glog.Infof("[*] Inviting account '%s' into group '%s'...\n", newMember, groupCtx.Group.Name)
+	glog.Infof("[*] Inviting account '%s' into group '%s'...\n", newMember.String(), groupCtx.Group.Name)
 
 	tx, err := groupCtx.eth.Group.Invite(groupCtx.eth.Auth.TxOpts, newMember)
 	if err != nil {
@@ -254,28 +254,31 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 	return nil
 }
 
-func (groupCtx *GroupContext) onKeyDirty() {
+func (groupCtx *GroupContext) onKeyDirty() error {
 	glog.Info("KEY DIRTY")
 
-	groupCtx.proposedKey = nil
+	time.Sleep(time.Duration(rand.Intn(5)) * time.Millisecond )
 
-	if err := groupCtx.Update(); err != nil {
-		glog.Errorf("could not update group: %s", err)
-		return
+	// err == nil means that in the meantime, someone has already
+	// proposed another key successfully and it got stored
+	if _, err := groupCtx.ProposedKey(); err == nil {
+		return nil
 	}
 
-	newBoxer, err := crypto.NewSymmetricKey()
+	if err := groupCtx.Update(); err != nil {
+		return errors.Wrap(err, "could not update group")
+	}
+
+	newBoxer, err := tribecrypto.NewSymmetricKey()
 	if err != nil {
-		glog.Errorf("could not create new group key: %s", err)
-		return
+		return errors.Wrap(err, "could not create new group key")
 	}
 
 	groupCtx.proposedKey = newBoxer
 
 	newIpfsHash, err := groupCtx.Repo.ReEncrypt(*newBoxer)
 	if err != nil {
-		glog.Errorf("could not re-encrypt group repo: %s", err)
-		return
+		return errors.Wrap(err, "could not re-encrypt group repo")
 	}
 
 	encNewIpfsHash := newBoxer.BoxSeal([]byte(newIpfsHash))
@@ -286,14 +289,12 @@ func (groupCtx *GroupContext) onKeyDirty() {
 
 		groupCtx.proposedKey = nil
 
-		return
+		return errors.Wrap(err, "could not send change key tx")
 	}
 
-	simInt := interface{}(groupCtx.eth.Backend)
-	x := simInt.(*backends.SimulatedBackend)
-	x.Commit()
-
 	groupCtx.Transactions.Add(tx)
+
+	return nil
 }
 
 func (groupCtx *GroupContext) ReEncrpyt() error {
@@ -348,7 +349,7 @@ func (groupCtx *GroupContext) GetKey(encNewIpfsHash []byte) error {
 	return nil
 }
 
-func (groupCtx *GroupContext) onGetKeySuccess(boxer crypto.SymmetricKey) {
+func (groupCtx *GroupContext) onGetKeySuccess(boxer tribecrypto.SymmetricKey) {
 	groupCtx.Group.SetBoxer(boxer)
 
 	if err := groupCtx.Save(); err != nil {
@@ -359,6 +360,24 @@ func (groupCtx *GroupContext) onGetKeySuccess(boxer crypto.SymmetricKey) {
 	if err := groupCtx.Update(); err != nil {
 		glog.Errorf("could not update group: %s", err)
 	}
+}
+
+func (groupCtx *GroupContext) ProposedKey() (tribecrypto.SymmetricKey, error) {
+	groupCtx.lock.Lock()
+	defer groupCtx.lock.Unlock()
+
+	if groupCtx.proposedKey == nil {
+		return tribecrypto.SymmetricKey{}, errors.New("symmetric key is nil")
+	}
+
+	return *groupCtx.proposedKey, nil
+}
+
+func (groupCtx *GroupContext) SetProposedKey(key *tribecrypto.SymmetricKey) {
+	groupCtx.lock.Lock()
+	defer groupCtx.lock.Unlock()
+
+	groupCtx.proposedKey = key
 }
 
 func (groupCtx *GroupContext) ListFiles() []string {

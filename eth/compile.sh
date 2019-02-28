@@ -1,4 +1,4 @@
-truffle compile
+truffle compile --reset --all
 
 compile_contracts() {
     IN=$1

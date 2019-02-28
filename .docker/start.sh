@@ -14,4 +14,4 @@ mkdir $last_num
 
 echo "[*] Program started"
 
-./main -stderrthreshold=INFO -log_dir=./$last_num
+./main ./eth.key -stderrthreshold=INFO -log_dir=./$last_num

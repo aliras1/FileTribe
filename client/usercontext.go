@@ -1,12 +1,12 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"ipfs-share/client/communication/common"
 	"ipfs-share/crypto"
-	ethinv "ipfs-share/eth/gen/Invitation"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -19,10 +19,13 @@ import (
 	. "ipfs-share/collections"
 	ethApp "ipfs-share/eth/gen/Dipfshare"
 	ipfsapi "ipfs-share/ipfs"
+	ethgroup "ipfs-share/eth/gen/Group"
 )
 
 type IUserFacade interface {
+	SignUp(username string) error
 	CreateGroup(groupname string) error
+	AcceptInvitation(groupAddress ethcommon.Address) error
 	User() interfaces.IAccount
 	Groups() []IGroupFacade
 	SignOut()
@@ -99,19 +102,19 @@ func (ctx *UserContext) IsMember(group ethcommon.Address, account ethcommon.Addr
 	return nil
 }
 
-func (ctx *UserContext) Boxer(group ethcommon.Address) (crypto.SymmetricKey, error) {
+func (ctx *UserContext) Boxer(group ethcommon.Address) (tribecrypto.SymmetricKey, error) {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
-		return crypto.SymmetricKey{}, errors.New("no group found")
+		return tribecrypto.SymmetricKey{}, errors.New("no group found")
 	}
 
 	return groupInt.(*GroupContext).Group.Boxer(), nil
 }
 
-func (ctx *UserContext) ProposedBoxer(group ethcommon.Address) (crypto.SymmetricKey, error) {
+func (ctx *UserContext) ProposedBoxer(group ethcommon.Address) (tribecrypto.SymmetricKey, error) {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
-		return crypto.SymmetricKey{}, errors.New("no group found")
+		return tribecrypto.SymmetricKey{}, errors.New("no group found")
 	}
 
 	return *groupInt.(*GroupContext).proposedKey, nil
@@ -148,14 +151,9 @@ func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	return nil
 }
 
-func NewUserContext(ethKeyPath string, password string, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
+func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	var err error
 	var ctx UserContext
-
-	auth, err := NewAuth(ethKeyPath, password)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create Auth")
-	}
 
 	appContract, err := ethApp.NewDipfshare(appContractAddress, backend)
 	if err != nil {
@@ -259,15 +257,28 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 	return nil
 }
 
-func (ctx *UserContext) AcceptInvitation(inv *ethinv.Invitation) error {
-	tx, err := inv.Accept(ctx.eth.Auth.TxOpts)
-	if err != nil {
-		return errors.Wrap(err, "could not send accept invitation tx")
+func (ctx *UserContext) AcceptInvitation(groupAddress ethcommon.Address) error {
+	for otherAddressInt := range ctx.invitations.Iterator() {
+		otherAddress := otherAddressInt.(ethcommon.Address)
+
+		if bytes.Equal(groupAddress.Bytes(), otherAddress.Bytes()) {
+			group, err := ethgroup.NewGroup(groupAddress, ctx.eth.Backend)
+			if err != nil {
+				return errors.Wrap(err, "could not get group contract instance")
+			}
+
+			tx, err := group.Join(ctx.eth.Auth.TxOpts)
+			if err != nil {
+				return errors.Wrap(err, "could not send accept invitation tx")
+			}
+
+			ctx.transactions.Add(tx)
+
+			return nil
+		}
 	}
 
-	ctx.transactions.Add(tx)
-
-	return nil
+	return errors.New("Group not found in invitations")
 }
 
 func (ctx *UserContext) disposeGroup(groupAddr ethcommon.Address) error {

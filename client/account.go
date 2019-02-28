@@ -15,9 +15,9 @@ import (
 )
 
 type AccountData struct {
-	Name string
+	Name            string
 	ContractAddress ethcommon.Address
-	Boxer crypto.AnonymBoxer
+	Boxer           tribecrypto.AnonymBoxer
 }
 
 type Account struct {
@@ -36,7 +36,7 @@ func (acc *Account) Name() string {
 }
 
 
-func (acc *Account) Boxer() crypto.AnonymBoxer {
+func (acc *Account) Boxer() tribecrypto.AnonymBoxer {
 	return acc.data.Boxer
 }
 
@@ -103,9 +103,9 @@ func NewAccount(username string, storage *fs.Storage) (interfaces.IAccount, erro
 	return &Account{
 		data: &AccountData{
 			Name:username,
-			Boxer:crypto.AnonymBoxer{
-				PublicKey:  crypto.AnonymPublicKey{Value: publicBoxerBytes},
-				PrivateKey: crypto.AnonymPrivateKey{Value: secretBoxerBytes},
+			Boxer: tribecrypto.AnonymBoxer{
+				PublicKey:  tribecrypto.AnonymPublicKey{Value: publicBoxerBytes},
+				PrivateKey: tribecrypto.AnonymPrivateKey{Value: secretBoxerBytes},
 			},
 		},
 		storage:storage,

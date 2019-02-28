@@ -17,7 +17,7 @@ func NewServerSession(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
 	account ethcommon.Address,
-	signer *crypto.Signer,
+	signer *tribecrypto.Signer,
 	callback common.CtxCallback,
 	sessionClosed common.SessionClosedCallback,
 ) (common.ISession, error) {

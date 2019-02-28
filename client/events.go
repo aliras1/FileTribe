@@ -9,7 +9,6 @@ import (
 	ethacc "ipfs-share/eth/gen/Account"
 	ethapp "ipfs-share/eth/gen/Dipfshare"
 	ethgroup "ipfs-share/eth/gen/Group"
-	ethinv "ipfs-share/eth/gen/Invitation"
 )
 
 func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.Dipfshare) {
@@ -77,21 +76,9 @@ func (ctx *UserContext) HandleGroupInvitationEvents(acc *ethacc.Account) {
 func (ctx *UserContext) onGroupInvitation(e *ethacc.AccountNewInvitation) {
 	glog.Info("New INVITATION")
 
-	inv, err := ethinv.NewInvitation(e.Inv, ctx.eth.Backend)
-	if err != nil {
-		glog.Errorf("could not create group invitation instance: %s", err)
-		return
-	}
+	glog.Infof("%s: got a group invitation into %s", ctx.account.Name(), e.Group.String())
 
-	groupAddr, err := inv.Group(&bind.CallOpts{Pending:true})
-	if err != nil {
-		glog.Errorf("could not get group Address from invitation: %s", err)
-		return
-	}
-
-	glog.Infof("%s: got a group invitation into %s", ctx.account.Name(), groupAddr.String())
-
-	ctx.invitations.Add(inv)
+	ctx.invitations.Add(e.Group)
 }
 
 func (ctx *UserContext) HandleInvitationAcceptedEvents(acc *ethacc.Account) {
@@ -311,33 +298,31 @@ func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 }
 
 
-func (ctx *UserContext) HandleKeyDirtyEvents(ch chan *ethgroup.GroupKeyDirty) {
-	glog.Info("keyDirty handling...")
-
-	for keyDirty := range ch {
-		glog.Info("got Dirty Key event")
-		go ctx.onKeyDirty(keyDirty)
-	}
-}
-
-func (ctx *UserContext) onKeyDirty(keyDirty *ethgroup.GroupKeyDirty) {
-	//id := NewBytesId(keyDirty.GroupId)
-	//
-	//groupCtxInt := ctx.groups.Get(id)
-	//if groupCtxInt == nil {
-	//	return
-	//}
-	//
-	//groupCtx := groupCtxInt.(*GroupContext)
-	//if err := groupCtx.Update(); err != nil {
-	//	glog.Errorf("could not update group context: %s", err)
-	//	return
-	//}
-	//
-	//if err := groupCtx.onKeyDirty(); err != nil {
-	//	glog.Errorf( "error while changing group key: %s", err)
-	//}
-}
+//func (ctx *UserContext) HandleKeyDirtyEvents(ch chan *ethgroup.GroupKeyDirty) {
+//	glog.Info("keyDirty handling...")
+//
+//	for keyDirty := range ch {
+//		glog.Info("got Dirty Key event")
+//		go ctx.onKeyDirty(keyDirty)
+//	}
+//}
+//
+//func (ctx *UserContext) onKeyDirty(keyDirty *ethgroup.GroupKeyDirty) {
+//	groupCtxInt := ctx.groups.Get(keyDirty.Group)
+//	if groupCtxInt == nil {
+//		return
+//	}
+//
+//	groupCtx := groupCtxInt.(*GroupContext)
+//	if err := groupCtx.Update(); err != nil {
+//		glog.Errorf("could not update group context: %s", err)
+//		return
+//	}
+//
+//	if err := groupCtx.onKeyDirty(); err != nil {
+//		glog.Errorf( "error while changing group key: %s", err)
+//	}
+//}
 
 //func (ctx *UserContext) HandleGroupLeftEvents(ch chan *eth.EthGroupLeft) {
 //	glog.Info("GroupLeft handling...")

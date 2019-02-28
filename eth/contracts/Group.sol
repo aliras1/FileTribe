@@ -4,10 +4,8 @@ import "./interfaces/IAccount.sol";
 import "./interfaces/IDipfshare.sol";
 import "./interfaces/IConsensus.sol";
 import "./common/Ownable.sol";
-import "./common/Invitable.sol";
-import "./common/Governable.sol";
 
-contract Group is Ownable, Invitable, Governable {
+contract Group is Ownable {
     enum State {
         NORMAL,
         KEY_DIRTY
@@ -20,8 +18,11 @@ contract Group is Ownable, Invitable, Governable {
     mapping(address => bool) private _canInvite;
     State private _state;
     uint256 _leaderIdx;
+    address[] private _consensuses;
+    mapping(address => uint256) private _memberToIdx;
     address _keyConsensus;
     address _leaderConsensus;
+    mapping(address => address) private _invitations; // owner -> account address
 
     event KeyDirty(address group);
     event GroupKeyChanged(bytes32 groupId, bytes ipfsHash);
@@ -46,12 +47,13 @@ contract Group is Ownable, Invitable, Governable {
         address account,
         string memory name,
         bytes memory ipfsHash)
-    public Ownable(account) Invitable() Governable() {
+    public Ownable(account) {
         _parent = parent;
         _name = name;
         _ipfsHash = ipfsHash;
         _state = State.NORMAL;
         _members.push(account);
+        _keyConsensus = IDipfshare(_parent).createConsensus(IConsensus.Type.KEY, address(0));
     }
 
     modifier onlyMembers() {
@@ -69,44 +71,11 @@ contract Group is Ownable, Invitable, Governable {
         return false;
     }
 
-    // onlyInDirtyState
-    function changeLeader(bytes32 r, bytes32 s, uint8 v) public onlyMembers  {
-        if (_leaderConsensus == address(0)) {
-            emit Debug(0);
-            _leaderConsensus = IDipfshare(_parent).createConsensus(
-                IConsensus.Type.LEADER,
-                msg.sender,
-                keccak256(abi.encodePacked(leader())),
-                new bytes(0x00)  // not intrested in additional data
-            );
-        }
-
-        emit ApprovedChangeLeader(msg.sender);
-
-        IConsensus(_leaderConsensus).approveExternal(msg.sender, r, s, v);
-    }
-
-    function onChangeLeaderConsensus() external {
-        require(msg.sender == _leaderConsensus, "msg.sender is not leaderConsensus");
-
-        _leaderIdx++;
-        _leaderConsensus = address(0);
-
-        emit GroupLeaderChanged(address(this), leader());
-    }
-
     function changeKey(bytes memory newIpfsHash) public onlyMembers onlyInDirtyState {
         bytes32 digest = keccak256(abi.encodePacked(_ipfsHash, newIpfsHash));
 
-        if (_keyConsensus == address(0)) {
-            return;
-        }
-
-        _keyConsensus = IDipfshare(_parent).createConsensus(
-            IConsensus.Type.KEY,
-            msg.sender,
-            digest,
-            newIpfsHash);
+        IConsensus(_keyConsensus).propose(digest, newIpfsHash);
+        IConsensus(_keyConsensus).setProposer(msg.sender);
 
         emit NewConsensus(address(this), address(_keyConsensus));
     }
@@ -116,8 +85,6 @@ contract Group is Ownable, Invitable, Governable {
 
         _ipfsHash = payload;
         _state = State.NORMAL;
-        _leaderIdx++;
-        _leaderConsensus = address(0);
 
         emit ConsensusReached(address(this), payload);
     }
@@ -125,24 +92,29 @@ contract Group is Ownable, Invitable, Governable {
     function changeIpfsHash(bytes memory newIpfsHash) public onlyMembers onlyInNormalState {
         bytes32 digest = keccak256(abi.encodePacked(_ipfsHash, newIpfsHash));
 
-        address c = IDipfshare(_parent).createConsensus(
-            IConsensus.Type.IPFS_HASH,
-            msg.sender,
-            digest,
-            newIpfsHash);
+        uint256 idx = _memberToIdx[msg.sender];
+        IConsensus(_consensuses[idx]).propose(digest, newIpfsHash);
 
-        emit NewConsensus(address(this), address(c));
-
-        addConsensus(c);
+        emit NewConsensus(address(this), _consensuses[idx]);
     }
 
     function onChangeIpfsHashConsensus(bytes calldata payload) external {
         require(_state == State.NORMAL, "operation is not possible in the current state");
-        require(isConsensus(msg.sender), "msg.sender is no consensus");
+
+        uint256 i;
+        for (i = 0; i < _consensuses.length; i++) {
+            IConsensus(_consensuses[i]).invalidate();
+            if (msg.sender == _consensuses[i]) {
+                break;
+            }
+        }
+        require(i < _consensuses.length, "msg.sender is no group consensus");
+        for (; i < _consensuses.length; i++) {
+            IConsensus(_consensuses[i]).invalidate();
+        }
 
         emit IpfsHashChanged(address(this), payload);
 
-        clearConsensuses();
         _ipfsHash = payload;
     }
 
@@ -165,7 +137,6 @@ contract Group is Ownable, Invitable, Governable {
         _members.length--;
 
         _state = State.KEY_DIRTY;
-        clearConsensuses();
 
         emit KeyDirty(address(this));
     }
@@ -186,7 +157,15 @@ contract Group is Ownable, Invitable, Governable {
         _members.length--;
 
         _state = State.KEY_DIRTY;
-        clearConsensuses();
+
+        emit KeyDirty(address(this));
+    }
+
+    function onKeyDeclined(address proposer) external {
+        require(msg.sender == _keyConsensus, "Only the group's Key-Consensus contract can call this function");
+        require(_state == State.KEY_DIRTY, "This function can be called only in DirtyKey state");
+
+        // TODO: ban proposer for some time
 
         emit KeyDirty(address(this));
     }
@@ -204,23 +183,36 @@ contract Group is Ownable, Invitable, Governable {
     }
 
     function invite(address account) public onlyMembers {
-        address inv = IAccount(account).invite();
+        IAccount(account).invite();
+        address accountOwner = IAccount(account).owner();
 
         emit InvitationSent(address(this), account);
 
-        addInvitation(inv);
+        _invitations[accountOwner] = account;
     }
 
-    function onInvitationAccepted(address account) external onlyInvitations {
-        removeInvitation(msg.sender);
+    function join() public {
+        address account = _invitations[msg.sender];
+        require(account != address(0), "account was not invited");
+
+        _memberToIdx[IAccount(account).owner()] = _members.length;
         _members.push(account);
+
+        address c = IDipfshare(_parent).createConsensus(IConsensus.Type.IPFS_HASH, msg.sender);
+        _consensuses.push(c);
+
+        IAccount(account).onInvitationAccepted();
+        _invitations[msg.sender] = address(0);
 
         emit InvitationAccepted(address(this), account);
     }
 
-    function onInvitationDeclined(address account) external onlyInvitations {
-        removeInvitation(msg.sender);
-        _members.push(account);
+    function decline() public {
+        address account = _invitations[msg.sender];
+        require(account != address(0), "account was not invited");
+
+        IAccount(account).onInvitationDeclined();
+        _invitations[msg.sender] = address(0);
 
         emit InvitationDeclined(address(this), account);
     }

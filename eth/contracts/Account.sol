@@ -1,19 +1,19 @@
 pragma solidity ^0.5.0;
 
-import "./Invitation.sol";
 import "./interfaces/IDipfshare.sol";
 import "./common/Ownable.sol";
-import "./common/Invitable.sol";
 
-contract Account is Ownable, Invitable {
+contract Account is Ownable {
     address _parent; // Dipfshare
     string private _name;
     string private _ipfsPeerId;
     bytes32 private _boxingKey;
     address[] private _groups;
+    address[] private _invitations;
 
-    event NewInvitation(address account, address inv);
+    event NewInvitation(address account, address group);
     event InvitationAccepted(address account, address group);
+    event InvitationDeclined(address account, address group);
     event GroupCreated(address account, address group);
     event GroupLeft(address account, address group);
     event Debug(string msg);
@@ -25,7 +25,7 @@ contract Account is Ownable, Invitable {
         string memory name,
         string memory ipfsPeerId,
         bytes32 boxingKey)
-    public Ownable(owner) Invitable() {
+    public Ownable(owner) {
         _parent = parent;
         _name = name;
         _ipfsPeerId = ipfsPeerId;
@@ -41,24 +41,38 @@ contract Account is Ownable, Invitable {
     }
 
     // TODO: onlyGroups modifier
-    function invite() external returns(address invitation) {
-        Invitation inv = new Invitation(address(this), msg.sender);
-        addInvitation(address(inv));
+    function invite() external {
+        _invitations.push(msg.sender);
 
-        emit NewInvitation(address(this), address(inv));
-
-        return address(inv);
+        emit NewInvitation(address(this), msg.sender);
     }
 
-    function onInvitationAccepted(address group) external onlyInvitations {
-        removeInvitation(msg.sender);
-        _groups.push(group);
+    function onInvitationAccepted() external {
+        uint256 i;
 
-        emit InvitationAccepted(address(this), group);
+        for (i = 0; i < _invitations.length; i++) {
+            if (_invitations[i] == msg.sender) {
+                _groups.push(msg.sender);
+                _invitations[i] = _invitations[_invitations.length-1];
+                _invitations.length--;
+
+                emit InvitationAccepted(address(this), msg.sender);
+            }
+        }
     }
 
-    function onInvitationDeclined() public onlyInvitations {
-        removeInvitation(msg.sender);
+    function onInvitationDeclined() external {
+        uint256 i;
+
+        for (i = 0; i < _invitations.length; i++) {
+            if (_invitations[i] == msg.sender) {
+                _groups.push(msg.sender);
+                _invitations[i] = _invitations[_invitations.length-1];
+                _invitations.length--;
+
+                emit InvitationDeclined(address(this), msg.sender);
+            }
+        }
     }
 
     function onGroupLeft(address group) external {

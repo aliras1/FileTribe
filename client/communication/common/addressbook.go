@@ -67,7 +67,7 @@ func (a *AddressBook) getContactFromEth(accAddr ethcommon.Address) (*Contact, er
 		return nil, errors.Wrap(err, "could not get owner")
 	}
 
-	contact := NewContact(owner, accAddr, name, ipfsId, crypto.AnonymPublicKey{}, a.ipfs)
+	contact := NewContact(owner, accAddr, name, ipfsId, tribecrypto.AnonymPublicKey{}, a.ipfs)
 
 	return contact, nil
 }

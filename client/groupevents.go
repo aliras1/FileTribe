@@ -226,7 +226,11 @@ func (groupCtx *GroupContext) HandleKeyDirtyEvents(group *ethgroup.Group) {
 			continue
 		}
 
-		groupCtx.onKeyDirty()
+		glog.Info("new KeyDirty event")
+
+		if err := groupCtx.onKeyDirty(); err != nil {
+			glog.Errorf("error while KeyDirty: %s", err)
+		}
 	}
 }
 

@@ -23,13 +23,13 @@ const (
 
 
 type Contact struct {
-	AccAddr     ethcommon.Address
-	Address   ethcommon.Address
-	Name      string
+	AccAddr    ethcommon.Address
+	Address    ethcommon.Address
+	Name       string
 	IpfsPeerId string
-	Boxer     crypto.AnonymPublicKey
-	conn *P2PConn
-	ipfs ipfs.IIpfs
+	Boxer      tribecrypto.AnonymPublicKey
+	conn       *P2PConn
+	ipfs       ipfs.IIpfs
 }
 
 func NewContact(
@@ -37,7 +37,7 @@ func NewContact(
 	accAddr ethcommon.Address,
 	name string,
 	ipfsPeerId string,
-	boxer crypto.AnonymPublicKey,
+	boxer tribecrypto.AnonymPublicKey,
 	ipfs ipfs.IIpfs) *Contact {
 
 	return &Contact{

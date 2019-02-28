@@ -10,7 +10,7 @@ import (
 
 type Auth struct {
 	Address ethcommon.Address
-	Signer  *crypto.Signer
+	Signer  *tribecrypto.Signer
 	TxOpts  *bind.TransactOpts
 }
 
@@ -30,7 +30,7 @@ func NewAuth(ethKeyPath string, password string) (*Auth, error) {
 
 	return &Auth{
 		Address: key.Address,
-		Signer:  &crypto.Signer{PrivateKey: key.PrivateKey},
+		Signer:  &tribecrypto.Signer{PrivateKey: key.PrivateKey},
 		TxOpts:  txOpts,
 	}, nil
 }

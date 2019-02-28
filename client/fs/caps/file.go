@@ -16,7 +16,7 @@ type FileCap struct {
 	Id              [32]byte
 	FileName        string
 	IpfsHash        string
-	DataKey         crypto.FileBoxer
+	DataKey         tribecrypto.FileBoxer
 	WriteAccessList []ethcommon.Address // if empty --> everyone has write access to it
 }
 
@@ -99,7 +99,7 @@ func NewGroupFileCap(fileName string, hasWriteAccess []ethcommon.Address) (*File
 		return nil, errors.Wrap(err, "could not read from crypto/rand")
 	}
 
-	boxer := crypto.FileBoxer{Key: key}
+	boxer := tribecrypto.FileBoxer{Key: key}
 
 	return &FileCap{
 		Id:              id,

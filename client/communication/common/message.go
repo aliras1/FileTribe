@@ -39,7 +39,7 @@ type Proposal struct {
 }
 
 
-func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer *crypto.Signer) (*Message, error) {
+func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer *tribecrypto.Signer) (*Message, error) {
 	msg := &Message{
 		From: from,
 		Type: msgType,
@@ -87,7 +87,7 @@ func (m *Message) Digest() []byte {
 	sessionIdBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(sessionIdBytes, m.SessionId)
 
-	hasher := crypto.NewKeccak256Hasher()
+	hasher := tribecrypto.NewKeccak256Hasher()
 	digest := hasher.Sum(
 		m.From.Bytes(),
 		[]byte{byte(m.Type)},
