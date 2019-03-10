@@ -191,14 +191,6 @@ func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tr
 	glog.Info("group ctx created")
 }
 
-func (ctx *UserContext) HandleGroupConsensusSuccessfulEvents(ch chan *ethgroup.GroupConsensusReached) {
-	glog.Info("groupUpdateIpfs handling...")
-
-	for e := range ch {
-		ctx.onGroupConsensus(e)
-	}
-}
-
 func (ctx *UserContext) HandleGroupCreatedEvents(acc *ethacc.Account) {
 	glog.Info("GroupCreatedEvents...")
 	ch := make(chan *ethacc.AccountGroupCreated)
@@ -216,34 +208,6 @@ func (ctx *UserContext) HandleGroupCreatedEvents(acc *ethacc.Account) {
 	}
 }
 
-func (ctx *UserContext) onGroupConsensus(e *ethgroup.GroupConsensusReached) {
-	ctx.lock.Lock()
-	defer ctx.lock.Unlock()
-
-	glog.Info("got update ipfs event message")
-
-	groupCtxInterface := ctx.groups.Get(e.Group)
-	if groupCtxInterface == nil {
-		return
-	}
-
-	groupCtx := groupCtxInterface.(*GroupContext)
-
-	boxer := groupCtx.Group.Boxer()
-	newIpfsHash, ok := boxer.BoxOpen(e.IpfsHash)
-	if !ok {
-		glog.Errorf("could not decrpyt new ipfs hash")
-		return
-	}
-
-	if err := groupCtx.Update(); err != nil {
-		glog.Errorf("could not update group context: %s", err)
-	}
-
-	if err := groupCtx.Repo.Update(string(newIpfsHash)); err != nil {
-		glog.Errorf("could not update group %s's repo with ipfs hash %s: %s", groupCtx.Group.Address().String(), e.IpfsHash, err)
-	}
-}
 
 func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 	glog.Info("got a group created event")

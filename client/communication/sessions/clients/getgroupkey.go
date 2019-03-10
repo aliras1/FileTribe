@@ -7,6 +7,7 @@ import (
 	"ipfs-share/crypto"
 	"math/rand"
 	"sync"
+	"time"
 
 	comcommon "ipfs-share/client/communication/common"
 	"ipfs-share/client/communication/sessions/common"
@@ -201,6 +202,7 @@ func NewGetGroupDataSessionClient(
 		Payload: groupMsgPayload,
 	}
 
+	rand.Seed(time.Now().UTC().UnixNano())
 	return &GetGroupDataSessionClient{
 		sessionId:         	rand.Uint32(),
 		groupDataMsg:		groupDataMsg,

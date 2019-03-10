@@ -41,22 +41,24 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 	var auths []*bind.TransactOpts
 	for _, key := range keys {
 		auth := bind.NewKeyedTransactor(key)
-		auth.GasLimit = 1000000000
+		auth.GasLimit = 4700000
 
 		auths = append(auths, auth)
 	}
 
 	alloc := make(map[common.Address]core.GenesisAccount)
 	for _, auth := range auths {
-		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(100000000000000000)}
+		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
 	}
 
-	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 1000000000)
+	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 4700000)
 
 	appAdrr, _, app, err := ethapp.DeployDipfshare(auths[0], simulator)
 	if err != nil {
 		return nil, common.Address{}, errors.Wrap(err, "could not deploy app contract on simulated chain")
 	}
+
+
 
 	simulator.Commit()
 
@@ -163,12 +165,14 @@ func NewTestCtx(username string, signup bool, ethKeyPath string, sim *backends.S
 		if err != nil {
 			return nil, fmt.Errorf("could not sign up: %s: %s", username, err)
 		}
+		time.Sleep(2 * time.Second)
 		sim.Commit()
 	} else {
 		//testUser, err = NewUserContextFromSignIn(username, password, ethKeyPath, homeDir, network, ipfs, p2pPort)
 		//if err != nil {
 		//	return nil, fmt.Errorf("could not sign in: %s: %s", username, err)
 		//}
+		return nil, errors.New("no signin")
 	}
 
 	return ctx, nil

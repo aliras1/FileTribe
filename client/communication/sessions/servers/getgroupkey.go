@@ -150,7 +150,7 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 			case comcommon.GetProposedGroupKey:
 				boxer, err := session.callback.ProposedBoxer(session.groupDataMsg.Group, ethcommon.BytesToAddress(session.groupDataMsg.Payload))
 				if err != nil {
-					session.error = errors.Wrap(err, "could not get proposed group boxer")
+					session.error = errors.Wrapf(err, "%s could not get proposed group boxer", session.sender.String())
 					session.close()
 					return
 				}

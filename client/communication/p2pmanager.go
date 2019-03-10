@@ -115,16 +115,12 @@ func (p2p *P2PManager) connectionListener(port string) {
 }
 
 func (p2p *P2PManager) handleConnection(addressBook *common.AddressBook, conn *common.P2PConn, stop chan struct{}) {
-	defer func() {
-		close(stop)
-		conn.Close()
-		glog.Infof("exiting")
-	}()
-
 	for {
 		select {
 		case <- stop:
 			{
+				close(stop)
+				conn.Close()
 				return
 			}
 		default:
@@ -146,22 +142,20 @@ func (p2p *P2PManager) handleConnection(addressBook *common.AddressBook, conn *c
 				var session sesscommon.ISession
 				sessionInterface := p2p.sessions.Get(msg.SessionId)
 
-				glog.Info("d0")
 				if sessionInterface == nil {
-					glog.Info("d0_0")
 					session, err = servers.NewGetGroupDataSessionServer(msg, contact, p2p.account.ContractAddress(), p2p.signer, p2p.ctxCallback, p2p.onSessionClosed)
 					if err != nil {
 						glog.Error("could not create new session: %s", err)
 						continue
 					}
-					glog.Info("d0_1")
+
 					p2p.sessions.Put(session.Id(), session)
-					glog.Info("d0_2")
 					go session.Run()
 					continue
 				}
 
-				glog.Info("d1")
+				// TODO: fix bug: store original msg.from in the session and
+				// check if the current sender is equal to that
 				session = sessionInterface.(sesscommon.ISession)
 				go session.NextState(contact, msg.Payload)
 			}

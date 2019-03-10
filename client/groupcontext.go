@@ -1,27 +1,24 @@
 package client
 
 import (
+	"crypto/rand"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"ipfs-share/client/communication/common"
-	"crypto/rand"
-	"ipfs-share/utils"
-	mathrand "math/rand"
-	"path"
-	"sync"
-	"time"
-
 	com "ipfs-share/client/communication"
+	"ipfs-share/client/communication/common"
 	sesscommon "ipfs-share/client/communication/sessions/common"
 	"ipfs-share/client/fs"
 	"ipfs-share/client/interfaces"
 	. "ipfs-share/collections"
 	"ipfs-share/crypto"
-	ipfsapi "ipfs-share/ipfs"
 	ethcons "ipfs-share/eth/gen/Consensus"
+	ipfsapi "ipfs-share/ipfs"
+	"ipfs-share/utils"
+	"path"
+	"sync"
 )
 
 type IGroupFacade interface {
@@ -104,7 +101,6 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 	go groupContext.HandleGroupInvitationAcceptedEvents(config.Eth.Group)
 	go groupContext.HandleNewConsensusEvents(config.Eth.Group)
 	go groupContext.HandleIpfsHashChangedEvents(config.Eth.Group)
-	go groupContext.HandleKeyDirtyEvents(config.Eth.Group)
 
 	return groupContext, nil
 }
@@ -272,63 +268,6 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 	return nil
 }
 
-func (groupCtx *GroupContext) onKeyDirty() error {
-	glog.Info("KEY DIRTY")
-
-	time.Sleep(time.Duration(mathrand.Intn(5)) * time.Millisecond )
-
-	// TODO: check if someone already proposed a key in the meantime
-
-	if err := groupCtx.Update(); err != nil {
-		return errors.Wrap(err, "could not update group")
-	}
-
-	newBoxer, err := tribecrypto.NewSymmetricKey()
-	if err != nil {
-		return errors.Wrap(err, "could not create new group key")
-	}
-
-	groupCtx.proposedKeys.Put(groupCtx.account.ContractAddress(), newBoxer)
-
-	newIpfsHash, err := groupCtx.Repo.ReEncrypt(*newBoxer)
-	if err != nil {
-		return errors.Wrap(err, "could not re-encrypt group repo")
-	}
-
-	encNewIpfsHash := newBoxer.BoxSeal([]byte(newIpfsHash))
-
-	tx, err := groupCtx.eth.Group.ChangeKey(groupCtx.eth.Auth.TxOpts, encNewIpfsHash)
-	if err != nil {
-		glog.Errorf("could not send change key tx: %s", err)
-
-		groupCtx.proposedKeys.Put(groupCtx.account.ContractAddress(), nil)
-
-		return errors.Wrap(err, "could not send change key tx")
-	}
-
-	groupCtx.Transactions.Add(tx)
-
-	return nil
-}
-
-func (groupCtx *GroupContext) ReEncrpyt() error {
-	//hash, err := groupCtx.Repo.ReEncrypt(groupCtx.Group.Boxer())
-	//if err != nil {
-	//	return errors.Wrap(err, "could not re-encrypt group repo")
-	//}
-	//
-	//if err := groupCtx.P2P.StartCommitSession(
-	//	hash,
-	//	groupCtx.account,
-	//	groupCtx.Group,
-	//	groupCtx.broadcast,
-	//	groupCtx.OnCommitClientSuccess,
-	//); err != nil {
-	//	return errors.Wrap(err, "could not start new session")
-	//}
-
-	return errors.New("not implemented")
-}
 
 func (groupCtx *GroupContext) GetKey(encNewIpfsHash []byte) error {
 	//newBoxer, ok := groupCtx.proposedKeys[encNewIpfsHashBase64]
@@ -376,24 +315,6 @@ func (groupCtx *GroupContext) onGetKeySuccess(boxer tribecrypto.SymmetricKey) {
 	}
 }
 
-//func (groupCtx *GroupContext) ProposedKey() (tribecrypto.SymmetricKey, error) {
-//	groupCtx.lock.Lock()
-//	defer groupCtx.lock.Unlock()
-//
-//	if groupCtx.proposedKey == nil {
-//		return tribecrypto.SymmetricKey{}, errors.New("symmetric key is nil")
-//	}
-//
-//	return *groupCtx.proposedKey, nil
-//}
-//
-//func (groupCtx *GroupContext) SetProposedKey(key *tribecrypto.SymmetricKey) {
-//	groupCtx.lock.Lock()
-//	defer groupCtx.lock.Unlock()
-//
-//	groupCtx.proposedKey = key
-//}
-
 func (groupCtx *GroupContext) ListFiles() []string {
 	var fileNames []string
 	files := groupCtx.Repo.Files()
@@ -407,22 +328,6 @@ func (groupCtx *GroupContext) ListFiles() []string {
 
 func (groupCtx *GroupContext) ListMembers() []ethcommon.Address {
 	return groupCtx.Group.Members()
-}
-
-func (groupCtx *GroupContext) OnChangeGroupKeyClientSuccess(args []interface{}) {
-	if len(args) < 1 {
-		glog.Error("args should be min. of length 1")
-	}
-
-	encNewIpfsHash := args[0].([]byte)
-
-	tx, err := groupCtx.eth.Group.ChangeKey(groupCtx.eth.Auth.TxOpts, encNewIpfsHash)
-	if err != nil {
-		glog.Errorf("could not send change group key transaction: %s", err)
-		return
-	}
-
-	groupCtx.Transactions.Add(tx)
 }
 
 func (groupCtx *GroupContext) OnCommitClientSuccess(args []interface{}) {

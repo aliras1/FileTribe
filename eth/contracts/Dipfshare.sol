@@ -50,8 +50,8 @@ contract Dipfshare is Ownable {
         return IGroupFactory(_groupFactory).create(msg.sender, name);
     }
 
-    function createConsensus(IConsensus.Type cType, address proposer) external returns(address consensus) {
-        return IConsensusFactory(_consensusFactory).create(cType, proposer, msg.sender);
+    function createConsensus(address proposer) external returns(address consensus) {
+        return IConsensusFactory(_consensusFactory).create(proposer, msg.sender);
     }
 
 

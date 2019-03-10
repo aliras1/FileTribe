@@ -2,6 +2,7 @@ echo "pwd" > /password
 
 cd /ethcode
 npm rebuild scrypt --update-binary
+#npm install -g scrypt
 
 mkdir /devnet
 

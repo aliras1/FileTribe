@@ -11,10 +11,6 @@ import (
 	ethgroup "ipfs-share/eth/gen/Group"
 )
 
-const (
-	IPFS_HASH = iota
-	KEY = 		iota
-)
 
 func (groupCtx *GroupContext) HandleGroupInvitationSentEvents(group *ethgroup.Group) {
 	glog.Info("HandleGroupInvitationSentEvents...")
@@ -90,12 +86,6 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 		return
 	}
 
-	ctype, err := cons.Ctype(&bind.CallOpts{Pending:true})
-	if err != nil {
-		glog.Errorf("could not get consensus type: %s", err)
-		return
-	}
-
 	payload, err := cons.Payload(&bind.CallOpts{Pending:true})
 	if err != nil {
 		glog.Errorf("could not get consensus payload: %s", err)
@@ -105,36 +95,35 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 	glog.Infof("stored payload from: %s", proposer.String())
 	groupCtx.proposedPayloads.Put(proposer, payload)
 
-	switch ctype {
-	case IPFS_HASH:
-		// 1. get those that voted
-		// 2. foreach voter: start a get proposed group key session
-		glog.Infof("my account addr: %s", (groupCtx.account.ContractAddress()).String())
-		glog.Info(groupCtx.Group.Members())
 
-		// Get proposed key
-		for _, member := range groupCtx.Group.Members() {
-			if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
-				continue
-			}
+	// TODO: only ask k' from those that have approved
+	// 1. get those that voted
+	// 2. foreach voter: start a get proposed group key session
+	glog.Infof("my account addr: %s", (groupCtx.account.ContractAddress()).String())
+	glog.Info(groupCtx.Group.Members())
 
-			glog.Infof("speaking to: %s", member.String())
+	// Get proposed key
+	for _, member := range groupCtx.Group.Members() {
+		if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
+			continue
+		}
 
-			contact, err := groupCtx.AddressBook.Get(member)
-			if err != nil {
-				glog.Warningf("could not get contact for member: %s", member.String())
-				continue
-			}
+		glog.Infof("speaking to: %s", member.String())
 
-			if err := groupCtx.P2P.StartGetProposedGroupKeySession(
-				e.Group,
-				member,
-				contact,
-				groupCtx.account.ContractAddress(),
-				groupCtx.onGetProposedKeySuccess,
-			);	err != nil {
-				glog.Errorf("could not start get group key session: %s", err)
-			}
+		contact, err := groupCtx.AddressBook.Get(member)
+		if err != nil {
+			glog.Warningf("could not get contact for member: %s", member.String())
+			continue
+		}
+
+		if err := groupCtx.P2P.StartGetProposedGroupKeySession(
+			e.Group,
+			member,
+			contact,
+			groupCtx.account.ContractAddress(),
+			groupCtx.onGetProposedKeySuccess,
+		);	err != nil {
+			glog.Errorf("could not start get group key session: %s", err)
 		}
 	}
 }
@@ -176,7 +165,7 @@ func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address
 	}
 
 	if err := groupCtx.approveConsensus(consensus); err != nil {
-		glog.Errorf("could not approve consensus")
+		glog.Errorf("could not approve consensus: %s", err)
 		return
 	}
 
@@ -207,42 +196,44 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 		return
 	}
 
-	if err := groupCtx.Group.SetIpfsHash(e.IpfsHash); err != nil {
-		glog.Errorf("could not set ipfs hash of group")
-		return
-	}
+	newBoxerInt := groupCtx.proposedKeys.Get(e.Proposer)
+	if newBoxerInt == nil {
+		for _, member := range groupCtx.Group.Members() {
+			if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
+				continue
+			}
 
-	if err := groupCtx.Group.Save(); err != nil {
-		glog.Errorf("could not save group: %s", err)
-	}
+			contact, err := groupCtx.AddressBook.Get(member)
+			if err != nil {
+				glog.Warningf("could not get contact for member: %s", member.String())
+				continue
+			}
 
-	if err := groupCtx.Repo.Update(groupCtx.Group.IpfsHash()); err != nil {
-		glog.Errorf("could not update group repo: %s", err)
+			onGetKeySuccess := func(_ ethcommon.Address, newBoxer tribecrypto.SymmetricKey) {
+				// if already got k' --> return
+				currentBoxer := groupCtx.Group.Boxer()
+				if bytes.Equal(currentBoxer.Key[:], newBoxer.Key[:]) {
+					return
+				}
+				groupCtx.Group.SetBoxer(newBoxer)
+				if err := groupCtx.Update(); err != nil {
+					glog.Errorf("could not update group context: %s", err)
+				}
+			}
+
+			if err := groupCtx.P2P.StartGetGroupKeySession(
+				e.Group,
+				contact,
+				groupCtx.account.ContractAddress(),
+				onGetKeySuccess,
+			);	err != nil {
+				glog.Errorf("could not start get group key session: %s", err)
+			}
+		}
+	} else {
+		groupCtx.Group.SetBoxer(newBoxerInt.(tribecrypto.SymmetricKey))
+		if err := groupCtx.Update(); err != nil {
+			glog.Errorf("could not update group context: %s", err)
+		}
 	}
 }
-
-func (groupCtx *GroupContext) HandleKeyDirtyEvents(group *ethgroup.Group) {
-	glog.Info("HandleKeyDirtyEvents...")
-	ch := make(chan *ethgroup.GroupKeyDirty)
-
-	sub, err := group.WatchKeyDirty(&bind.WatchOpts{Context:groupCtx.eth.Auth.TxOpts.Context}, ch)
-	if err != nil {
-		glog.Errorf("could not subscribe to GroupKeyDirty events: %s", err)
-		return
-	}
-
-	groupCtx.subs.Add(sub)
-
-	for e := range ch {
-		if !bytes.Equal(e.Group.Bytes(), groupCtx.Group.Address().Bytes()) {
-			continue
-		}
-
-		glog.Info("new KeyDirty event")
-
-		if err := groupCtx.onKeyDirty(); err != nil {
-			glog.Errorf("error while KeyDirty: %s", err)
-		}
-	}
-}
-

@@ -9,7 +9,7 @@ module.exports = {
             network_id: "*", // Match any network id
             websockets: true,
             gasLimit: 4700000,
-            from: "0xc4f45f1822b614116ea5b68d4020f3ae1a0179e5",
+            // from: "0xc4f45f1822b614116ea5b68d4020f3ae1a0179e5",
             // provider:function () {
             //   let Web3 = require("web3");
             //   let web3 = new Web3();

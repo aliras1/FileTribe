@@ -143,11 +143,8 @@ func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	// Account events
 	//go ctx.HandleDebugEvents(network.GetDebugChannel())
 	go ctx.HandleGroupInvitationEvents(acc.Contract())
-	//go ctx.HandleGroupConsensusSuccessfulEvents(network.GetGroupUpdateIpfsChannel())
 	go ctx.HandleGroupCreatedEvents(acc.Contract())
 	go ctx.HandleInvitationAcceptedEvents(acc.Contract())
-	//go ctx.HandleGroupKeyChangedEvents(network.GetGroupKeyChangedChannel())
-	//go ctx.HandleKeyDirtyEvents(network.GetKeyDirtyChannel())
 
 	if err := ctx.BuildGroups(); err != nil {
 		return errors.Wrap(err, "could not build groups")

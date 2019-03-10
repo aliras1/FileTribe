@@ -105,7 +105,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 	sim.Commit()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	if bob.groups.Count() < 1 {
 		t.Fatal("no group by bob")
@@ -154,6 +154,8 @@ func TestGroupContext_Invite(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	sim.Commit()
+
+	time.Sleep(5 * time.Second)
 
 	//i := alice.transactions.Count() - 1
 	//tx := alice.transactions.Get(i)

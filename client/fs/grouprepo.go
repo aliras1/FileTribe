@@ -384,20 +384,3 @@ func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer tribecryp
 
 	return capabilities, nil
 }
-
-func (repo *GroupRepo) ReEncrypt(boxer tribecrypto.SymmetricKey) (string, error) {
-	//for fileInt := range repo.files.VIterator() {
-	//	file := fileInt.(*File)
-	//	if err := file.ChangeKey(repo.ipfs); err != nil {
-	//		return "", errors.Wrap(err, "could not change file key")
-	//	}
-	//}
-	//
-	//ipfsHash, err := repo.CommitChanges(boxer)
-	//if err != nil {
-	//	return "", errors.Wrap(err, "could not commit changes")
-	//}
-	//
-	//return ipfsHash, nil
-	return "", errors.New("ReEncrypt not implemented")
-}
