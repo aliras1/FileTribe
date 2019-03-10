@@ -23,10 +23,8 @@ func NewServerSession(
 ) (common.ISession, error) {
 
 	switch msg.Type {
-	case comcommon.GetGroupKey:
-		fallthrough
-	case comcommon.GetProposedGroupKey:
-		return servers.NewGetGroupKeySessionServer(
+	case comcommon.GetGroupData:
+		return servers.NewGetGroupDataSessionServer(
 			msg,
 			contact,
 			account,

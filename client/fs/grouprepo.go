@@ -199,11 +199,11 @@ func (repo *GroupRepo) getFileCaps() []*caps.FileCap {
 	return capabilities
 }
 
-func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, address ethcommon.Address) error {
+func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, boxer tribecrypto.SymmetricKey, address ethcommon.Address) error {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
-	newCaps, err := repo.getGroupFileCapsFromIpfs(newIpfsHash, repo.group.Boxer())
+	newCaps, err := repo.getGroupFileCapsFromIpfs(newIpfsHash, boxer)
 	if err != nil {
 		return errors.Wrap(err, "could not get requested group changes")
 	}
@@ -240,7 +240,7 @@ func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, address ethcommon.Ad
 		}
 
 		// check if new DiffNode is correct
-		if err := repo.checkDiffNode(file, newCap.DataKey, newCap.IpfsHash); err != nil {
+		if err := repo.isDiffNodeValid(file, newCap.DataKey, newCap.IpfsHash); err != nil {
 			return errors.Wrap(err, "invalid new DiffNode")
 		}
 	}
@@ -291,7 +291,7 @@ func (repo *GroupRepo) IsValidChangeKey(newIpfsHash string, address *ethcommon.A
 		}
 
 		// check if new DiffNode is correct
-		if err := repo.checkDiffNode(file, newCap.DataKey, newCap.IpfsHash); err != nil {
+		if err := repo.isDiffNodeValid(file, newCap.DataKey, newCap.IpfsHash); err != nil {
 			return errors.Wrap(err, "invalid new DiffNode")
 		}
 	}
@@ -299,7 +299,7 @@ func (repo *GroupRepo) IsValidChangeKey(newIpfsHash string, address *ethcommon.A
 	return nil
 }
 
-func (repo *GroupRepo) checkDiffNode(file *File, newBoxer tribecrypto.FileBoxer, newIpfsHash string) error {
+func (repo *GroupRepo) isDiffNodeValid(file *File, newBoxer tribecrypto.FileBoxer, newIpfsHash string) error {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
@@ -336,6 +336,10 @@ func (repo *GroupRepo) checkDiffNode(file *File, newBoxer tribecrypto.FileBoxer,
 func (repo *GroupRepo) Update(newIpfsHash string) error {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
+
+	if strings.Compare(newIpfsHash, "") == 0 {
+		return nil
+	}
 
 	caps, err := repo.getGroupFileCapsFromIpfs(newIpfsHash, repo.group.Boxer())
 	if err != nil {
@@ -382,17 +386,18 @@ func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer tribecryp
 }
 
 func (repo *GroupRepo) ReEncrypt(boxer tribecrypto.SymmetricKey) (string, error) {
-	for fileInt := range repo.files.VIterator() {
-		file := fileInt.(*File)
-		if err := file.ChangeKey(repo.ipfs); err != nil {
-			return "", errors.Wrap(err, "could not change file key")
-		}
-	}
-
-	ipfsHash, err := repo.CommitChanges(boxer)
-	if err != nil {
-		return "", errors.Wrap(err, "could not commit changes")
-	}
-
-	return ipfsHash, nil
+	//for fileInt := range repo.files.VIterator() {
+	//	file := fileInt.(*File)
+	//	if err := file.ChangeKey(repo.ipfs); err != nil {
+	//		return "", errors.Wrap(err, "could not change file key")
+	//	}
+	//}
+	//
+	//ipfsHash, err := repo.CommitChanges(boxer)
+	//if err != nil {
+	//	return "", errors.Wrap(err, "could not commit changes")
+	//}
+	//
+	//return ipfsHash, nil
+	return "", errors.New("ReEncrypt not implemented")
 }

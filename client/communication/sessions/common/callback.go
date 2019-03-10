@@ -3,13 +3,12 @@ package common
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"ipfs-share/client/fs"
-	"ipfs-share/client/fs/caps"
 	"ipfs-share/client/interfaces"
 	"ipfs-share/collections"
 	"ipfs-share/crypto"
 )
 
-type OnGetGroupKeySuccessCallback func(cap *caps.GroupAccessCap)
+type OnGetGroupKeySuccessCallback func(address ethcommon.Address, boxer tribecrypto.SymmetricKey)
 
 type OnClientSuccessCallback func(args []interface{})
 
@@ -26,5 +25,5 @@ type CtxCallback interface {
 
 	Boxer(group ethcommon.Address) (tribecrypto.SymmetricKey, error)
 
-	ProposedBoxer(group ethcommon.Address) (tribecrypto.SymmetricKey, error)
+	ProposedBoxer(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error)
 }

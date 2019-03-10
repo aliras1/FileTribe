@@ -151,7 +151,12 @@ func NewTestCtx(username string, signup bool, ethKeyPath string, sim *backends.S
 		}
 	}
 
-	ctx, err := NewUserContext(ethKeyPath, password, sim, appAddr, ipfs, p2pPort)
+	auth, err := NewAuth(ethKeyPath, password)
+	if err != nil {
+		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
+	}
+
+	ctx, err := NewUserContext(auth, sim, appAddr, ipfs, p2pPort)
 
 	if signup {
 		err = ctx.SignUp(username)

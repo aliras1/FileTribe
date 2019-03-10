@@ -162,14 +162,16 @@ func (g *Group) Update(name string, members []ethcommon.Address, encIpfsHash []b
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	ipfsHash, ok := g.boxer.BoxOpen(encIpfsHash)
-	if !ok {
-		return errors.New("could not decrypt ipfs hash")
+	if len(encIpfsHash) > 0 {
+		ipfsHash, ok := g.boxer.BoxOpen(encIpfsHash)
+		if !ok {
+			return errors.New("could not decrypt ipfs hash")
+		}
+		g.ipfsHash = string(ipfsHash)
 	}
 
 	g.name = name
 	g.members = members
-	g.ipfsHash = string(ipfsHash)
 	g.encryptedIpfsHash = encIpfsHash
 
 	return nil

@@ -91,7 +91,6 @@ func (contact *Contact) dialP2PConn(ipfs ipfs.IIpfs) (*P2PConn, error) {
 		return contact.conn, nil
 	}
 
-	glog.Error(contact.IpfsPeerId)
 	stream, err := ipfs.P2PStreamDial(context.Background(), contact.IpfsPeerId, P2PProtocolName, "")
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not dial to stream %s", contact.IpfsPeerId)

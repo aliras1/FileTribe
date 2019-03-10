@@ -358,6 +358,13 @@ func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
+	var newKey [32]byte
+	if _, err := rand.Read(newKey[:]); err != nil {
+		return "", errors.Wrap(err, "could not read from crypto.rand")
+	}
+
+	f.PendingChanges.DataKey = tribecrypto.FileBoxer{Key: newKey}
+
 	diff, err := f.diff(f.PendingChanges.DataKey)
 	if err != nil {
 		return "", errors.Wrap(err, "could not get file diff")
@@ -374,22 +381,4 @@ func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
 	}
 
 	return newIpfsHash, nil
-}
-
-func (f *File) ChangeKey(ipfs ipfsapi.IIpfs) error {
-	var newKey [32]byte
-	if _, err := rand.Read(newKey[:]); err != nil {
-		return errors.Wrap(err, "could not read from crypto.rand")
-	}
-
-	f.PendingChanges.DataKey = tribecrypto.FileBoxer{Key: newKey}
-
-	ipfsHash, err := f.UploadDiff(ipfs)
-	if err != nil {
-		return errors.Wrap(err, "could not upload file diff to ipfs")
-	}
-
-	f.PendingChanges.IpfsHash = ipfsHash
-
-	return nil
 }

@@ -2,10 +2,12 @@ package client
 
 import (
 	"bytes"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/golang/glog"
-	comcommon "ipfs-share/client/communication/common"
 	"ipfs-share/client/fs/caps"
+	"ipfs-share/crypto"
+
+	"github.com/golang/glog"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethacc "ipfs-share/eth/gen/Account"
 	ethapp "ipfs-share/eth/gen/Dipfshare"
 	ethgroup "ipfs-share/eth/gen/Group"
@@ -53,7 +55,7 @@ func (ctx *UserContext) onAccountCreated(e *ethapp.DipfshareAccountCreated) {
 		return
 	}
 
-	glog.Infof("Account created: %s", e.Account.String())
+	glog.Infof("Account created: %s --> %s (%s)", ctx.account.Name(), e.Account.String(), e.Owner.String())
 }
 
 func (ctx *UserContext) HandleGroupInvitationEvents(acc *ethacc.Account) {
@@ -130,7 +132,6 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 		}
 
 		if err := ctx.p2p.StartGetGroupKeySession(
-			comcommon.GetGroupKey,
 			e.Group,
 			contact,
 			e.Account,
@@ -141,11 +142,13 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 	}
 }
 
-func (ctx *UserContext) onGetKeySuccess(cap *caps.GroupAccessCap) {
-	exists := ctx.groups.Get(cap.Address)
+func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tribecrypto.SymmetricKey) {
+	exists := ctx.groups.Get(groupAddress)
 	if exists != nil {
 		return
 	}
+
+	cap := &caps.GroupAccessCap{Address:groupAddress, Boxer:boxer}
 
 	if err := ctx.storage.SaveGroupAccessCap(cap); err != nil {
 		glog.Errorf("could not save group access cap: %s", err)
@@ -174,7 +177,12 @@ func (ctx *UserContext) onGetKeySuccess(cap *caps.GroupAccessCap) {
 
 	groupCtx, err := NewGroupContext(config)
 	if err != nil {
-		glog.Errorf("could not create new group ctx")
+		glog.Errorf("could not create new group ctx: %s", err)
+		return
+	}
+
+	if err := groupCtx.Update(); err != nil {
+		glog.Errorf("could not update group ctx: %s", err)
 		return
 	}
 
@@ -296,51 +304,3 @@ func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 
 	glog.Infof("Group created: %s", group.Address().String())
 }
-
-
-//func (ctx *UserContext) HandleKeyDirtyEvents(ch chan *ethgroup.GroupKeyDirty) {
-//	glog.Info("keyDirty handling...")
-//
-//	for keyDirty := range ch {
-//		glog.Info("got Dirty Key event")
-//		go ctx.onKeyDirty(keyDirty)
-//	}
-//}
-//
-//func (ctx *UserContext) onKeyDirty(keyDirty *ethgroup.GroupKeyDirty) {
-//	groupCtxInt := ctx.groups.Get(keyDirty.Group)
-//	if groupCtxInt == nil {
-//		return
-//	}
-//
-//	groupCtx := groupCtxInt.(*GroupContext)
-//	if err := groupCtx.Update(); err != nil {
-//		glog.Errorf("could not update group context: %s", err)
-//		return
-//	}
-//
-//	if err := groupCtx.onKeyDirty(); err != nil {
-//		glog.Errorf( "error while changing group key: %s", err)
-//	}
-//}
-
-//func (ctx *UserContext) HandleGroupLeftEvents(ch chan *eth.EthGroupLeft) {
-//	glog.Info("GroupLeft handling...")
-//
-//	for groupLeft := range ch {
-//		glog.Info("got GroupLeft event")
-//		go ctx.onGroupLeft(groupLeft)
-//	}
-//}
-//
-//func (ctx *UserContext) onGroupLeft(event *eth.EthGroupLeft) {
-//	if !bytes.Equal(event.account.Bytes(), ctx.account.Address().Bytes()) {
-//		return
-//	}
-//
-//	groupId := NewBytesId(event.GroupId)
-//
-//	if err := ctx.DeleteGroup(groupId); err != nil {
-//		glog.Errorf("could not delete group: %s", err)
-//	}
-//}

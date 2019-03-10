@@ -1,8 +1,7 @@
 package client
 
 import (
-	"github.com/ethereum/go-ethereum/core/types"
-	ethinv "ipfs-share/eth/gen/Invitation"
+	"github.com/ethereum/go-ethereum/common"
 	"ipfs-share/utils"
 	"testing"
 
@@ -97,12 +96,11 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal("no invitations at charlie")
 	}
 
-	inv := bob.invitations.Get(0).(*ethinv.Invitation)
-	if err := bob.AcceptInvitation(inv); err != nil {
+	if err := bob.AcceptInvitation(bob.invitations.Get(0).(common.Address)); err != nil {
 		t.Fatal(err)
 	}
-	inv = charlie.invitations.Get(0).(*ethinv.Invitation)
-	if err := charlie.AcceptInvitation(inv); err != nil {
+	sim.Commit()
+	if err := charlie.AcceptInvitation(bob.invitations.Get(0).(common.Address)); err != nil {
 		t.Fatal(err)
 	}
 	sim.Commit()
@@ -157,34 +155,34 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	sim.Commit()
 
-	i := alice.transactions.Count() - 1
-	tx := alice.transactions.Get(i)
-	receipt, err := sim.TransactionReceipt(alice.eth.Auth.TxOpts.Context, tx.(*types.Transaction).Hash())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	glog.Info(receipt.Status)
-	glog.Info(receipt.Logs)
-
-	time.Sleep(2 * time.Second)
-
-	charlieGroups := charlie.groups.ToList()
-	groupAtCharlie := charlieGroups[0].(*GroupContext)
-	if err := groupAtCharlie.Leave(); err != nil {
-		t.Fatal("could not leave group")
-	}
-	sim.Commit()
-
-	time.Sleep(1 * time.Second)
-
-	sim.Commit()
-
-	time.Sleep(2 * time.Second)
-
-	sim.Commit()
-
-	time.Sleep(2 * time.Second)
+	//i := alice.transactions.Count() - 1
+	//tx := alice.transactions.Get(i)
+	//receipt, err := sim.TransactionReceipt(alice.eth.Auth.TxOpts.Context, tx.(*types.Transaction).Hash())
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//
+	//glog.Info(receipt.Status)
+	//glog.Info(receipt.Logs)
+	//
+	//time.Sleep(2 * time.Second)
+	//
+	//charlieGroups := charlie.groups.ToList()
+	//groupAtCharlie := charlieGroups[0].(*GroupContext)
+	//if err := groupAtCharlie.Leave(); err != nil {
+	//	t.Fatal("could not leave group")
+	//}
+	//sim.Commit()
+	//
+	//time.Sleep(1 * time.Second)
+	//
+	//sim.Commit()
+	//
+	//time.Sleep(2 * time.Second)
+	//
+	//sim.Commit()
+	//
+	//time.Sleep(2 * time.Second)
 	//fmt.Println("----------- Charlie leaves ------------")
 	//fakeNetwork.SetAuth(CHARLIE)
 	//groupAtCharlie := charlieGroups[0]

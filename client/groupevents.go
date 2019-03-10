@@ -2,14 +2,13 @@ package client
 
 import (
 	"bytes"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
-	"github.com/pkg/errors"
-	comcommon "ipfs-share/client/communication/common"
-	"ipfs-share/client/fs/caps"
+	"ipfs-share/crypto"
 	ethcons "ipfs-share/eth/gen/Consensus"
 	ethgroup "ipfs-share/eth/gen/Group"
-	"ipfs-share/utils"
 )
 
 const (
@@ -78,6 +77,19 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 		return
 	}
 
+	proposer, err := cons.Proposer(&bind.CallOpts{Pending:true})
+	if err != nil {
+		glog.Errorf("could not get the proposer of consensus: %s", err)
+		return
+	}
+	glog.Infof("proposer of cons: %s", proposer.String())
+	glog.Infof("account addr: %s", groupCtx.account.ContractAddress().String())
+
+	if bytes.Equal(proposer.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
+		glog.Info("own consensus")
+		return
+	}
+
 	ctype, err := cons.Ctype(&bind.CallOpts{Pending:true})
 	if err != nil {
 		glog.Errorf("could not get consensus type: %s", err)
@@ -90,37 +102,23 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 		return
 	}
 
-	proposer, err := cons.Proposer(&bind.CallOpts{Pending:true})
-	if err != nil {
-		glog.Errorf("could not get proposer from consensus: %s", err)
-		return
-	}
+	glog.Infof("stored payload from: %s", proposer.String())
+	groupCtx.proposedPayloads.Put(proposer, payload)
 
 	switch ctype {
 	case IPFS_HASH:
-		key := groupCtx.Group.Boxer()
-		ipfsHash, ok := key.BoxOpen(payload)
-		if !ok {
-			glog.Errorf("could not decrypt consensus payload")
-			return
-		}
+		// 1. get those that voted
+		// 2. foreach voter: start a get proposed group key session
+		glog.Infof("my account addr: %s", (groupCtx.account.ContractAddress()).String())
+		glog.Info(groupCtx.Group.Members())
 
-		if err := groupCtx.Repo.IsValidChangeSet(string(ipfsHash), proposer); err != nil {
-			glog.Errorf("invalid changeset: %s", err)
-			return
-		}
-
-		if err := groupCtx.approveConsensus(cons); err != nil {
-			glog.Errorf("could not approve consensus")
-			return
-		}
-
-	case KEY:
 		// Get proposed key
 		for _, member := range groupCtx.Group.Members() {
 			if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
 				continue
 			}
+
+			glog.Infof("speaking to: %s", member.String())
 
 			contact, err := groupCtx.AddressBook.Get(member)
 			if err != nil {
@@ -128,9 +126,9 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 				continue
 			}
 
-			if err := groupCtx.P2P.StartGetGroupKeySession(
-				comcommon.GetProposedGroupKey,
+			if err := groupCtx.P2P.StartGetProposedGroupKeySession(
 				e.Group,
+				member,
 				contact,
 				groupCtx.account.ContractAddress(),
 				groupCtx.onGetProposedKeySuccess,
@@ -141,34 +139,48 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 	}
 }
 
-func (groupCtx *GroupContext) onGetProposedKeySuccess(cap *caps.GroupAccessCap) {
-	glog.Errorf("not implemented: onGetProposedKeySuccess")
-}
+func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address, boxer tribecrypto.SymmetricKey) {
+	// TODO: check if the received key is correct, i.e. the payload can be decrypted
 
-func (groupCtx *GroupContext) approveConsensus(cons *ethcons.Consensus) error {
-	digest, err := cons.Digest(&bind.CallOpts{Pending:true})
-	if err != nil {
-		return errors.Wrap(err, "could not get digest from consensus")
+	glog.Infof("GOT proposed key: %v with proposer: %s", boxer.Key, proposer.String())
+
+	groupCtx.proposedKeys.Put(proposer, boxer)
+
+	payloadInt := groupCtx.proposedPayloads.Get(proposer)
+	if payloadInt == nil {
+		glog.Error("payload is nil")
+		return
 	}
 
-	sig, err := groupCtx.eth.Auth.Signer.Sign(digest[:])
+	consensusAddress, err := groupCtx.eth.Group.GetConsensus(&bind.CallOpts{Pending:true}, proposer)
 	if err != nil {
-		return errors.WithMessage(err, "could not sign digest")
+		glog.Errorf("could not get member's consensus: %s", err)
+		return
 	}
 
-	r, s, v, err := utils.SigToRSV(sig)
+	consensus, err := ethcons.NewConsensus(consensusAddress, groupCtx.eth.Backend)
 	if err != nil {
-		return errors.Wrap(err, "could not convert sig to r,s,v")
+		glog.Errorf("could not create new consensus instance from eth: %s", err)
+		return
 	}
 
-	tx, err := cons.Approve(groupCtx.eth.Auth.TxOpts, r, s, v)
-	if err != nil {
-		return errors.Wrap(err, "could not send consensus approve tx")
+	ipfsHash, ok := boxer.BoxOpen(payloadInt.([]byte))
+	if !ok {
+		glog.Errorf("could not decrypt consensus payload")
+		return
 	}
 
-	groupCtx.Transactions.Add(tx)
+	if err := groupCtx.Repo.IsValidChangeSet(string(ipfsHash), boxer, proposer); err != nil {
+		glog.Errorf("invalid changeset: %s", err)
+		return
+	}
 
-	return nil
+	if err := groupCtx.approveConsensus(consensus); err != nil {
+		glog.Errorf("could not approve consensus")
+		return
+	}
+
+	groupCtx.proposedPayloads.Put(proposer, nil)
 }
 
 func (groupCtx *GroupContext) HandleIpfsHashChangedEvents(group *ethgroup.Group) {

@@ -111,13 +111,18 @@ func (ctx *UserContext) Boxer(group ethcommon.Address) (tribecrypto.SymmetricKey
 	return groupInt.(*GroupContext).Group.Boxer(), nil
 }
 
-func (ctx *UserContext) ProposedBoxer(group ethcommon.Address) (tribecrypto.SymmetricKey, error) {
+func (ctx *UserContext) ProposedBoxer(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error) {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
 		return tribecrypto.SymmetricKey{}, errors.New("no group found")
 	}
 
-	return *groupInt.(*GroupContext).proposedKey, nil
+	boxerInt := groupInt.(*GroupContext).proposedKeys.Get(proposer)
+	if boxerInt == nil {
+		return tribecrypto.SymmetricKey{}, errors.New("no proposed key found")
+	}
+
+	return boxerInt.(tribecrypto.SymmetricKey), nil
 }
 
 func (ctx *UserContext) Init(acc interfaces.IAccount) error {

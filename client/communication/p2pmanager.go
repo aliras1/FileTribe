@@ -45,7 +45,7 @@ func NewP2PManager(
 
 	p2pListener, err := ipfs.P2PListen(context.Background(), common.P2PProtocolName, "/ip4/127.0.0.1/tcp/" + port)
 	if err != nil {
-		return nil, errors.New("could not create P2P listener")
+		return nil, errors.Wrap(err, "could not create P2P listener")
 	}
 
 	p2p := &P2PManager{
@@ -85,7 +85,6 @@ func (p2p *P2PManager) connectionListener(port string) {
 		return
 	}
 	defer l.Close()
-	defer close(p2p.stop)
 
 	glog.Infof("listening on %s", tcpAddr.String())
 
@@ -109,7 +108,7 @@ func (p2p *P2PManager) connectionListener(port string) {
 				conn.SetKeepAlive(true)
 				go p2p.handleConnection(p2p.addressBook, (*common.P2PConn)(conn), p2p.stop)
 
-				glog.Infof("%s is serving %s on %s", p2p.account.Name, conn.RemoteAddr().String(), conn.LocalAddr().String())
+				glog.Infof("%s is serving %s on %s", p2p.account.Name(), conn.RemoteAddr().String(), conn.LocalAddr().String())
 			}
 		}
 	}
@@ -132,34 +131,37 @@ func (p2p *P2PManager) handleConnection(addressBook *common.AddressBook, conn *c
 			{
 				msg, err := conn.ReadMessage(addressBook)
 				if err != nil {
-					glog.Errorf("could not read from connection: %s", err)
-					continue
+					glog.Errorf("%s: could not read from connection: %s", p2p.account.Name(), err)
+					return
 				}
 
 				contact, err := addressBook.Get(msg.From)
 				if err != nil {
 					glog.Errorf("could not get contact from address book: %s", err)
-					continue
+					return
 				}
 
-				address := p2p.account.ContractAddress()
-				glog.Infof("%s (%s): msg from: %s, sessid: %d", p2p.account.Name(), address.String(), msg.From.String(), msg.SessionId)
+				glog.Infof("%s: msg from: %s, sessid: %d", p2p.account.Name(), msg.From.String(), msg.SessionId)
 
 				var session sesscommon.ISession
 				sessionInterface := p2p.sessions.Get(msg.SessionId)
+
+				glog.Info("d0")
 				if sessionInterface == nil {
-					session, err = servers.NewGetGroupKeySessionServer(msg, contact, p2p.account.ContractAddress(), p2p.signer, p2p.ctxCallback, p2p.onSessionClosed)
+					glog.Info("d0_0")
+					session, err = servers.NewGetGroupDataSessionServer(msg, contact, p2p.account.ContractAddress(), p2p.signer, p2p.ctxCallback, p2p.onSessionClosed)
 					if err != nil {
 						glog.Error("could not create new session: %s", err)
 						continue
 					}
-
+					glog.Info("d0_1")
 					p2p.sessions.Put(session.Id(), session)
-
+					glog.Info("d0_2")
 					go session.Run()
 					continue
 				}
 
+				glog.Info("d1")
 				session = sessionInterface.(sesscommon.ISession)
 				go session.NextState(contact, msg.Payload)
 			}
@@ -171,18 +173,42 @@ func (p2p *P2PManager) onSessionClosed(session sesscommon.ISession) {
 	glog.Infof("sid %v closed with error: %v", session.Id(), session.Error())
 }
 
-
-
 func (p2p *P2PManager) StartGetGroupKeySession(
-	msgType common.MessageType,
 	group ethcommon.Address,
 	receiver *common.Contact,
 	sender ethcommon.Address,
 	onSuccess sesscommon.OnGetGroupKeySuccessCallback,
 ) error {
-	session := clients.NewGetGroupKeySessionClient(
-		msgType,
+	session := clients.NewGetGroupDataSessionClient(
+		common.GetGroupKey,
 		group,
+		nil, // no additional information needed
+		receiver,
+		sender,
+		p2p.signer,
+		p2p.onSessionClosed,
+		onSuccess)
+
+	p2p.AddSession(session)
+
+	go session.Run()
+
+	return nil
+}
+
+func (p2p *P2PManager) StartGetProposedGroupKeySession(
+	group ethcommon.Address,
+	proposer ethcommon.Address,
+	receiver *common.Contact,
+	sender ethcommon.Address,
+	onSuccess sesscommon.OnGetGroupKeySuccessCallback,
+) error {
+	glog.Info("StartGetProposedGroupKeySession...")
+
+	session := clients.NewGetGroupDataSessionClient(
+		common.GetProposedGroupKey,
+		group,
+		proposer.Bytes(),
 		receiver,
 		sender,
 		p2p.signer,

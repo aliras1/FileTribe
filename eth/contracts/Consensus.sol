@@ -89,6 +89,10 @@ contract Consensus {
         return true;
     }
 
+    function getProposer() external returns(address) {
+        return _proposer;
+    }
+
     modifier onlyMembers() {
         require(IGroup(_group).isMember(msg.sender), "user is not member of group");
         _;

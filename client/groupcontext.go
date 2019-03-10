@@ -7,7 +7,9 @@ import (
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
 	"ipfs-share/client/communication/common"
-	"math/rand"
+	"crypto/rand"
+	"ipfs-share/utils"
+	mathrand "math/rand"
 	"path"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ import (
 	. "ipfs-share/collections"
 	"ipfs-share/crypto"
 	ipfsapi "ipfs-share/ipfs"
+	ethcons "ipfs-share/eth/gen/Consensus"
 )
 
 type IGroupFacade interface {
@@ -44,7 +47,8 @@ type GroupContext struct {
 	Storage          *fs.Storage
 	Transactions     *List
 	broadcastChannel *ipfsapi.PubSubSubscription
-	proposedKey      *tribecrypto.SymmetricKey
+	proposedKeys     *Map
+	proposedPayloads *Map
 	subs             *List
 	lock             sync.Mutex
 }
@@ -67,16 +71,18 @@ func (groupCtx *GroupContext) Address() ethcommon.Address {
 func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 
 	groupContext := &GroupContext{
-		account:         config.Account,
-		Group:           config.Group,
-		P2P:             config.P2P,
-		GroupConnection: nil,
-		AddressBook:     config.AddressBook,
-		eth:             config.Eth,
-		Ipfs:            config.Ipfs,
-		Storage:         config.Storage,
-		Transactions:    config.Transactions,
-		subs:            NewConcurrentList(),
+		account:          config.Account,
+		Group:            config.Group,
+		P2P:              config.P2P,
+		GroupConnection:  nil,
+		AddressBook:      config.AddressBook,
+		eth:              config.Eth,
+		Ipfs:             config.Ipfs,
+		Storage:          config.Storage,
+		Transactions:     config.Transactions,
+		subs:             NewConcurrentList(),
+		proposedKeys:     NewConcurrentMap(),
+		proposedPayloads: NewConcurrentMap(),
 	}
 
 	repo, err := fs.NewGroupRepo(config.Group, config.Account.ContractAddress(), config.Storage, config.Ipfs)
@@ -125,7 +131,6 @@ func (groupCtx *GroupContext) Update() error {
 		return errors.Wrap(err, "could not get group ipfs hash")
 	}
 
-
 	if err := groupCtx.Group.Update(name, members, encIpfsHash); err != nil {
 		return errors.Wrap(err, "could not update group")
 	}
@@ -157,13 +162,26 @@ func (groupCtx *GroupContext) Stop() {
 }
 
 func (groupCtx *GroupContext) CommitChanges() error {
-	hash, err := groupCtx.Repo.CommitChanges(groupCtx.Group.Boxer())
+	var secretKeyBytes [32]byte
+	if _, err := rand.Read(secretKeyBytes[:]); err != nil {
+		return errors.Wrap(err, "could not read crypto/rand")
+	}
+
+	newKey := tribecrypto.SymmetricKey{
+		Key: secretKeyBytes,
+		RNG: rand.Reader,
+	}
+
+	glog.Infof("NEW KEY: %v", newKey.Key)
+
+	groupCtx.proposedKeys.Put(groupCtx.account.ContractAddress(), newKey)
+
+	hash, err := groupCtx.Repo.CommitChanges(newKey)
 	if err != nil {
 		return errors.Wrap(err, "could commit group repo's changes")
 	}
 
-	key := groupCtx.Group.Boxer()
-	encIpfsHash := key.BoxSeal([]byte(hash))
+	encIpfsHash := newKey.BoxSeal([]byte(hash))
 
 	tx, err := groupCtx.eth.Group.ChangeIpfsHash(groupCtx.eth.Auth.TxOpts, encIpfsHash)
 	if err != nil {
@@ -257,13 +275,9 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 func (groupCtx *GroupContext) onKeyDirty() error {
 	glog.Info("KEY DIRTY")
 
-	time.Sleep(time.Duration(rand.Intn(5)) * time.Millisecond )
+	time.Sleep(time.Duration(mathrand.Intn(5)) * time.Millisecond )
 
-	// err == nil means that in the meantime, someone has already
-	// proposed another key successfully and it got stored
-	if _, err := groupCtx.ProposedKey(); err == nil {
-		return nil
-	}
+	// TODO: check if someone already proposed a key in the meantime
 
 	if err := groupCtx.Update(); err != nil {
 		return errors.Wrap(err, "could not update group")
@@ -274,7 +288,7 @@ func (groupCtx *GroupContext) onKeyDirty() error {
 		return errors.Wrap(err, "could not create new group key")
 	}
 
-	groupCtx.proposedKey = newBoxer
+	groupCtx.proposedKeys.Put(groupCtx.account.ContractAddress(), newBoxer)
 
 	newIpfsHash, err := groupCtx.Repo.ReEncrypt(*newBoxer)
 	if err != nil {
@@ -287,7 +301,7 @@ func (groupCtx *GroupContext) onKeyDirty() error {
 	if err != nil {
 		glog.Errorf("could not send change key tx: %s", err)
 
-		groupCtx.proposedKey = nil
+		groupCtx.proposedKeys.Put(groupCtx.account.ContractAddress(), nil)
 
 		return errors.Wrap(err, "could not send change key tx")
 	}
@@ -362,23 +376,23 @@ func (groupCtx *GroupContext) onGetKeySuccess(boxer tribecrypto.SymmetricKey) {
 	}
 }
 
-func (groupCtx *GroupContext) ProposedKey() (tribecrypto.SymmetricKey, error) {
-	groupCtx.lock.Lock()
-	defer groupCtx.lock.Unlock()
-
-	if groupCtx.proposedKey == nil {
-		return tribecrypto.SymmetricKey{}, errors.New("symmetric key is nil")
-	}
-
-	return *groupCtx.proposedKey, nil
-}
-
-func (groupCtx *GroupContext) SetProposedKey(key *tribecrypto.SymmetricKey) {
-	groupCtx.lock.Lock()
-	defer groupCtx.lock.Unlock()
-
-	groupCtx.proposedKey = key
-}
+//func (groupCtx *GroupContext) ProposedKey() (tribecrypto.SymmetricKey, error) {
+//	groupCtx.lock.Lock()
+//	defer groupCtx.lock.Unlock()
+//
+//	if groupCtx.proposedKey == nil {
+//		return tribecrypto.SymmetricKey{}, errors.New("symmetric key is nil")
+//	}
+//
+//	return *groupCtx.proposedKey, nil
+//}
+//
+//func (groupCtx *GroupContext) SetProposedKey(key *tribecrypto.SymmetricKey) {
+//	groupCtx.lock.Lock()
+//	defer groupCtx.lock.Unlock()
+//
+//	groupCtx.proposedKey = key
+//}
 
 func (groupCtx *GroupContext) ListFiles() []string {
 	var fileNames []string
@@ -445,6 +459,32 @@ func (groupCtx *GroupContext) p2pBroadcast(msg []byte) error {
 			}
 		}()
 	}
+
+	return nil
+}
+
+func (groupCtx *GroupContext) approveConsensus(cons *ethcons.Consensus) error {
+	digest, err := cons.Digest(&bind.CallOpts{Pending:true})
+	if err != nil {
+		return errors.Wrap(err, "could not get digest from consensus")
+	}
+
+	sig, err := groupCtx.eth.Auth.Signer.Sign(digest[:])
+	if err != nil {
+		return errors.WithMessage(err, "could not sign digest")
+	}
+
+	r, s, v, err := utils.SigToRSV(sig)
+	if err != nil {
+		return errors.Wrap(err, "could not convert sig to r,s,v")
+	}
+
+	tx, err := cons.Approve(groupCtx.eth.Auth.TxOpts, r, s, v)
+	if err != nil {
+		return errors.Wrap(err, "could not send consensus approve tx")
+	}
+
+	groupCtx.Transactions.Add(tx)
 
 	return nil
 }

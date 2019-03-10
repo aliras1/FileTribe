@@ -18,7 +18,7 @@ type GetGroupKeySessionServer struct {
 	state           uint8
 	contact         *comcommon.Contact
 	sender          ethcommon.Address
-	group           ethcommon.Address
+	groupDataMsg	comcommon.GroupDataMessage
 	callback        common.CtxCallback
 	signer          *tribecrypto.Signer
 	challenge       [32]byte
@@ -79,37 +79,42 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 	switch session.state {
 	case 0:
 		{
-			if err := session.callback.IsMember(session.group, session.contact.AccAddr); err != nil {
+			glog.Infof("server [%d] {%s} [0] --> %s", session.sessionId, session.sender.String(), session.contact.AccAddr.String())
+			if err := session.callback.IsMember(session.groupDataMsg.Group, session.contact.AccAddr); err != nil {
 				session.error = errors.Wrap(err, "could not verify group membership")
-				session.Abort()
+				session.close()
 				return
 			}
+			glog.Infof("server [%d] [0][0]", session.sessionId)
 
 			msg, err := comcommon.NewMessage(
 				session.sender,
-				comcommon.GetGroupKey,
+				comcommon.GetGroupData,
 				session.sessionId,
 				session.challenge[:],
 				session.signer,
 			)
 			if err != nil {
 				session.error = errors.New("could not create message")
-				session.Abort()
+				session.close()
 				return
 			}
+			glog.Infof("server [%d] [0][1]", session.sessionId)
 
 			encMsg, err := msg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encode message")
-				session.Abort()
+				session.close()
 				return
 			}
+			glog.Infof("server [%d] [0][2]", session.sessionId)
 
 			if err := session.contact.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
-				session.Abort()
+				session.close()
 				return
 			}
+			glog.Infof("server [%d] [0][3]", session.sessionId)
 
 			session.state = 1
 
@@ -117,41 +122,43 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 		}
 	case 1:
 		{
+			glog.Infof("server [%d] {%s} [1] --> %s", session.sessionId, session.sender.String(), session.contact.AccAddr.String())
 			if !session.contact.VerifySignature(session.challenge[:], data) {
 				session.error = errors.New("invalid signature")
-				session.Abort()
+				session.close()
 				return
 			}
 
 			var key []byte
 
-			switch session.keyType {
+			switch session.groupDataMsg.Data {
 			case comcommon.GetGroupKey:
-				boxer, err := session.callback.Boxer(session.group)
+				boxer, err := session.callback.Boxer(session.groupDataMsg.Group)
 				if err != nil {
 					session.error = errors.Wrap(err, "could not get group boxer")
-					session.Abort()
+					session.close()
 					return
 				}
 
 				data, err := boxer.Encode()
 				if err != nil {
 					session.error = errors.Wrap(err, "could not marshal group key")
-					session.Abort()
+					session.close()
 					return
 				}
 				key = data
 			case comcommon.GetProposedGroupKey:
-				boxer, err := session.callback.ProposedBoxer(session.group)
+				boxer, err := session.callback.ProposedBoxer(session.groupDataMsg.Group, ethcommon.BytesToAddress(session.groupDataMsg.Payload))
 				if err != nil {
 					session.error = errors.Wrap(err, "could not get proposed group boxer")
-					session.Abort()
+					session.close()
 					return
 				}
+				glog.Infof("Sending back key: %v", boxer.Key)
 				data, err := boxer.Encode()
 				if err != nil {
 					session.error = errors.Wrap(err, "could not marshal group key")
-					session.Abort()
+					session.close()
 					return
 				}
 				key = data
@@ -160,31 +167,31 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 
 			msg, err := comcommon.NewMessage(
 				session.sender,
-				comcommon.GetGroupKey,
+				comcommon.GetGroupData,
 				session.sessionId,
 				key,
 				session.signer,
 			)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not create message")
-				session.Abort()
+				session.close()
 				return
 			}
 
 			encMsg, err := msg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encode message")
-				session.Abort()
+				session.close()
 				return
 			}
 
 			if err := session.contact.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
-				session.Abort()
+				session.close()
 				return
 			}
 
-			session.Abort()
+			session.close()
 		}
 
 	default:
@@ -194,7 +201,7 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 	}
 }
 
-func NewGetGroupKeySessionServer(
+func NewGetGroupDataSessionServer(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
 	sender ethcommon.Address,
@@ -208,16 +215,18 @@ func NewGetGroupKeySessionServer(
 		return nil, errors.Wrap(err, "could not read rand")
 	}
 
-	group := ethcommon.BytesToAddress(msg.Payload)
+	groupDataMsg, err := comcommon.DecodeGroupDataMessage(msg.Payload)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not decode message payload")
+	}
 
 	return &GetGroupKeySessionServer{
 		sessionId:       msg.SessionId,
-		keyType:		 msg.Type,
 		contact:         contact,
 		callback:		 callback,
 		sender:          sender,
 		signer:			 signer,
-		group:           group,
+		groupDataMsg:	 *groupDataMsg,
 		onSessionClosed: onSessionClosed,
 		state:           0,
 		challenge:       challenge,

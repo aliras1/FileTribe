@@ -53,7 +53,9 @@ contract Group is Ownable {
         _ipfsHash = ipfsHash;
         _state = State.NORMAL;
         _members.push(account);
-        _keyConsensus = IDipfshare(_parent).createConsensus(IConsensus.Type.KEY, address(0));
+
+        address c = IDipfshare(_parent).createConsensus(IConsensus.Type.IPFS_HASH, account);
+        _consensuses.push(c);
     }
 
     modifier onlyMembers() {
@@ -108,7 +110,9 @@ contract Group is Ownable {
                 break;
             }
         }
+
         require(i < _consensuses.length, "msg.sender is no group consensus");
+
         for (; i < _consensuses.length; i++) {
             IConsensus(_consensuses[i]).invalidate();
         }
@@ -215,6 +219,10 @@ contract Group is Ownable {
         _invitations[msg.sender] = address(0);
 
         emit InvitationDeclined(address(this), account);
+    }
+
+    function getConsensus(address member) public view returns(address) {
+        return _consensuses[_memberToIdx[member]];
     }
 
     function threshold() public view returns(uint) {

@@ -13,8 +13,7 @@ import (
 type MessageType byte
 
 const (
-	GetGroupKey 		MessageType = 0
-	GetProposedGroupKey MessageType = 1
+	GetGroupData 		MessageType = 0
 )
 
 type Message struct {
@@ -23,6 +22,19 @@ type Message struct {
 	SessionId uint32	`json:"session_id"`
 	Payload []byte `json:"payload"`
 	Sig     []byte	`json:"sig"`
+}
+
+type GroupData byte
+
+const (
+	GetGroupKey 		GroupData = 0
+	GetProposedGroupKey GroupData = 1
+)
+
+type GroupDataMessage struct {
+	Group ethcommon.Address `json:"group"`
+	Data GroupData `json:"data"`
+	Payload []byte
 }
 
 type HeartBeat struct {
@@ -95,6 +107,24 @@ func (m *Message) Digest() []byte {
 		m.Payload,
 	)
 	return digest[:]
+}
+
+func (m *GroupDataMessage) Encode() ([]byte, error) {
+	enc, err := json.Marshal(m)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not encode GroupDataMessage")
+	}
+
+	return enc, nil
+}
+
+func DecodeGroupDataMessage(data []byte) (*GroupDataMessage, error) {
+	var m GroupDataMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, errors.Wrap(err, "could not decode GroupDataMessage")
+	}
+
+	return &m, nil
 }
 
 // -----------------------------------------
