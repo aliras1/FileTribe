@@ -115,31 +115,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	}
 
 	time.Sleep(1 * time.Second)
-	//groupAtAlice.Invite(charlieUser.Address(), true)
 
-	//time.Sleep(1 * time.Second)
-	//
-	//if len(bob.Groups()) != 1 {
-	//	t.Fatal("no group found by bob")
-	//}
-	//if len(charlie.Groups()) != 1 {
-	//	t.Fatal("no group found by charlie")
-	//}
-	//
-	//
-	//aliceGroups = alice.Groups()
-	//bobGroups := bob.Groups()
-	//charlieGroups := charlie.Groups()
-	//if aliceGroups[0].(*GroupContext).Group.CountMembers() != 3 {
-	//	t.Fatal("alice's groupAtAlice has not got enough members")
-	//}
-	//if bobGroups[0].(*GroupContext).Group.CountMembers() != 3 {
-	//	t.Fatal("bob's groupAtAlice has not got enough members")
-	//}
-	//if charlieGroups[0].(*GroupContext).Group.CountMembers() != 3 {
-	//	t.Fatal("charlie's groupAtAlice has not got enough members")
-	//}
-	//
 	fmt.Println("----------- Alice init commit ------------")
 
 	fileAlice := "./0xab083E63Cfc7525634642075d49A0DE31374bc0f/data/userdata/root/" + groupAtAlice.Group.Address().String() + "/rrrepo.go"
@@ -157,79 +133,47 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	time.Sleep(5 * time.Second)
 
-	//i := alice.transactions.Count() - 1
-	//tx := alice.transactions.Get(i)
-	//receipt, err := sim.TransactionReceipt(alice.eth.Auth.TxOpts.Context, tx.(*types.Transaction).Hash())
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//glog.Info(receipt.Status)
-	//glog.Info(receipt.Logs)
-	//
-	//time.Sleep(2 * time.Second)
-	//
-	//charlieGroups := charlie.groups.ToList()
-	//groupAtCharlie := charlieGroups[0].(*GroupContext)
-	//if err := groupAtCharlie.Leave(); err != nil {
-	//	t.Fatal("could not leave group")
-	//}
-	//sim.Commit()
-	//
-	//time.Sleep(1 * time.Second)
-	//
-	//sim.Commit()
-	//
-	//time.Sleep(2 * time.Second)
-	//
-	//sim.Commit()
-	//
-	//time.Sleep(2 * time.Second)
-	//fmt.Println("----------- Charlie leaves ------------")
-	//fakeNetwork.SetAuth(CHARLIE)
-	//groupAtCharlie := charlieGroups[0]
-	//if err := groupAtCharlie.Leave(); err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//time.Sleep(5 * time.Second)
-	//
-	//fmt.Println("----------- Bob change file ------------")
-	//fakeNetwork.SetAuth(BOB)
-	//bobGroups = bob.Groups()
-	//groupAtBob := bobGroups[0].(*GroupContext)
-	//fileBob := "./bob/data/userdata/root/" + groupAtBob.Group.Id().ToString() + "/rrrepo.go"
-	//if err := AppendToFile(fileBob, "Bob's modification (should fail)\n"); err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//if err := groupAtBob.CommitChanges(); err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//time.Sleep(5 * time.Second)
-	//fmt.Println("----------- Grant W access to only alice  ------------")
-	//fakeNetwork.SetAuth(ALICE)
-	//
-	//if err := groupAtAlice.GrantWriteAccess(fileAlice, bobUser.Address()); err != nil {
-	//	t.Fatal(err)
-	//}
-	//if err := groupAtAlice.CommitChanges(); err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//time.Sleep(5 * time.Second)
-	//fmt.Println("----------- Bob modif  ------------")
-	//fakeNetwork.SetAuth(BOB)
-	//if err := AppendToFile(fileBob, "Bob's modification\n"); err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//if err := groupAtBob.CommitChanges(); err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//time.Sleep(5 * time.Second)
+
+	fmt.Println("----------- Bob tries to change the file ------------")
+	bobGroups := bob.Groups()
+	groupAtBob := bobGroups[0].(*GroupContext)
+	fileBob := "./0xbE9678b9882dAc288093b9D38ea7382f21479c77/data/userdata/root/" + groupAtBob.Group.Address().String() + "/rrrepo.go"
+	if err := AppendToFile(fileBob, "Bob's modification (should fail)\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := groupAtBob.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+	sim.Commit()
+	time.Sleep(2 * time.Second)
+	sim.Commit()
+	time.Sleep(3 * time.Second)
+
+	fmt.Println("----------- Grant W access to only alice  ------------")
+	if err := groupAtAlice.GrantWriteAccess(fileAlice, bob.account.ContractAddress()); err != nil {
+		t.Fatal(err)
+	}
+	if err := groupAtAlice.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+	sim.Commit()
+	time.Sleep(2 * time.Second)
+	sim.Commit()
+	time.Sleep(3 * time.Second)
+
+
+	fmt.Println("----------- Bob modif  ------------")
+	if err := AppendToFile(fileBob, "Bob's modification\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := groupAtBob.CommitChanges(); err != nil {
+		t.Fatal(err)
+	}
+	sim.Commit()
+
+	time.Sleep(5 * time.Second)
 	//fmt.Println("----------- Alice modif  ------------")
 	//fakeNetwork.SetAuth(ALICE)
 	//if err := AppendToFile(fileAlice, "Alice's modification\n"); err != nil {

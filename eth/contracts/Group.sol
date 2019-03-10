@@ -137,8 +137,17 @@ contract Group is Ownable {
     }
 
     function invite(address account) public onlyMembers {
-        IAccount(account).invite();
+        uint256 i;
+        for (i = 0; i < _members.length; i++) {
+            if (_members[i] == account) {
+                revert("account is already member of the group");
+            }
+        }
+
         address accountOwner = IAccount(account).owner();
+        require(_invitations[accountOwner] == address(0), "account has already been invited");
+
+        IAccount(account).invite();
 
         emit InvitationSent(address(this), account);
 
@@ -152,7 +161,7 @@ contract Group is Ownable {
         _memberToIdx[IAccount(account).owner()] = _members.length;
         _members.push(account);
 
-        address c = IDipfshare(_parent).createConsensus(msg.sender);
+        address c = IDipfshare(_parent).createConsensus(account);
         _consensuses.push(c);
 
         IAccount(account).onInvitationAccepted();
