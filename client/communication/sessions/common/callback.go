@@ -2,10 +2,11 @@ package common
 
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/interfaces"
-	"ipfs-share/collections"
-	"ipfs-share/crypto"
+
+	"github.com/aliras1/FileTribe/client/fs"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	"github.com/aliras1/FileTribe/collections"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type OnGetGroupKeySuccessCallback func(address ethcommon.Address, boxer tribecrypto.SymmetricKey)

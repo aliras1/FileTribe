@@ -2,20 +2,21 @@ package client
 
 import (
 	"bytes"
-	"ipfs-share/client/fs/caps"
-	"ipfs-share/crypto"
 
 	"github.com/golang/glog"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	ethacc "ipfs-share/eth/gen/Account"
-	ethapp "ipfs-share/eth/gen/Dipfshare"
-	ethgroup "ipfs-share/eth/gen/Group"
+
+	"github.com/aliras1/FileTribe/client/fs/caps"
+	"github.com/aliras1/FileTribe/tribecrypto"
+	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
+	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
+	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 )
 
-func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.Dipfshare) {
+func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.FileTribeDApp) {
 	glog.Info("HandleAccountCreatedEvents...")
-	ch := make(chan *ethapp.DipfshareAccountCreated)
+	ch := make(chan *ethapp.FileTribeDAppAccountCreated)
 
 	sub, err := app.WatchAccountCreated(&bind.WatchOpts{Context:ctx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
@@ -30,7 +31,7 @@ func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.Dipfshare) {
 	}
 }
 
-func (ctx *UserContext) onAccountCreated(e *ethapp.DipfshareAccountCreated) {
+func (ctx *UserContext) onAccountCreated(e *ethapp.FileTribeDAppAccountCreated) {
 	if !bytes.Equal(e.Owner.Bytes(), ctx.eth.Auth.Address.Bytes()) {
 		return
 	}

@@ -126,11 +126,8 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 	sim.Commit()
-
 	time.Sleep(2 * time.Second)
-
 	sim.Commit()
-
 	time.Sleep(5 * time.Second)
 
 
@@ -172,8 +169,13 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 	sim.Commit()
+	time.Sleep(2 * time.Second)
+	sim.Commit()
+	time.Sleep(3 * time.Second)
 
-	time.Sleep(5 * time.Second)
+
+
+
 	//fmt.Println("----------- Alice modif  ------------")
 	//fakeNetwork.SetAuth(ALICE)
 	//if err := AppendToFile(fileAlice, "Alice's modification\n"); err != nil {

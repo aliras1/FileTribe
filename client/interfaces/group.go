@@ -3,7 +3,7 @@ package interfaces
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
-	"ipfs-share/crypto"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type IGroup interface {

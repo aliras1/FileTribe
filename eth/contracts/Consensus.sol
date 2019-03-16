@@ -25,15 +25,9 @@ contract Consensus {
         _digest = digest;
         _payload = payload;
 
-        delete _membersThatApproved;
+        _membersThatApproved.length = 0;
         _membersThatApproved.push(_proposer);
         _isActive = true;
-    }
-
-    function setProposer(address proposer) external {
-        require(msg.sender == _group, "msg.sender is not group owner");
-
-        _proposer = proposer;
     }
 
     function invalidate() external {

@@ -5,21 +5,22 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/pkg/errors"
-	"ipfs-share/collections"
-	"ipfs-share/crypto"
-	"ipfs-share/eth/gen/Account"
-	ethapp "ipfs-share/eth/gen/Dipfshare"
-	"ipfs-share/ipfs"
+
+	"github.com/aliras1/FileTribe/collections"
+	"github.com/aliras1/FileTribe/eth/gen/Account"
+	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
+	"github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type AddressBook struct {
 	accToContactMap *collections.Map
 	backend chequebook.Backend
-	app *ethapp.Dipfshare
+	app *ethapp.FileTribeDApp
 	ipfs ipfs.IIpfs
 }
 
-func NewAddressBook(backend chequebook.Backend, app *ethapp.Dipfshare, ipfs ipfs.IIpfs) *AddressBook {
+func NewAddressBook(backend chequebook.Backend, app *ethapp.FileTribeDApp, ipfs ipfs.IIpfs) *AddressBook {
 	return &AddressBook{
 		backend: 			backend,
 		app:				app,

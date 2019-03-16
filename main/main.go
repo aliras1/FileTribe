@@ -4,20 +4,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"strings"
+	"fmt"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
-	"net/http"
-	"os"
 
-	"fmt"
-	ipfs_share "ipfs-share/client"
-	ipfsapi "ipfs-share/ipfs"
+	ipfs_share "github.com/aliras1/FileTribe/client"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
-const (
+var (
 	host           = "0.0.0.0"
 	port           = "3333"
 	ipfsAPIAddress = "http://127.0.0.1:5001"
@@ -336,24 +339,15 @@ func errorHandler(w http.ResponseWriter, r *http.Request, msg string) {
 	w.Write([]byte(msg))
 }
 
-func main() {
-	var err error
-
-	flag.Parse()
-
-	fmt.Println(os.Args)
-	if len(os.Args) < 5 {
-		panic(fmt.Sprintf("not enough arguments"))
-	}
-
-	auth, err := ipfs_share.NewAuth(os.Args[4], password)
+func startDaemon(ethKeyPath string, ipfsApiAddress string, ethFullNodeAddress string, port string) {
+	auth, err := ipfs_share.NewAuth(ethKeyPath, password)
 	if err != nil {
 		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
 	}
 
-	ipfs = ipfsapi.NewIpfs(ipfsAPIAddress)
+	ipfs = ipfsapi.NewIpfs(ipfsApiAddress)
 
-	ethNode, err := ethclient.Dial(ethWSAddress)
+	ethNode, err := ethclient.Dial(ethFullNodeAddress)
 	if err != nil {
 		if err != nil {
 			panic(fmt.Sprintf("could not connect to ethereum node: %s", err))
@@ -372,11 +366,11 @@ func main() {
 	}
 
 	router := mux.NewRouter()
-	
-	router.HandleFunc("/signup/{username}/{password}", signUp).Methods("POST")
-	router.HandleFunc("/signin/{username}/{password}", signIn).Methods("POST")
+
+	router.HandleFunc("/signup/{username}", signUp).Methods("POST")
+	router.HandleFunc("/signin/{username}", signIn).Methods("POST")
 	router.HandleFunc("/signout", signOut).Methods("GET")
-	
+
 	router.HandleFunc("/group/create", createGroup).Methods("POST")
 	router.HandleFunc("/group/join", joinGroup).Methods("POST")
 	router.HandleFunc("/group/invite/{groupAddress}", invite).Methods("POST")
@@ -389,6 +383,198 @@ func main() {
 
 	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")
 	router.HandleFunc("/ls/tx", listTransactions).Methods("GET")
-	
+
 	glog.Fatal(http.ListenAndServe(host+":"+port, router))
+}
+
+func usage() {
+	fmt.Print(`FileTribe
+
+USAGE:
+  filetribe <command> ...
+
+COMMANDS: 
+  BASIC COMMANDS:
+    signup <username>                           Sign up to FileTribe    
+    ls {-g|-i|-tx}                              List groups, pending invitations or pending Ethereum transactions
+    daemon <eth account key> ...                Start a running client daemon process                                                
+    group                                       Interact with groups
+
+  GROUP COMMANDS:
+    create <groupname>                          Create a group
+    invite <group address> <invitee address>    Invite a new member to the given group
+    leave  <group address>                      Leave the given group
+    ls <group address>                          List group members
+    repo <group address> ...                    Interact with the group repository
+
+  REPO COMMANDS:
+    ls                                          List files
+    commit                                      Commit the pending changes in the repository
+    grant <file> <member>                       Grant write access for the given file to the given user
+    revoke <file> <member>                      Revoke write access for the given file to the given user
+
+  DAEMON OPTIONS:
+    -ipfs=<api address>                         http address of a running IPFS daemon's API
+    -eth=<api address>                          websocket address of an Ethereum full node
+    -p=<port>                                   Port number on which the daemon will be listening
+
+
+OPTIONS:
+  -h --help                                     Show this screen.
+  -a=<address>                                  http address of a running client daemon`)
+}
+
+func printHelpAndExit(message string) {
+	fmt.Printf("%s\nUse 'filetribe -h' to learn more about its usage.\n", message)
+	os.Exit(1)
+}
+
+func main() {
+	var err error
+
+	fileTribeUrl := flag.String("a", "http://127.0.0.1:3333", "")
+
+	flag.Usage = usage
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 1 {
+		printHelpAndExit("No command found")
+	}
+
+	request := *fileTribeUrl
+	command := args[0]
+	args = args[1:]
+
+	switch command {
+	case "signup":
+		if len(args) < 2 {
+			printHelpAndExit("No username found")
+		}
+		request += "/" + command + "/" + args[0]
+
+	case "ls":
+		if len(args) < 2 {
+			printHelpAndExit("You must specify what to list {-g|-i|-tx} (groups, pending invitations, pending transactions)")
+		}
+
+		found := false
+		split := strings.Split(args[0], "-")
+		if len(split) < 2 {
+			printHelpAndExit("Argument must be one of {-g|-i|-tx}")
+		}
+
+		for _, opt := range []string{"g", "i", "tx"} {
+			if strings.EqualFold(opt, split[0]) {
+				request += "/" + command + "/" + opt
+				found = true
+				break
+			}
+		}
+		if !found {
+			printHelpAndExit("Argument must be one of {-g|-i|-tx}")
+		}
+
+	case "daemon":
+		fmt.Println(args)
+		if len(args) < 1 {
+			printHelpAndExit("No path to the Ethereum account key file found")
+		}
+
+		ethKeyPath = args[0]
+
+		for _, arg := range args[1:] {
+			split := strings.Split(arg, "=")
+			if len(split) < 2 {
+				printHelpAndExit(fmt.Sprintf("Invalid option: %s", arg))
+			}
+
+			opt, value := split[0], split[1]
+
+			switch opt {
+			case "-ipfs": ipfsAPIAddress = value
+			case "-eth": ethWSAddress = value
+			case "-p": port = value
+			}
+
+			startDaemon(ethKeyPath, ipfsAPIAddress, ethWSAddress, port)
+		}
+
+	case "group":
+		if len(args) < 1 {
+			printHelpAndExit("No group sub-command found")
+		}
+
+		request += "/" + command
+		subcommand := args[0]
+		args = args[1:]
+
+		switch subcommand {
+		case "create":
+			if len(args) < 1 {
+				printHelpAndExit("No group name found")
+			}
+
+			request += "/" + subcommand + "/" + args[0]
+
+		case "invite":
+			if len(args) < 2 {
+				printHelpAndExit("Not enough arguments")
+			}
+
+			request += "/" + subcommand + "/" + args[0] + "/" + args[1]
+
+		case "leave":
+			fallthrough
+
+		case "ls":
+			if len(args) < 1 {
+				printHelpAndExit("No group argument found")
+			}
+
+			request += "/" + subcommand + "/" + args[0]
+
+		case "repo":
+			if len(args) < 2 {
+				printHelpAndExit("Not enough arguments")
+			}
+
+			request += "/" + subcommand + "/" + args[0]
+
+			subSubCommand := args[0]
+			args = args[1:]
+
+			switch subSubCommand {
+			case "ls":
+				fallthrough
+
+			case "commit":
+				request += "/" + subSubCommand
+
+			case "grant":
+				fallthrough
+
+			case "revoke":
+				if len(args) < 2 {
+					printHelpAndExit("Not enough arguments")
+				}
+
+				request += "/" + subSubCommand + "/" + args[0] + "/" + args[1]
+			}
+		}
+	}
+
+	resp, err := http.Get(*fileTribeUrl)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		fmt.Println(string(body))
+	}
+	defer resp.Body.Close()
 }

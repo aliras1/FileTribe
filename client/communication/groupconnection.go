@@ -5,12 +5,13 @@ import (
 	"encoding/base64"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"ipfs-share/client/communication/common"
-	"ipfs-share/client/communication/sessions"
-	sesscommon "ipfs-share/client/communication/sessions/common"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/interfaces"
-	ipfsapi "ipfs-share/ipfs"
+
+	"github.com/aliras1/FileTribe/client/communication/common"
+	"github.com/aliras1/FileTribe/client/communication/sessions"
+	sesscommon "github.com/aliras1/FileTribe/client/communication/sessions/common"
+	"github.com/aliras1/FileTribe/client/fs"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
 

@@ -41,7 +41,7 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 	var auths []*bind.TransactOpts
 	for _, key := range keys {
 		auth := bind.NewKeyedTransactor(key)
-		auth.GasLimit = 4700000
+		auth.GasLimit = 47000000
 
 		auths = append(auths, auth)
 	}
@@ -51,7 +51,7 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
 	}
 
-	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 4700000)
+	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 47000000)
 
 	appAdrr, _, app, err := ethapp.DeployDipfshare(auths[0], simulator)
 	if err != nil {

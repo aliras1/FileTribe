@@ -3,10 +3,12 @@ package common
 import (
 	"encoding/binary"
 	"encoding/json"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	ethcrypto"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 
-	"ipfs-share/crypto"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 // MessageType ...
@@ -99,8 +101,7 @@ func (m *Message) Digest() []byte {
 	sessionIdBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(sessionIdBytes, m.SessionId)
 
-	hasher := tribecrypto.NewKeccak256Hasher()
-	digest := hasher.Sum(
+	digest := ethcrypto.Keccak256(
 		m.From.Bytes(),
 		[]byte{byte(m.Type)},
 		sessionIdBytes,

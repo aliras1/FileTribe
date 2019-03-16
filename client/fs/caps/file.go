@@ -9,11 +9,10 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
-	"ipfs-share/crypto"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type FileCap struct {
-	Id              [32]byte
 	FileName        string
 	IpfsHash        string
 	DataKey         tribecrypto.FileBoxer
@@ -21,10 +20,6 @@ type FileCap struct {
 }
 
 func (cap *FileCap) Equal(other *FileCap) bool {
-	if !bytes.Equal(cap.Id[:], other.Id[:]) {
-		return false
-	}
-
 	if strings.Compare(cap.FileName, other.FileName) != 0 {
 		return false
 	}
@@ -89,11 +84,6 @@ func DecodeFileCapList(data []byte) ([]*FileCap, error) {
 
 
 func NewGroupFileCap(fileName string, hasWriteAccess []ethcommon.Address) (*FileCap, error) {
-	var id [32]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		return nil, errors.Wrap(err, "could not read from crypto/rand")
-	}
-
 	var key [32]byte
 	if _, err := rand.Read(key[:]); err != nil {
 		return nil, errors.Wrap(err, "could not read from crypto/rand")
@@ -102,7 +92,6 @@ func NewGroupFileCap(fileName string, hasWriteAccess []ethcommon.Address) (*File
 	boxer := tribecrypto.FileBoxer{Key: key}
 
 	return &FileCap{
-		Id:              id,
 		DataKey:         boxer,
 		IpfsHash:        "",
 		FileName:        fileName,

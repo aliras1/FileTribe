@@ -8,14 +8,15 @@ import (
 	"sync"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/getlantern/deepcopy"
 	"github.com/pkg/errors"
 
-	"ipfs-share/client/fs/caps"
-	"ipfs-share/client/interfaces"
-	. "ipfs-share/collections"
-	"ipfs-share/crypto"
-	"ipfs-share/ipfs"
+	"github.com/aliras1/FileTribe/client/fs/caps"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	. "github.com/aliras1/FileTribe/collections"
+	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/ipfs"
 )
 
 type IpfsAddOperation func(reader io.Reader) (string, error)
@@ -79,7 +80,7 @@ func NewGroupRepoFromIpfs(ipfsHash string, group interfaces.IGroup, user ethcomm
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create new file from cap")
 		}
-		files.Put(file.Cap.Id, file)
+		files.Put(file.Cap.FileName, file)
 	}
 	repo.files = files
 
@@ -93,7 +94,7 @@ func (repo *GroupRepo) IpfsHash() string {
 	return repo.ipfsHash
 }
 
-func (repo *GroupRepo) Get(id IIdentifier) *File {
+func (repo *GroupRepo) Get(id string) *File {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
@@ -130,7 +131,7 @@ func (repo *GroupRepo) getPendingChanges() ([]*caps.FileCap, error) {
 		filePath := dir + f.Name()
 		var file *File
 
-		fileInt := repo.files.Get(NewStringId(f.Name()))
+		fileInt := repo.files.Get(f.Name())
 
 		// if current file is not in repo --> create new
 		if fileInt == nil {
@@ -138,7 +139,7 @@ func (repo *GroupRepo) getPendingChanges() ([]*caps.FileCap, error) {
 			if err != nil {
 				return nil, errors.Wrap(err, "could not create new group file")
 			}
-			repo.files.Put(file.Cap.Id, file)
+			repo.files.Put(file.Cap.FileName, file)
 		} else {
 			file = fileInt.(*File)
 		}
@@ -214,7 +215,7 @@ func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, boxer tribecrypto.Sy
 			return errors.New("new write access list can not be nil")
 		}
 
-		fileInt := repo.files.Get(NewStringId(newCap.FileName))
+		fileInt := repo.files.Get(newCap.FileName)
 		if fileInt == nil {
 			// new file, nothing to check
 			continue
@@ -258,7 +259,7 @@ func (repo *GroupRepo) IsValidChangeKey(newIpfsHash string, address *ethcommon.A
 	}
 
 	for _, newCap := range newCaps {
-		fileInt := repo.files.Get(NewStringId(newCap.FileName))
+		fileInt := repo.files.Get(newCap.FileName)
 		if fileInt == nil {
 			return errors.New("additional files found")
 		}
@@ -280,10 +281,6 @@ func (repo *GroupRepo) IsValidChangeKey(newIpfsHash string, address *ethcommon.A
 			if !bytes.Equal(file.Cap.WriteAccessList[i].Bytes(), newCap.WriteAccessList[i].Bytes()) {
 				return errors.New("users with write access do not match")
 			}
-		}
-
-		if !bytes.Equal(file.Cap.Id[:], newCap.Id[:]) {
-			return errors.New("id's do not match")
 		}
 
 		if strings.Compare(file.Cap.FileName, newCap.FileName) != 0 {
@@ -323,8 +320,7 @@ func (repo *GroupRepo) isDiffNodeValid(file *File, newBoxer tribecrypto.FileBoxe
 		return errors.Wrap(err, "could not read orig file")
 	}
 
-	hasher := tribecrypto.NewKeccak256Hasher()
-	hash := hasher.Sum(fileData)
+	hash := ethcrypto.Keccak256(fileData)
 
 	if !bytes.Equal(newDiff.Hash, hash) {
 		return errors.New("new diff prev hash does not match with current hash")
@@ -348,13 +344,15 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 
 	for _, cap := range caps {
 		var file *File
-		fileInterface := repo.files.Get(NewStringId(cap.FileName))
+		var err error
+		fileInterface := repo.files.Get(cap.FileName)
 		if fileInterface == nil {
-			file, err := NewGroupFileFromCap(cap, repo.group.Address().String(), repo.storage)
+			file, err = NewGroupFileFromCap(cap, repo.group.Address().String(), repo.storage)
 			if err != nil {
 				return errors.Wrap(err, "could not create new group file from cap")
 			}
-			repo.files.Put(file.Cap.Id, file)
+
+			repo.files.Put(file.Cap.FileName, file)
 			go file.Download(repo.storage, repo.ipfs)
 		} else {
 			file = fileInterface.(*File)
@@ -363,7 +361,9 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 			}
 		}
 
-		return nil
+		if err := file.SaveMetadata(); err != nil {
+			return errors.Wrap(err, "could not save file meta data on disk")
+		}
 	}
 
 	repo.ipfsHash = newIpfsHash

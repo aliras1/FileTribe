@@ -1,7 +1,7 @@
 pragma solidity ^0.5.0;
 
 
-interface IDipfshare {
+interface IFileTribeDApp {
     function createGroup(string calldata name) external returns(address group);
 
     function createConsensus(address proposer) external returns(address consensus);

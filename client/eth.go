@@ -2,13 +2,14 @@ package client
 
 import (
 	"github.com/ethereum/go-ethereum/contracts/chequebook"
-	ethapp "ipfs-share/eth/gen/Dipfshare"
-	ethgroup "ipfs-share/eth/gen/Group"
+
+	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
+	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 )
 
 type Eth struct {
 	Auth    *Auth
-	App 	*ethapp.Dipfshare
+	App 	*ethapp.FileTribeDApp
 	Backend chequebook.Backend
 }
 

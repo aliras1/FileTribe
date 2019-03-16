@@ -5,7 +5,5 @@ interface IConsensus {
 
     function invalidate() external;
 
-    function setProposer(address proposer) external;
-
     function getProposer() external returns(address);
 }

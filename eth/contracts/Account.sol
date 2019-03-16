@@ -1,10 +1,10 @@
 pragma solidity ^0.5.0;
 
-import "./interfaces/IDipfshare.sol";
+import "./interfaces/IFileTribeDApp.sol";
 import "./common/Ownable.sol";
 
 contract Account is Ownable {
-    address _parent; // Dipfshare
+    address _fileTribe;
     string private _name;
     string private _ipfsPeerId;
     bytes32 private _boxingKey;
@@ -20,20 +20,20 @@ contract Account is Ownable {
     event DebugBytesAcc(bytes msg);
 
     constructor (
-        address parent,
+        address fileTribe,
         address owner,
         string memory name,
         string memory ipfsPeerId,
         bytes32 boxingKey)
     public Ownable(owner) {
-        _parent = parent;
+        _fileTribe = fileTribe;
         _name = name;
         _ipfsPeerId = ipfsPeerId;
         _boxingKey = boxingKey;
     }
 
     function createGroup(string memory name) public onlyOwner {
-        address group = IDipfshare(_parent).createGroup(name);
+        address group = IFileTribeDApp(_fileTribe).createGroup(name);
 
         _groups.push(group);
 
@@ -93,7 +93,7 @@ contract Account is Ownable {
     }
 
     modifier onlyParent() {
-        require(msg.sender == _parent, "non parent address tried to call");
+        require(msg.sender == _fileTribe, "non parent address tried to call");
         _;
     }
 

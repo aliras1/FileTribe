@@ -1,17 +1,14 @@
 package tribecrypto
 
 import (
-	"fmt"
-	// "ioioutil"
-	"io"
-	"crypto/rand"
-	// "bufio"
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
-	"golang.org/x/crypto/sha3"
-
+	"fmt"
+	"io"
 
 	"golang.org/x/crypto/nacl/secretbox"
+	"golang.org/x/crypto/sha3"
 )
 
 const (

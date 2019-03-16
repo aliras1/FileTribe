@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"ipfs-share/crypto"
 	"net"
 	"strings"
 
@@ -13,8 +12,9 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 
-	. "ipfs-share/collections"
-	"ipfs-share/ipfs"
+	. "github.com/aliras1/FileTribe/collections"
+	"github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 const (

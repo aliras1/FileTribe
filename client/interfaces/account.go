@@ -2,9 +2,9 @@ package interfaces
 
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	ethacc "ipfs-share/eth/gen/Account"
 
-	"ipfs-share/crypto"
+	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type IAccount interface {

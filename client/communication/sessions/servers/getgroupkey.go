@@ -2,15 +2,15 @@ package servers
 
 import (
 	"crypto/rand"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/golang/glog"
-	"ipfs-share/crypto"
 	"sync"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
-	comcommon "ipfs-share/client/communication/common"
-	"ipfs-share/client/communication/sessions/common"
+	comcommon "github.com/aliras1/FileTribe/client/communication/common"
+	"github.com/aliras1/FileTribe/client/communication/sessions/common"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type GetGroupKeySessionServer struct {

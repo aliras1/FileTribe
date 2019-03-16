@@ -1,16 +1,17 @@
 package clients
 
 import (
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/golang/glog"
-	"github.com/pkg/errors"
-	"ipfs-share/crypto"
 	"math/rand"
 	"sync"
 	"time"
 
-	comcommon "ipfs-share/client/communication/common"
-	"ipfs-share/client/communication/sessions/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/golang/glog"
+	"github.com/pkg/errors"
+
+	comcommon "github.com/aliras1/FileTribe/client/communication/common"
+	"github.com/aliras1/FileTribe/client/communication/sessions/common"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type GetGroupDataSessionClient struct {

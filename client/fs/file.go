@@ -3,7 +3,6 @@ package fs
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -12,17 +11,17 @@ import (
 	"sync"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/getlantern/deepcopy"
 	"github.com/golang-collections/collections/stack"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
 	"github.com/sergi/go-diff/diffmatchpatch"
 
-	"ipfs-share/client/fs/caps"
-	"ipfs-share/collections"
-	"ipfs-share/crypto"
-	ipfsapi "ipfs-share/ipfs"
-	"ipfs-share/utils"
+	"github.com/aliras1/FileTribe/client/fs/caps"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/utils"
 )
 
 // IFile is an interface for the files
@@ -42,9 +41,6 @@ type File struct {
 	lock           sync.RWMutex
 }
 
-func (f *File) Id() collections.IIdentifier {
-	return collections.NewStringId(f.Cap.FileName)
-}
 
 func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId string, storage *Storage) (*File, error) {
 	if writeAccessList == nil {
@@ -62,8 +58,7 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 		return nil, errors.Wrap(err, "could not deep copy cap")
 	}
 
-	idString := base64.URLEncoding.EncodeToString(cap.Id[:])
-	capPath := storage.GroupFileCapDir(groupId) + idString
+	capPath := storage.GroupFileCapDir(groupId) + cap.FileName
 	origPath := storage.GroupFileOrigDir(groupId) + fileName
 
 	file := &File{
@@ -82,10 +77,9 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 }
 
 func NewGroupFileFromCap(cap *caps.FileCap, groupId string, storage *Storage) (*File, error) {
-	idString := base64.URLEncoding.EncodeToString(cap.Id[:])
-	capPath := storage.GroupFileCapDir(groupId) + idString
+	capPath := storage.GroupFileCapDir(groupId) + cap.FileName
 	dataPath := storage.GroupFileDataDir(groupId) + cap.FileName
-	pendingPath := storage.GroupFileOrigDir(groupId) + idString
+	pendingPath := storage.GroupFileOrigDir(groupId) + cap.FileName
 
 	var pendingChanges *caps.FileCap
 	if err := deepcopy.Copy(&pendingChanges, cap); err != nil {
@@ -120,9 +114,8 @@ func LoadPTPFile(filePath string) (*File, error) {
 // NewFileFromCap creates a new File instance from a shared
 // capability
 func NewFileFromCap(dataDir, capDir string, cap *caps.FileCap, ipfs ipfsapi.IIpfs, storage *Storage) (*File, error) {
-	baseName := base64.URLEncoding.EncodeToString(cap.Id[:])
-	dataPath := dataDir + baseName
-	capPath := capDir + baseName
+	dataPath := dataDir + cap.FileName
+	capPath := capDir + cap.FileName
 
 	file := &File{
 		Cap:      cap,
@@ -175,9 +168,7 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 			return
 		}
 
-		hasher := tribecrypto.NewKeccak256Hasher()
-		origHash = hasher.Sum(origData)
-
+		origHash = ethcrypto.Keccak256(origData)
 		currentStr = string(origData)
 	}
 
@@ -231,10 +222,11 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 func (f *File) SaveMetadata() error {
 	jsonBytes, err := json.Marshal(f)
 	if err != nil {
-		return errors.Wrapf(err, "could not marshal file '%s': File.save", f.Cap.Id)
+		return errors.Wrapf(err, "could not marshal file '%s': File.save", f.Cap.FileName)
 	}
+	glog.Infof("%v", f)
 	if err := utils.WriteFile(f.CapPath, jsonBytes); err != nil {
-		return errors.Wrapf(err, "could not write file '%s': File.save", f.Cap.Id)
+		return errors.Wrapf(err, "could not write file '%s': File.save", f.Cap.FileName)
 	}
 
 	return nil
@@ -332,10 +324,7 @@ func (f *File) diff(boxer tribecrypto.FileBoxer) (*DiffNode, error) {
 			return nil, errors.Wrap(err, "could not read original file")
 		}
 
-		hasher := tribecrypto.NewKeccak256Hasher()
-		hash := hasher.Sum(originalData)
-
-		diff.Hash = hash
+		diff.Hash = ethcrypto.Keccak256(originalData)
 
 		originalStr = string(originalData)
 	}

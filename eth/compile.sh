@@ -1,3 +1,10 @@
+#!/usr/bin/env bash
+
+if [[ ! -f "./compile.sh" ]]; then
+    echo "$0 must be run from the eth directory of the repository."
+    exit 2
+fi
+
 truffle compile --reset --all
 
 compile_contracts() {

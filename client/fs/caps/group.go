@@ -5,7 +5,7 @@ import (
 	ethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
-	"ipfs-share/crypto"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type GroupAccessCap struct {

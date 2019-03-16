@@ -6,10 +6,6 @@ import (
 
 type Compare func(interface{}, interface{}) bool
 
-type ICollectionItem interface {
-	Id() IIdentifier
-}
-
 type KeyValuePair struct {
 	Key interface{}
 	Value interface{}

@@ -1,11 +1,13 @@
 package client
 
 import (
+	"io/ioutil"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"io/ioutil"
-	"ipfs-share/crypto"
+
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type Auth struct {

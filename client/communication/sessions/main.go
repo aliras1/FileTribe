@@ -3,12 +3,13 @@ package sessions
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	comcommon "ipfs-share/client/communication/common"
-	"ipfs-share/client/communication/sessions/common"
-	"ipfs-share/client/communication/sessions/servers"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/interfaces"
-	"ipfs-share/crypto"
+
+	comcommon "github.com/aliras1/FileTribe/client/communication/common"
+	"github.com/aliras1/FileTribe/client/communication/sessions/common"
+	"github.com/aliras1/FileTribe/client/communication/sessions/servers"
+	"github.com/aliras1/FileTribe/client/fs"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 

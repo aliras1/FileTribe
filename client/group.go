@@ -3,15 +3,15 @@ package client
 import (
 	"bytes"
 	"crypto/rand"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/fs/caps"
 	"sync"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
-	"ipfs-share/client/interfaces"
-	"ipfs-share/crypto"
+	"github.com/aliras1/FileTribe/client/fs"
+	"github.com/aliras1/FileTribe/client/fs/caps"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type Group struct {

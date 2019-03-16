@@ -6,9 +6,10 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
-	"ipfs-share/crypto"
-	ethcons "ipfs-share/eth/gen/Consensus"
-	ethgroup "ipfs-share/eth/gen/Group"
+
+	ethcons "github.com/aliras1/FileTribe/eth/gen/Consensus"
+	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 

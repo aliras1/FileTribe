@@ -3,15 +3,16 @@ package client
 import (
 	"crypto/rand"
 	"encoding/json"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
-	"github.com/pkg/errors"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/interfaces"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/chequebook"
+	"github.com/pkg/errors"
 	"golang.org/x/crypto/curve25519"
-	"ipfs-share/crypto"
-	ethacc "ipfs-share/eth/gen/Account"
+
+	"github.com/aliras1/FileTribe/client/fs"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type AccountData struct {

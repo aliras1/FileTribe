@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+type truffle >/dev/null 2>&1 || { echo >&2 "I require Truffle but it's not installed. Aborting."; exit 1; }
+
+echo [*] Creating environment...
+
+ws=./build/go_workspace
+mkdir -p ${ws}
+cd ${ws}
+export GOPATH=$PWD
+
+root=./src/github.com/aliras1/
+mkdir -p ${root}
+cd ${root}
+ln -s ../../../../../. FileTribe
+cd ../../../../../
+
+echo [*] Getting dependencies...
+
+#go get -u github.com/getlantern/deepcopy
+#go get -u github.com/golang-collections/collections
+#go get -u github.com/sergi/go-diff/...
+#go get -u github.com/pkg/errors
+#go get -u github.com/golang/glog
+#go get -u github.com/whyrusleeping/tar-utils
+#go get -u golang.org/x/crypto/...
+#go get -u github.com/ethereum/go-ethereum
+#go get -u github.com/gorilla/mux
+#go get -u github.com/ipfs/go-ipfs-api
+#go get -u github.com/ugorji/go/codec
+
+echo [*] Generating abi APIs...
+
+cd ./eth
+./compile.sh
+
+echo [*] Building FileTribe...
+
+cd ../main
+go build -o ../filetribe main.go

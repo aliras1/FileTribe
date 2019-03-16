@@ -3,23 +3,23 @@ package client
 import (
 	"bytes"
 	"context"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
-	"ipfs-share/client/communication/common"
-	"ipfs-share/crypto"
 	"sync"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
-	com "ipfs-share/client/communication"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/interfaces"
-	. "ipfs-share/collections"
-	ethApp "ipfs-share/eth/gen/Dipfshare"
-	ipfsapi "ipfs-share/ipfs"
-	ethgroup "ipfs-share/eth/gen/Group"
+	com "github.com/aliras1/FileTribe/client/communication"
+	"github.com/aliras1/FileTribe/client/communication/common"
+	"github.com/aliras1/FileTribe/client/fs"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	. "github.com/aliras1/FileTribe/collections"
+	ethApp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
+	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type IUserFacade interface {
@@ -157,7 +157,7 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	var err error
 	var ctx UserContext
 
-	appContract, err := ethApp.NewDipfshare(appContractAddress, backend)
+	appContract, err := ethApp.NewFileTribeDApp(appContractAddress, backend)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create account contract instance")
 	}

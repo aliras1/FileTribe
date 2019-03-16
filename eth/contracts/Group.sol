@@ -1,12 +1,12 @@
 pragma solidity ^0.5.0;
 
 import "./interfaces/IAccount.sol";
-import "./interfaces/IDipfshare.sol";
+import "./interfaces/IFileTribeDApp.sol";
 import "./interfaces/IConsensus.sol";
 import "./common/Ownable.sol";
 
 contract Group is Ownable {
-    address _parent; // Dipfshare
+    address _fileTribe;
     string private _name;
     address[] private _members;
     bytes private _ipfsHash; // encrypted with group key
@@ -29,16 +29,16 @@ contract Group is Ownable {
     event Debug(int msg);
 
     constructor (
-        address parent,
+        address fileTribe,
         address account,
         string memory name,
         bytes memory ipfsHash)
     public Ownable(account) {
-        _parent = parent;
+        _fileTribe = fileTribe;
         _name = name;
         _ipfsHash = ipfsHash;
         _members.push(account);
-        _consensuses.push(IDipfshare(_parent).createConsensus(account));
+        _consensuses.push(IFileTribeDApp(_fileTribe).createConsensus(account));
     }
 
     modifier onlyMembers() {
@@ -66,17 +66,12 @@ contract Group is Ownable {
     }
 
     function onChangeIpfsHashConsensus(bytes calldata payload) external {
-        uint256 i;
-        for (i = 0; i < _consensuses.length; i++) {
-            if (msg.sender == _consensuses[i]) {
-                break;
-            }
-        }
+        address proposer = IConsensus(msg.sender).getProposer();
+        address proposerOwner = IAccount(proposer).owner();
 
-        require(i < _consensuses.length, "msg.sender is no group consensus");
-        address proposer = IConsensus(_consensuses[i]).getProposer();
+        require(_consensuses[_memberToIdx[proposerOwner]] != address(0), "msg.sender is no group consensus");
 
-        for (i = 0; i < _consensuses.length; i++) {
+        for (uint256 i = 0; i < _consensuses.length; i++) {
             IConsensus(_consensuses[i]).invalidate();
         }
 
@@ -161,7 +156,7 @@ contract Group is Ownable {
         _memberToIdx[IAccount(account).owner()] = _members.length;
         _members.push(account);
 
-        address c = IDipfshare(_parent).createConsensus(account);
+        address c = IFileTribeDApp(_fileTribe).createConsensus(account);
         _consensuses.push(c);
 
         IAccount(account).onInvitationAccepted();

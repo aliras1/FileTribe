@@ -3,7 +3,7 @@ package common
 import (
 	"math"
 
-	"ipfs-share/client/communication/common"
+	"github.com/aliras1/FileTribe/client/communication/common"
 )
 
 

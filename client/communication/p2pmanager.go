@@ -2,19 +2,21 @@ package communication
 
 import (
 	"context"
+	"net"
+	"time"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"ipfs-share/client/communication/common"
-	"ipfs-share/client/communication/sessions/clients"
-	sesscommon "ipfs-share/client/communication/sessions/common"
-	"ipfs-share/client/communication/sessions/servers"
-	"ipfs-share/client/interfaces"
-	. "ipfs-share/collections"
-	"ipfs-share/crypto"
-	ipfsapi "ipfs-share/ipfs"
-	"net"
-	"time"
+
+	"github.com/aliras1/FileTribe/client/communication/common"
+	"github.com/aliras1/FileTribe/client/communication/sessions/clients"
+	sesscommon "github.com/aliras1/FileTribe/client/communication/sessions/common"
+	"github.com/aliras1/FileTribe/client/communication/sessions/servers"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	. "github.com/aliras1/FileTribe/collections"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 

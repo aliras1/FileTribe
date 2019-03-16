@@ -2,9 +2,11 @@ package fs
 
 import (
 	"encoding/json"
-	"github.com/pkg/errors"
 	"io/ioutil"
-	"ipfs-share/utils"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliras1/FileTribe/utils"
 )
 
 const (

@@ -3,9 +3,10 @@ package tribecrypto
 import (
 	"crypto/rand"
 	"encoding/json"
+	"io"
+
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/nacl/secretbox"
-	"io"
 )
 
 type SymmetricKey struct {

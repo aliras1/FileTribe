@@ -4,10 +4,9 @@ package tribecrypto
 import (
 	"crypto/rand"
 	"fmt"
+
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/crypto/sha3"
-
-	//"ipfs-share/crypto/blslib"
 )
 
 

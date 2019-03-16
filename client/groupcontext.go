@@ -3,22 +3,24 @@ package client
 import (
 	"crypto/rand"
 	"fmt"
+	"path"
+	"sync"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	com "ipfs-share/client/communication"
-	"ipfs-share/client/communication/common"
-	sesscommon "ipfs-share/client/communication/sessions/common"
-	"ipfs-share/client/fs"
-	"ipfs-share/client/interfaces"
-	. "ipfs-share/collections"
-	"ipfs-share/crypto"
-	ethcons "ipfs-share/eth/gen/Consensus"
-	ipfsapi "ipfs-share/ipfs"
-	"ipfs-share/utils"
-	"path"
-	"sync"
+
+	com "github.com/aliras1/FileTribe/client/communication"
+	"github.com/aliras1/FileTribe/client/communication/common"
+	sesscommon "github.com/aliras1/FileTribe/client/communication/sessions/common"
+	"github.com/aliras1/FileTribe/client/fs"
+	"github.com/aliras1/FileTribe/client/interfaces"
+	. "github.com/aliras1/FileTribe/collections"
+	ethcons "github.com/aliras1/FileTribe/eth/gen/Consensus"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/utils"
 )
 
 type IGroupFacade interface {
@@ -223,7 +225,7 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 		return errors.New("can not grant write access to non group members")
 	}
 
-	file := groupCtx.Repo.Get(NewStringId(path.Base(filePath)))
+	file := groupCtx.Repo.Get(path.Base(filePath))
 	if file == nil {
 		tmpFile, err := fs.NewGroupFile(
 			filePath,
@@ -248,7 +250,7 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 		return errors.New("can not revoke write access from non group members")
 	}
 
-	file := groupCtx.Repo.Get(NewStringId(path.Base(filePath)))
+	file := groupCtx.Repo.Get(path.Base(filePath))
 	if file == nil {
 		tmpFile, err := fs.NewGroupFile(
 			filePath,

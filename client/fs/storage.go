@@ -4,17 +4,18 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/golang/glog"
 	"io/ioutil"
-	"ipfs-share/client/fs/caps"
-	ipfsapi "ipfs-share/ipfs"
-	"ipfs-share/utils"
 	"os"
 	"path"
-
 	"bytes"
+
+	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"ipfs-share/crypto"
+
+	"github.com/aliras1/FileTribe/client/fs/caps"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/utils"
 )
 
 const (

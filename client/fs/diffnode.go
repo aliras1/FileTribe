@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sergi/go-diff/diffmatchpatch"
 
-	"ipfs-share/crypto"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type DiffNode struct {
