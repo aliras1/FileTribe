@@ -1,6 +1,7 @@
 # FileTribe
 
-##Dependency
+## Dependency
+
 In order to use FileTribe, you will need a running IPFS daemon. To install IPFS, [download](https://dist.ipfs.io/#go-ipfs) it and then run
 ```
 $ tar xvfz go-ipfs.tar.gz
@@ -9,7 +10,7 @@ $ ./install.sh
 ```
 For more information see [here](https://docs.ipfs.io/introduction/install/).
 
-##Building the sources
+## Building the sources
 
 To successfully build the FileTribe client application, you need Go (v1.10 <=) and Truffle. To install Truffle, run
 `$ npm install -g truffle`. If both dependencies are installed, run
