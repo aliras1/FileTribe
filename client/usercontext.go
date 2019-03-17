@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"os"
 	"sync"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -175,7 +176,7 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	ctx.invitations = NewConcurrentList()
 	ctx.subs = NewConcurrentList()
 	ctx.channelStop = make(chan int)
-	ctx.storage = fs.NewStorage(auth.Address.String())
+	ctx.storage = fs.NewStorage(os.Getenv("HOME") + "/.filetribe/" + auth.Address.String())
 
 	// app events
 	go ctx.HandleAccountCreatedEvents(ctx.eth.App)
@@ -305,6 +306,8 @@ func (ctx *UserContext) Groups() []IGroupFacade {
 	for groupCtxInt := range ctx.groups.VIterator() {
 		groups = append(groups, groupCtxInt.(IGroupFacade))
 	}
+
+	glog.Info(groups)
 
 	return groups
 }

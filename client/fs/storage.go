@@ -44,8 +44,10 @@ type Storage struct {
 
 // NewStorage creates the directory structure
 func NewStorage(dataPath string) *Storage {
+	glog.Info(dataPath)
+
 	var storage Storage
-	storage.dataPath = "./" + path.Clean(dataPath + "/data") + "/"
+	storage.dataPath = dataPath + "/data/"
 	storage.publicPath = storage.dataPath + "public/"
 	storage.publicFilesPath = storage.dataPath + "public/files/"
 	storage.publicForPath = storage.dataPath + "public/for/"
@@ -59,7 +61,7 @@ func NewStorage(dataPath string) *Storage {
 	storage.tmpPath = storage.dataPath + "userdata/tmp/"
 	storage.contextDataPath = storage.dataPath + "userdata/context/"
 
-	os.Mkdir(storage.dataPath, 0770)
+	os.MkdirAll(storage.dataPath, 0770)
 	os.MkdirAll(storage.publicFilesPath, 0770)
 	os.MkdirAll(storage.publicForPath, 0770)
 	os.MkdirAll(storage.capsPath, 0770)

@@ -1,10 +1,10 @@
 .PHONY : all
 
 all:
-	build/create_environment.sh
+	build/install.sh
 
 clean:
 	rm -rf build/go_workspace
 	rm -rf eth/build
 	rm -rf eth/gen
-	rm filetribe
+	rm build/bin/filetribe

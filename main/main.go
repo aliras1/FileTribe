@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
-	"fmt"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/chequebook"
@@ -20,16 +20,17 @@ import (
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
-var (
-	host           = "0.0.0.0"
-	port           = "3333"
-	ipfsAPIAddress = "http://127.0.0.1:5001"
-	//ethWSAddress   = "ws://127.0.0.1:8001"
-	password = "pwd"
-	ethWSAddress   = "ws://172.18.0.2:8001"
-	ethKeyPath = "../misc/eth/ethkeystore/UTC--2018-05-19T19-06-19.498239404Z--c4f45f1822b614116ea5b68d4020f3ae1a0179e5"
-	contractAddress = "0x41cf9ED28C99cC5eBd531bD1929a7E99c122fED8"
-)
+type Config struct {
+	APIAddress string
+	IpfsAPIAddress string
+	EthFullNodeAddress string
+	EthAccountKeyPath string
+	EthAccountPasswordFilePath string
+	FileTribeDAppAddress string
+	LogLevel string
+}
+
+const configPath = "./config.json"
 
 var client ipfs_share.IUserFacade
 var ipfs ipfsapi.IIpfs
@@ -41,7 +42,6 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 
 	username := params["username"]
 	err := client.SignUp(username)
-	glog.Flush()
 	if err != nil {
 		errorHandler(w, r, fmt.Sprintf("could not sign up: %s: %s", username, err))
 		return
@@ -339,15 +339,37 @@ func errorHandler(w http.ResponseWriter, r *http.Request, msg string) {
 	w.Write([]byte(msg))
 }
 
-func startDaemon(ethKeyPath string, ipfsApiAddress string, ethFullNodeAddress string, port string) {
-	auth, err := ipfs_share.NewAuth(ethKeyPath, password)
+func startDaemon() {
+	var config Config
+
+	jsonBytes, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		panic(fmt.Sprintf("could not read config file: %s", err))
+	}
+
+	if err := json.Unmarshal(jsonBytes, &config); err != nil {
+		panic(fmt.Sprintf("could not unmarshal config json: %s", err))
+	}
+
+	passwordBytes, err := ioutil.ReadFile(config.EthAccountPasswordFilePath)
+	if err != nil {
+		panic(fmt.Sprintf("could not read password file: %s", err))
+	}
+
+	password := strings.Replace(string(passwordBytes), "\n", "", -1)
+
+	if err := flag.Set("stderrthreshold", config.LogLevel); err != nil {
+		panic(fmt.Sprintf("could not set log level: %s", err))
+	}
+
+	auth, err := ipfs_share.NewAuth(config.EthAccountKeyPath, password)
 	if err != nil {
 		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
 	}
 
-	ipfs = ipfsapi.NewIpfs(ipfsApiAddress)
+	ipfs = ipfsapi.NewIpfs(config.IpfsAPIAddress)
 
-	ethNode, err := ethclient.Dial(ethFullNodeAddress)
+	ethNode, err := ethclient.Dial(config.EthFullNodeAddress)
 	if err != nil {
 		if err != nil {
 			panic(fmt.Sprintf("could not connect to ethereum node: %s", err))
@@ -357,12 +379,12 @@ func startDaemon(ethKeyPath string, ipfsApiAddress string, ethFullNodeAddress st
 	client, err = ipfs_share.NewUserContext(
 		auth,
 		ethNode,
-		ethcommon.HexToAddress(contractAddress),
+		ethcommon.HexToAddress(config.FileTribeDAppAddress),
 		ipfs,
 		"2001",
 	)
 	if err != nil {
-		panic(fmt.Sprintf("could not signup: %s", err))
+		panic(fmt.Sprintf("could not create user context: %s", err))
 	}
 
 	router := mux.NewRouter()
@@ -384,7 +406,7 @@ func startDaemon(ethKeyPath string, ipfsApiAddress string, ethFullNodeAddress st
 	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")
 	router.HandleFunc("/ls/tx", listTransactions).Methods("GET")
 
-	glog.Fatal(http.ListenAndServe(host+":"+port, router))
+	glog.Fatal(http.ListenAndServe(config.APIAddress, router))
 }
 
 func usage() {
@@ -430,8 +452,6 @@ func printHelpAndExit(message string) {
 }
 
 func main() {
-	var err error
-
 	fileTribeUrl := flag.String("a", "http://127.0.0.1:3333", "")
 
 	flag.Usage = usage
@@ -442,70 +462,58 @@ func main() {
 		printHelpAndExit("No command found")
 	}
 
-	request := *fileTribeUrl
+	var (
+		request *http.Request
+		err error
+	)
+	url := *fileTribeUrl
 	command := args[0]
 	args = args[1:]
 
 	switch command {
 	case "signup":
-		if len(args) < 2 {
+		if len(args) < 1 {
 			printHelpAndExit("No username found")
 		}
-		request += "/" + command + "/" + args[0]
+		url += "/" + command + "/" + args[0]
+		request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
+		if err != nil {
+			panic(fmt.Sprintf("Could not create http request: %s", err))
+		}
 
 	case "ls":
-		if len(args) < 2 {
+		if len(args) < 1 {
 			printHelpAndExit("You must specify what to list {-g|-i|-tx} (groups, pending invitations, pending transactions)")
 		}
 
-		found := false
-		split := strings.Split(args[0], "-")
-		if len(split) < 2 {
+		switch args[0] {
+		case "-g":
+			url += "/" + command + "/groups"
+
+		case "-i":
+			url += "/" + command + "/invs"
+
+		case "-tx":
+			url += "/" + command + "/tx"
+
+		default:
 			printHelpAndExit("Argument must be one of {-g|-i|-tx}")
 		}
 
-		for _, opt := range []string{"g", "i", "tx"} {
-			if strings.EqualFold(opt, split[0]) {
-				request += "/" + command + "/" + opt
-				found = true
-				break
-			}
-		}
-		if !found {
-			printHelpAndExit("Argument must be one of {-g|-i|-tx}")
+		request, err = http.NewRequest("GET", url, bytes.NewBuffer(nil))
+		if err != nil {
+			panic(fmt.Sprintf("Could not create http request: %s", err))
 		}
 
 	case "daemon":
-		fmt.Println(args)
-		if len(args) < 1 {
-			printHelpAndExit("No path to the Ethereum account key file found")
-		}
-
-		ethKeyPath = args[0]
-
-		for _, arg := range args[1:] {
-			split := strings.Split(arg, "=")
-			if len(split) < 2 {
-				printHelpAndExit(fmt.Sprintf("Invalid option: %s", arg))
-			}
-
-			opt, value := split[0], split[1]
-
-			switch opt {
-			case "-ipfs": ipfsAPIAddress = value
-			case "-eth": ethWSAddress = value
-			case "-p": port = value
-			}
-
-			startDaemon(ethKeyPath, ipfsAPIAddress, ethWSAddress, port)
-		}
+		startDaemon()
 
 	case "group":
 		if len(args) < 1 {
 			printHelpAndExit("No group sub-command found")
 		}
 
-		request += "/" + command
+		url += "/" + command
 		subcommand := args[0]
 		args = args[1:]
 
@@ -515,66 +523,112 @@ func main() {
 				printHelpAndExit("No group name found")
 			}
 
-			request += "/" + subcommand + "/" + args[0]
+			url += "/" + subcommand
+			request, err = http.NewRequest("POST", url, bytes.NewBuffer([]byte(fmt.Sprintf(`"%s"`, args[0]))))
+			if err != nil {
+				panic(fmt.Sprintf("Could not create http request: %s", err))
+			}
+			request.Header.Set("Content-Type", "application/json")
 
 		case "invite":
 			if len(args) < 2 {
 				printHelpAndExit("Not enough arguments")
 			}
 
-			request += "/" + subcommand + "/" + args[0] + "/" + args[1]
+			url += "/" + subcommand + "/" + args[0]
+			request, err = http.NewRequest("POST", url, bytes.NewBuffer([]byte(fmt.Sprintf(`"%s"`, args[1]))))
+			if err != nil {
+				panic(fmt.Sprintf("Could not create http request: %s", err))
+			}
+			request.Header.Set("Content-Type", "application/json")
 
 		case "leave":
-			fallthrough
+			if len(args) < 1 {
+				printHelpAndExit("No group argument found")
+			}
+
+			url += "/" + subcommand + "/" + args[0]
+			request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
+			if err != nil {
+				panic(fmt.Sprintf("Could not create http request: %s", err))
+			}
+			request.Header.Set("Content-Type", "application/json")
 
 		case "ls":
 			if len(args) < 1 {
 				printHelpAndExit("No group argument found")
 			}
 
-			request += "/" + subcommand + "/" + args[0]
+			url += "/" + subcommand + "/" + args[0]
+			request, err = http.NewRequest("GET", url, bytes.NewBuffer(nil))
+			if err != nil {
+				panic(fmt.Sprintf("Could not create http request: %s", err))
+			}
 
 		case "repo":
 			if len(args) < 2 {
 				printHelpAndExit("Not enough arguments")
 			}
 
-			request += "/" + subcommand + "/" + args[0]
+			url += "/" + subcommand + "/" + args[0]
 
 			subSubCommand := args[0]
 			args = args[1:]
 
 			switch subSubCommand {
 			case "ls":
-				fallthrough
+				url += "/" + subSubCommand + "/" + args[0]
+				request, err = http.NewRequest("GET", url, bytes.NewBuffer(nil))
+				if err != nil {
+					panic(fmt.Sprintf("Could not create http request: %s", err))
+				}
+				request.Header.Set("Content-Type", "application/json")
 
 			case "commit":
-				request += "/" + subSubCommand
+				url += "/" + subSubCommand + "/" + args[0]
+				request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
+				if err != nil {
+					panic(fmt.Sprintf("Could not create http request: %s", err))
+				}
+				request.Header.Set("Content-Type", "application/json")
 
 			case "grant":
 				fallthrough
 
 			case "revoke":
-				if len(args) < 2 {
+				if len(args) < 3 {
 					printHelpAndExit("Not enough arguments")
 				}
 
-				request += "/" + subSubCommand + "/" + args[0] + "/" + args[1]
+				url += "/" + subSubCommand + "/" + args[0] + "/" + args[1] + "/" + args[2]
+				request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
+				if err != nil {
+					panic(fmt.Sprintf("Could not create http request: %s", err))
+				}
+				request.Header.Set("Content-Type", "application/json")
 			}
 		}
+
+	default:
+		printHelpAndExit("Unknown command")
 	}
 
-	resp, err := http.Get(*fileTribeUrl)
-	if err != nil {
-		fmt.Println(err)
-	} else {
+	if !strings.EqualFold(command, "daemon") {
+		fmt.Printf("requesting: %s\n", url)
+
+
+		client := &http.Client{}
+		resp, err := client.Do(request)
+		if err != nil {
+			panic(fmt.Sprintf("Could not send http request: %s", err))
+		}
+		defer resp.Body.Close()
+
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			fmt.Println(err)
-			return
+			panic(fmt.Sprintf("could not read http response body: %s", err))
 		}
 
 		fmt.Println(string(body))
 	}
-	defer resp.Body.Close()
 }

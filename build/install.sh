@@ -4,16 +4,16 @@ type truffle >/dev/null 2>&1 || { echo >&2 "I require Truffle but it's not insta
 
 echo [*] Creating environment...
 
-ws=./build/go_workspace
-mkdir -p ${ws}
-cd ${ws}
-export GOPATH=$PWD
-
-root=./src/github.com/aliras1/
-mkdir -p ${root}
-cd ${root}
-ln -s ../../../../../. FileTribe
-cd ../../../../../
+#ws=./build/go_workspace
+#mkdir -p ${ws}
+#cd ${ws}
+#export GOPATH=$PWD
+#
+#root=./src/github.com/aliras1/
+#mkdir -p ${root}
+#cd ${root}
+#ln -s ../../../../../. FileTribe
+#cd ../../../../../
 
 echo [*] Getting dependencies...
 
@@ -31,10 +31,19 @@ echo [*] Getting dependencies...
 
 echo [*] Generating abi APIs...
 
-cd ./eth
-./compile.sh
+#cd ./eth
+#./compile.sh
+#
+#echo [*] Building FileTribe...
+#
+#cd ../
+mkdir ./build/bin
 
-echo [*] Building FileTribe...
+cd ./main
+go build -o ../build/bin/filetribe main.go
 
-cd ../main
-go build -o ../filetribe main.go
+cd ../
+ln -s $PWD/build/bin/filetribe $HOME/.local/bin/filetribe
+
+mkdir $HOME/.filetribe
+cp ./config.json $HOME/.filetribe/

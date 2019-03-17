@@ -1,4 +1,4 @@
-var Dipfshare = artifacts.require("./Dipfshare.sol");
+var FileTribeDApp = artifacts.require("./FileTribeDApp.sol");
 var AccountFactory = artifacts.require("./factory/AccountFactory.sol");
 var GroupFactory = artifacts.require("./factory/GroupFactory.sol");
 var ConsensusFactory = artifacts.require("./factory/ConsensusFactory.sol");
@@ -9,14 +9,14 @@ module.exports = function(deployer) {
     var groupFactory;
     var consFactory;
 
-    deployer.deploy(Dipfshare).then(() => {
+    deployer.deploy(FileTribeDApp).then(() => {
         return deployer.deploy(GroupFactory, {gas: 4700000});
     }).then(() => {
         return deployer.deploy(ConsensusFactory);
     }).then(() => {
         return deployer.deploy(AccountFactory);
     }).then(() => {
-        return Dipfshare.deployed();
+        return FileTribeDApp.deployed();
     }).then((instance) => {
         app = instance;
         return AccountFactory.deployed();
