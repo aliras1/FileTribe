@@ -130,9 +130,9 @@ OPTIONS:
 
 FileTribe is licensed under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html), also found in the `COPYING` file in the root of the repository.
 
-#####Used libraries
+##### Used libraries
 
-| Library       | Author(s)        | License  |
+| Library       | Author(s)  | License  |
 | ------------- |:----------:| --------:|
 | [collections](https://github.com/golang-collections/collections)      | 2012 Caleb Doxsey | [MIT License](https://opensource.org/licenses/MIT) |
 | [go-diff](https://github.com/sergi/go-diff)      | 2012-2016 The go-diff [Authors](https://github.com/sergi/go-diff/blob/master/AUTHORS)      |   [MIT License](https://opensource.org/licenses/MIT) |
