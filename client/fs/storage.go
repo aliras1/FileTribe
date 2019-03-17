@@ -7,13 +7,15 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"github.com/golang/glog"
-	ipfsapi "ipfs-share/ipfs"
-	"ipfs-share/utils"
-
-	"ipfs-share/crypto"
-	"github.com/pkg/errors"
 	"bytes"
+
+	"github.com/golang/glog"
+	"github.com/pkg/errors"
+
+	"github.com/aliras1/FileTribe/client/fs/caps"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/utils"
 )
 
 const (
@@ -42,8 +44,10 @@ type Storage struct {
 
 // NewStorage creates the directory structure
 func NewStorage(dataPath string) *Storage {
+	glog.Info(dataPath)
+
 	var storage Storage
-	storage.dataPath = "./" + path.Clean(dataPath + "/data") + "/"
+	storage.dataPath = dataPath + "/data/"
 	storage.publicPath = storage.dataPath + "public/"
 	storage.publicFilesPath = storage.dataPath + "public/files/"
 	storage.publicForPath = storage.dataPath + "public/for/"
@@ -57,7 +61,7 @@ func NewStorage(dataPath string) *Storage {
 	storage.tmpPath = storage.dataPath + "userdata/tmp/"
 	storage.contextDataPath = storage.dataPath + "userdata/context/"
 
-	os.Mkdir(storage.dataPath, 0770)
+	os.MkdirAll(storage.dataPath, 0770)
 	os.MkdirAll(storage.publicFilesPath, 0770)
 	os.MkdirAll(storage.publicForPath, 0770)
 	os.MkdirAll(storage.capsPath, 0770)
@@ -94,6 +98,26 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) error
 	return utils.CopyFile(filePath, newFilePath)
 }
 
+func (storage *Storage) SaveAccountData(data []byte) error {
+	path := storage.userDataPath + "account.dat"
+
+	if err := utils.WriteFile(path, data); err != nil {
+		return errors.Wrapf(err, "could not write to file: %s", path)
+	}
+
+	return nil
+}
+
+func (storage *Storage) LoadAccountData() ([]byte, error) {
+	path := storage.userDataPath + "account.dat"
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not read file: %s", path)
+	}
+
+	return data, nil
+}
 
 // +------------------------------+
 // |   Group specific functions   |
@@ -101,12 +125,12 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) error
 
 // Gets all the locally stored group access capabilities from
 // directory data/userdata/caps/GA/
-func (storage *Storage) GetGroupCaps() ([]GroupAccessCap, error) {
-	var caps []GroupAccessCap
+func (storage *Storage) GetGroupCaps() ([]caps.GroupAccessCap, error) {
+	var capabilities []caps.GroupAccessCap
 	// read capabilities from caps and try to refresh them
 	groupCapFiles, err := ioutil.ReadDir(storage.capsGAPath)
 	if err != nil {
-		return caps, err
+		return capabilities, err
 	}
 	for _, groupCapFile := range groupCapFiles {
 		if groupCapFile.IsDir() {
@@ -118,15 +142,29 @@ func (storage *Storage) GetGroupCaps() ([]GroupAccessCap, error) {
 			glog.Warning("could not read file '%s': Storage.GetGroupCaps: %s", filePath, err)
 			continue
 		}
-		var cap GroupAccessCap
+		var cap caps.GroupAccessCap
 		if err := json.Unmarshal(capBytes, &cap); err != nil {
 			glog.Warning("could not unmarshal group cap: Storage.GetGroupCaps: %s", err)
 			continue
 		}
 		cap.Boxer.RNG = rand.Reader
-		caps = append(caps, cap)
+		capabilities = append(capabilities, cap)
 	}
-	return caps, nil
+	return capabilities, nil
+}
+
+func (storage *Storage) SaveGroupAccessCap(cap *caps.GroupAccessCap) error {
+	capJson, err := json.Marshal(cap)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal group access capability")
+	}
+
+	path := storage.GroupAccessCapDir() + cap.Address.String() + CAP_EXT
+	if err := utils.WriteFile(path, capJson); err != nil {
+		return errors.Wrap(err, "could not write group cap file")
+	}
+
+	return nil
 }
 
 func (storage *Storage) GroupAccessCapDir() string {
@@ -160,7 +198,7 @@ func (storage *Storage) DownloadTmpFile(ipfsHash string, ipfs ipfsapi.IIpfs) (st
 	return filePath, nil
 }
 
-func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer crypto.SymmetricKey, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
+func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer tribecrypto.SymmetricKey, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
 	path := storage.tmpPath + ipfsHash
 	if err := ipfs.Get(ipfsHash, path); err != nil {
 		return nil, errors.Wrapf(err, "could not ipfs get ipfs hash %s", ipfsHash)
@@ -184,7 +222,7 @@ func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer crypto.Symmetri
 	return data, nil
 }
 
-func (storage *Storage) DownloadAndDecryptWithFileBoxer(boxer crypto.FileBoxer, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
+func (storage *Storage) DownloadAndDecryptWithFileBoxer(boxer tribecrypto.FileBoxer, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
 	tmpFilePath, err := storage.DownloadTmpFile(ipfsHash, ipfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not ipfs get '%s'", ipfsHash)

@@ -2,9 +2,10 @@ package collections
 
 import (
 	"bytes"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"encoding/base64"
 	"strings"
+
+	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
 type IIdentifier interface {

@@ -12,6 +12,8 @@ ipfs config --json Experimental.Libp2pStreamMounting true
 cd /mounted
 mkdir $last_num
 
+sleep 10
+
 echo "[*] Program started"
 
-./main -stderrthreshold=INFO -log_dir=./$last_num
+./main ./eth.key -stderrthreshold=INFO -log_dir=./$last_num

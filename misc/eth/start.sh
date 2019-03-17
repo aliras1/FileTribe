@@ -1,5 +1,9 @@
 echo "pwd" > /password
 
+cd /ethcode
+npm rebuild scrypt --update-binary
+#npm install -g scrypt
+
 mkdir /devnet
 
 echo "[*] Initializing..."
@@ -13,8 +17,9 @@ echo "[*] Network is up"
 echo "[*] Deyploying contract..."
 
 cd /ethcode
-truffle compile
-truffle migrate --network development
+
+truffle compile --reset --all
+truffle migrate --reset --network development
 
 echo "[*] Contract deployed"
 

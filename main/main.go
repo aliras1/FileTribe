@@ -1,108 +1,86 @@
 package main
 
 import (
-	"encoding/base64"
+	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/chequebook"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 
-	ipfs_share "ipfs-share/client"
-	nw "ipfs-share/network"
-	ipfsapi "ipfs-share/ipfs"
-	"fmt"
-	"ipfs-share/collections"
+	ipfs_share "github.com/aliras1/FileTribe/client"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
-const (
-	host           = "0.0.0.0"
-	port           = "3333"
-	ipfsAPIAddress = "http://127.0.0.1:5001"
-	//ethWSAddress   = "ws://127.0.0.1:8001"
-	ethWSAddress   = "ws://172.18.0.2:8001"
-	// ethKeyPath = "../misc/eth/ethkeystore/UTC--2018-05-19T19-06-19.498239404Z--c4f45f1822b614116ea5b68d4020f3ae1a0179e5"
-	contractAddress = "0x41cf9ed28c99cc5ebd531bd1929a7e99c122fed8"
-)
-
-var client ipfs_share.IUserFacade
-var network nw.INetwork
-var ipfs ipfsapi.IIpfs
-
-func stringToAddress(addressString string) ethcommon.Address {
-	addressBytes := ethcommon.FromHex(addressString)
-	address := ethcommon.BytesToAddress(addressBytes)
-
-	return address
+type Config struct {
+	APIAddress string
+	IpfsAPIAddress string
+	EthFullNodeAddress string
+	EthAccountKeyPath string
+	EthAccountPasswordFilePath string
+	FileTribeDAppAddress string
+	LogLevel string
 }
 
+const configPath = "./config.json"
+
+var client ipfs_share.IUserFacade
+var ipfs ipfsapi.IIpfs
+var ethNode chequebook.Backend
+var auth *ipfs_share.Auth
+
 func signUp(w http.ResponseWriter, r *http.Request) {
-	if client != nil {
-		client.SignOut()
-		client = nil
-	}
-
 	params := mux.Vars(r)
-	var err error
 
-	var ethKeyPath string
-	json.NewDecoder(r.Body).Decode(&ethKeyPath)
-	
-	network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
+	username := params["username"]
+	err := client.SignUp(username)
 	if err != nil {
-		errorHandler (w, r, fmt.Sprintf( "could not connect to ethereum network: %s", err))
+		errorHandler(w, r, fmt.Sprintf("could not sign up: %s: %s", username, err))
 		return
-	}
-
-	client, err = ipfs_share.NewUserContextFromSignUp(
-		params["username"],
-		params["password"],
-		ethKeyPath,
-		params["username"], // data directory
-		network,
-		ipfs,
-		"2001",
-	)
-	if err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not signup: %s", err))
 	}
 }
 
 func signIn(w http.ResponseWriter, r *http.Request) {
-	if client != nil {
-		client.SignOut()
-		client = nil
-	}
-
-	params := mux.Vars(r)
-	var err error
-
-	var ethKeyPath string
-	if err := json.NewDecoder(r.Body).Decode(&ethKeyPath); err != nil {
-		errorHandler(w, r, "could not decode ethkeypath")
-		return
-	}
-	
-	network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
-	if err != nil {
-		errorHandler(w, r, fmt.Sprintf("could not connect to ethereum network: %s", err))
-		return
-	}
-
-	client, err = ipfs_share.NewUserContextFromSignIn(
-		params["username"],
-		params["password"],
-		ethKeyPath,
-		params["username"], // data directory
-		network,
-		ipfs,
-		"2001",
-	)
-	if err != nil {
-		glog.Error(err)
-	}
+	//if client != nil {
+	//	client.SignOut()
+	//	client = nil
+	//}
+	//
+	//params := mux.Vars(r)
+	//var err error
+	//
+	//var ethKeyPath string
+	//if err := json.NewDecoder(r.Body).Decode(&ethKeyPath); err != nil {
+	//	errorHandler(w, r, "could not decode ethkeypath")
+	//	return
+	//}
+	//
+	//network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
+	//if err != nil {
+	//	errorHandler(w, r, fmt.Sprintf("could not connect to ethereum network: %s", err))
+	//	return
+	//}
+	//
+	//client, err = ipfs_share.NewUserContextFromSignIn(
+	//	params["username"],
+	//	params["password"],
+	//	ethKeyPath,
+	//	params["username"], // data directory
+	//	network,
+	//	ipfs,
+	//	"2001",
+	//)
+	//if err != nil {
+	//	glog.Error(err)
+	//}
 }
 
 func signOut(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +110,23 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func joinGroup(w http.ResponseWriter, r *http.Request) {
+	if client == nil {
+		errorHandler(w, r, "user context is null")
+		return
+	}
+
+	var groupAddressStr string
+	if err := json.NewDecoder(r.Body).Decode(&groupAddressStr); err != nil {
+		errorHandler(w, r, "argument not found")
+		return
+	}
+
+	if err := client.AcceptInvitation(ethcommon.HexToAddress(groupAddressStr)); err != nil {
+		errorHandler(w, r, err.Error())
+	}
+}
+
 func invite(w http.ResponseWriter, r *http.Request) {
 	if client == nil {
 		errorHandler(w, r, "user context is null")
@@ -139,13 +134,7 @@ func invite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 
 	var member string
 	if err := json.NewDecoder(r.Body).Decode(&member); err != nil {
@@ -153,11 +142,33 @@ func invite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	address := ethcommon.HexToAddress(member)
+	glog.Infof("inviting address: %s", address.String())
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			if err := group.Invite(address, true); err != nil {
 				errorHandler(w, r, fmt.Sprintf("could not invite user: %s", err.Error()))
+			}
+			return
+		}
+	}
+
+	errorHandler(w, r, "no group found")
+}
+
+func leave(w http.ResponseWriter, r *http.Request) {
+	if client == nil {
+		errorHandler(w, r, "user context is null")
+		return
+	}
+
+	params := mux.Vars(r)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
+
+	for _, group := range client.Groups() {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
+			if err := group.Leave(); err != nil {
+				errorHandler(w, r, fmt.Sprintf("could not leave group: %s", err.Error()))
 			}
 			return
 		}
@@ -176,16 +187,10 @@ func groupRepoCommit(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&path)
 
 	params := mux.Vars(r)
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			if err := group.CommitChanges(); err != nil {
 				errorHandler(w, r, fmt.Sprintf("could not add group file: %s", err.Error()))
 			}
@@ -203,16 +208,10 @@ func groupRepoListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			list := group.ListFiles()
 
 			if err := json.NewEncoder(w).Encode(list); err != nil {
@@ -232,16 +231,10 @@ func groupListMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			var list []string
 			for _, address := range group.ListMembers() {
 				list = append(list, address.String())
@@ -267,20 +260,12 @@ func groupRepoGrantWriteAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
-
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 	file := params["file"]
 	address := ethcommon.HexToAddress(params["member"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			if err := group.GrantWriteAccess(file, address); err != nil {
 				errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
 			}
@@ -299,20 +284,12 @@ func groupRepoRevokeWriteAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-
-	groupIdArray, err := base64.URLEncoding.DecodeString(params["groupId"])
-	if err != nil {
-		errorHandler(w, r, "no group id found")
-		return
-	}
-	var groupId [32]byte
-	copy(groupId[:], groupIdArray)
-
+	groupAddress := ethcommon.HexToAddress(params["groupAddress"])
 	file := params["file"]
 	address := ethcommon.HexToAddress(params["member"])
 
 	for _, group := range client.Groups() {
-		if group.Id().Equal(collections.NewBytesId(groupId)) {
+		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
 			if err := group.RevokeWriteAccess(file, address); err != nil {
 				errorHandler(w, r, fmt.Sprintf("could not grant write access: %s", err))
 			}
@@ -332,7 +309,7 @@ func lsGroups(w http.ResponseWriter, r *http.Request) {
 
 	var list []string
 	for _, group := range client.Groups() {
-		list = append(list, group.Id().ToString())
+		list = append(list, group.Address().String())
 	}
 
 	if err := json.NewEncoder(w).Encode(list); err != nil {
@@ -362,27 +339,298 @@ func errorHandler(w http.ResponseWriter, r *http.Request, msg string) {
 	w.Write([]byte(msg))
 }
 
-func main() {
-	flag.Parse()
+func startDaemon() {
+	var config Config
 
-	ipfs = ipfsapi.NewIpfs(ipfsAPIAddress)
+	jsonBytes, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		panic(fmt.Sprintf("could not read config file: %s", err))
+	}
+
+	if err := json.Unmarshal(jsonBytes, &config); err != nil {
+		panic(fmt.Sprintf("could not unmarshal config json: %s", err))
+	}
+
+	passwordBytes, err := ioutil.ReadFile(config.EthAccountPasswordFilePath)
+	if err != nil {
+		panic(fmt.Sprintf("could not read password file: %s", err))
+	}
+
+	password := strings.Replace(string(passwordBytes), "\n", "", -1)
+
+	if err := flag.Set("stderrthreshold", config.LogLevel); err != nil {
+		panic(fmt.Sprintf("could not set log level: %s", err))
+	}
+
+	auth, err := ipfs_share.NewAuth(config.EthAccountKeyPath, password)
+	if err != nil {
+		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
+	}
+
+	ipfs = ipfsapi.NewIpfs(config.IpfsAPIAddress)
+
+	ethNode, err := ethclient.Dial(config.EthFullNodeAddress)
+	if err != nil {
+		if err != nil {
+			panic(fmt.Sprintf("could not connect to ethereum node: %s", err))
+		}
+	}
+
+	client, err = ipfs_share.NewUserContext(
+		auth,
+		ethNode,
+		ethcommon.HexToAddress(config.FileTribeDAppAddress),
+		ipfs,
+		"2001",
+	)
+	if err != nil {
+		panic(fmt.Sprintf("could not create user context: %s", err))
+	}
 
 	router := mux.NewRouter()
-	
-	router.HandleFunc("/signup/{username}/{password}", signUp).Methods("POST")
-	router.HandleFunc("/signin/{username}/{password}", signIn).Methods("POST")
+
+	router.HandleFunc("/signup/{username}", signUp).Methods("POST")
+	router.HandleFunc("/signin/{username}", signIn).Methods("POST")
 	router.HandleFunc("/signout", signOut).Methods("GET")
-	
+
 	router.HandleFunc("/group/create", createGroup).Methods("POST")
-	router.HandleFunc("/group/invite/{groupId}", invite).Methods("POST")
-	router.HandleFunc("/group/ls/{groupId}", groupListMembers).Methods("GET")
-	router.HandleFunc("/group/repo/commit/{groupId}", groupRepoCommit).Methods("POST")
-	router.HandleFunc("/group/repo/ls/{groupId}", groupRepoListFiles).Methods("GET")
-	router.HandleFunc("/group/repo/grant/{groupId}/{file}/{member}", groupRepoGrantWriteAccess).Methods("POST")
-	router.HandleFunc("/group/repo/revoke/{groupId}/{file}/{member}", groupRepoRevokeWriteAccess).Methods("POST")
+	router.HandleFunc("/group/join", joinGroup).Methods("POST")
+	router.HandleFunc("/group/invite/{groupAddress}", invite).Methods("POST")
+	router.HandleFunc("/group/leave/{groupAddress}", leave).Methods("POST")
+	router.HandleFunc("/group/ls/{groupAddress}", groupListMembers).Methods("GET")
+	router.HandleFunc("/group/repo/commit/{groupAddress}", groupRepoCommit).Methods("POST")
+	router.HandleFunc("/group/repo/ls/{groupAddress}", groupRepoListFiles).Methods("GET")
+	router.HandleFunc("/group/repo/grant/{groupAddress}/{file}/{member}", groupRepoGrantWriteAccess).Methods("POST")
+	router.HandleFunc("/group/repo/revoke/{groupAddress}/{file}/{member}", groupRepoRevokeWriteAccess).Methods("POST")
 
 	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")
 	router.HandleFunc("/ls/tx", listTransactions).Methods("GET")
-	
-	glog.Fatal(http.ListenAndServe(host+":"+port, router))
+
+	glog.Fatal(http.ListenAndServe(config.APIAddress, router))
+}
+
+func usage() {
+	fmt.Print(`FileTribe
+
+USAGE:
+  filetribe <command> ...
+
+COMMANDS: 
+  BASIC COMMANDS:
+    signup <username>                           Sign up to FileTribe    
+    ls {-g|-i|-tx}                              List groups, pending invitations or pending Ethereum transactions
+    daemon                                      Start a running client daemon process (configured from $HOME/.filetribe/config.json)                                                
+    group                                       Interact with groups
+
+  GROUP COMMANDS:
+    create <groupname>                          Create a group
+    invite <group address> <invitee address>    Invite a new member to the given group
+    leave  <group address>                      Leave the given group
+    ls <group address>                          List group members
+    repo ...                                    Interact with the group repository
+
+  REPO COMMANDS:
+    ls <group address>                          List files
+    commit <group address>                      Commit the pending changes in the repository
+    grant <group address> <file> <member>       Grant write access for the given file to the given user
+    revoke <group address> <file> <member>      Revoke write access for the given file to the given user
+
+  CONFIG.JSON OPTIONS:
+    APIAddress                                  Address on which the daemon will be listening    
+    IpfsAPIAddress                              http address of a running IPFS daemon's API
+    EthFullNodeAddress                          websocket address of an Ethereum full node
+    EthAccountKeyPath                           Path to an Ethereum account key file
+    EthAccountPasswordFilePath                  Path to the password file of the corresponding Ethereum account
+    FileTribeDAppAddress                        Address of the FileTribeDApp contract
+    LogLevel {INFO|WARNING|ERROR}               Level of logs that will be printed to stdout                                   
+
+OPTIONS:
+  -h --help                                     Show this screen`)
+}
+
+func printHelpAndExit(message string) {
+	fmt.Printf("%s\nUse 'filetribe --help' to learn more about its usage.\n", message)
+	os.Exit(1)
+}
+
+func main() {
+	fileTribeUrl := flag.String("a", "http://127.0.0.1:3333", "")
+
+	flag.Usage = usage
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 1 {
+		printHelpAndExit("No command found")
+	}
+
+	var (
+		request *http.Request
+		err error
+	)
+	url := *fileTribeUrl
+	command := args[0]
+	args = args[1:]
+
+	switch command {
+	case "signup":
+		if len(args) < 1 {
+			printHelpAndExit("No username found")
+		}
+		url += "/" + command + "/" + args[0]
+		request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
+		if err != nil {
+			panic(fmt.Sprintf("Could not create http request: %s", err))
+		}
+
+	case "ls":
+		if len(args) < 1 {
+			printHelpAndExit("You must specify what to list {-g|-i|-tx} (groups, pending invitations, pending transactions)")
+		}
+
+		switch args[0] {
+		case "-g":
+			url += "/" + command + "/groups"
+
+		case "-i":
+			url += "/" + command + "/invs"
+
+		case "-tx":
+			url += "/" + command + "/tx"
+
+		default:
+			printHelpAndExit("Argument must be one of {-g|-i|-tx}")
+		}
+
+		request, err = http.NewRequest("GET", url, bytes.NewBuffer(nil))
+		if err != nil {
+			panic(fmt.Sprintf("Could not create http request: %s", err))
+		}
+
+	case "daemon":
+		startDaemon()
+
+	case "group":
+		if len(args) < 1 {
+			printHelpAndExit("No group sub-command found")
+		}
+
+		url += "/" + command
+		subcommand := args[0]
+		args = args[1:]
+
+		switch subcommand {
+		case "create":
+			if len(args) < 1 {
+				printHelpAndExit("No group name found")
+			}
+
+			url += "/" + subcommand
+			request, err = http.NewRequest("POST", url, bytes.NewBuffer([]byte(fmt.Sprintf(`"%s"`, args[0]))))
+			if err != nil {
+				panic(fmt.Sprintf("Could not create http request: %s", err))
+			}
+			request.Header.Set("Content-Type", "application/json")
+
+		case "invite":
+			if len(args) < 2 {
+				printHelpAndExit("Not enough arguments")
+			}
+
+			url += "/" + subcommand + "/" + args[0]
+			request, err = http.NewRequest("POST", url, bytes.NewBuffer([]byte(fmt.Sprintf(`"%s"`, args[1]))))
+			if err != nil {
+				panic(fmt.Sprintf("Could not create http request: %s", err))
+			}
+			request.Header.Set("Content-Type", "application/json")
+
+		case "leave":
+			if len(args) < 1 {
+				printHelpAndExit("No group argument found")
+			}
+
+			url += "/" + subcommand + "/" + args[0]
+			request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
+			if err != nil {
+				panic(fmt.Sprintf("Could not create http request: %s", err))
+			}
+			request.Header.Set("Content-Type", "application/json")
+
+		case "ls":
+			if len(args) < 1 {
+				printHelpAndExit("No group argument found")
+			}
+
+			url += "/" + subcommand + "/" + args[0]
+			request, err = http.NewRequest("GET", url, bytes.NewBuffer(nil))
+			if err != nil {
+				panic(fmt.Sprintf("Could not create http request: %s", err))
+			}
+
+		case "repo":
+			if len(args) < 2 {
+				printHelpAndExit("Not enough arguments")
+			}
+
+			url += "/" + subcommand + "/" + args[0]
+
+			subSubCommand := args[0]
+			args = args[1:]
+
+			switch subSubCommand {
+			case "ls":
+				url += "/" + subSubCommand + "/" + args[0]
+				request, err = http.NewRequest("GET", url, bytes.NewBuffer(nil))
+				if err != nil {
+					panic(fmt.Sprintf("Could not create http request: %s", err))
+				}
+				request.Header.Set("Content-Type", "application/json")
+
+			case "commit":
+				url += "/" + subSubCommand + "/" + args[0]
+				request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
+				if err != nil {
+					panic(fmt.Sprintf("Could not create http request: %s", err))
+				}
+				request.Header.Set("Content-Type", "application/json")
+
+			case "grant":
+				fallthrough
+
+			case "revoke":
+				if len(args) < 3 {
+					printHelpAndExit("Not enough arguments")
+				}
+
+				url += "/" + subSubCommand + "/" + args[0] + "/" + args[1] + "/" + args[2]
+				request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
+				if err != nil {
+					panic(fmt.Sprintf("Could not create http request: %s", err))
+				}
+				request.Header.Set("Content-Type", "application/json")
+			}
+		}
+
+	default:
+		printHelpAndExit("Unknown command")
+	}
+
+	if !strings.EqualFold(command, "daemon") {
+		fmt.Printf("requesting: %s\n", url)
+
+
+		client := &http.Client{}
+		resp, err := client.Do(request)
+		if err != nil {
+			panic(fmt.Sprintf("Could not send http request: %s", err))
+		}
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(fmt.Sprintf("could not read http response body: %s", err))
+		}
+
+		fmt.Println(string(body))
+	}
 }

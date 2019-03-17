@@ -1,26 +1,26 @@
 package fs
 
 import (
-	"encoding/base64"
+	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"path"
+	"strings"
+	"sync"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-
-	ipfsapi "ipfs-share/ipfs"
-	"ipfs-share/collections"
-	"github.com/pkg/errors"
-	"ipfs-share/utils"
-	"bytes"
-	"github.com/getlantern/deepcopy"
-	"sync"
-	"strings"
-	"github.com/sergi/go-diff/diffmatchpatch"
-	"ipfs-share/crypto"
-	"github.com/golang/glog"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang-collections/collections/stack"
+	"github.com/golang/glog"
+	"github.com/pkg/errors"
+	"github.com/sergi/go-diff/diffmatchpatch"
+
+	"github.com/aliras1/FileTribe/client/fs/caps"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/utils"
 )
 
 // IFile is an interface for the files
@@ -32,17 +32,14 @@ type IFile interface {
 // File represents a file that
 // is shared in a peer to peer mode
 type File struct {
-	Cap            *FileCap
-	PendingChanges *FileCap
+	Cap            *caps.FileCap
+	PendingChanges *caps.FileCap
 	DataPath       string
 	CapPath        string
 	OrigPath       string
 	lock           sync.RWMutex
 }
 
-func (f *File) Id() collections.IIdentifier {
-	return collections.NewStringId(f.Cap.FileName)
-}
 
 func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId string, storage *Storage) (*File, error) {
 	if writeAccessList == nil {
@@ -51,25 +48,24 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 
 	fileName := path.Base(filePath)
 
-	cap, err := NewGroupFileCap(fileName, writeAccessList)
+	cap, err := caps.NewGroupFileCap(fileName, writeAccessList)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create cap for NewFile")
 	}
-	var pendingChanges *FileCap
-	if err := deepcopy.Copy(&pendingChanges, cap); err != nil {
+	var pendingChanges *caps.FileCap
+	if err := deepcopy(&pendingChanges, cap); err != nil {
 		return nil, errors.Wrap(err, "could not deep copy cap")
 	}
 
-	idString := base64.URLEncoding.EncodeToString(cap.Id[:])
-	capPath := storage.GroupFileCapDir(groupId) + idString
-	pendingPath := storage.GroupFileOrigDir(groupId) + fileName
+	capPath := storage.GroupFileCapDir(groupId) + cap.FileName
+	origPath := storage.GroupFileOrigDir(groupId) + fileName
 
 	file := &File{
 		Cap:            cap,
 		PendingChanges: pendingChanges,
 		DataPath:       filePath,
 		CapPath:        capPath,
-		OrigPath:       pendingPath,
+		OrigPath:       origPath,
 	}
 
 	if err := file.SaveMetadata(); err != nil {
@@ -79,14 +75,13 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 	return file, nil
 }
 
-func NewGroupFileFromCap(cap *FileCap, groupId string, storage *Storage) (*File, error) {
-	idString := base64.URLEncoding.EncodeToString(cap.Id[:])
-	capPath := storage.GroupFileCapDir(groupId) + idString
+func NewGroupFileFromCap(cap *caps.FileCap, groupId string, storage *Storage) (*File, error) {
+	capPath := storage.GroupFileCapDir(groupId) + cap.FileName
 	dataPath := storage.GroupFileDataDir(groupId) + cap.FileName
-	pendingPath := storage.GroupFileOrigDir(groupId) + idString
+	pendingPath := storage.GroupFileOrigDir(groupId) + cap.FileName
 
-	var pendingChanges *FileCap
-	if err := deepcopy.Copy(&pendingChanges, cap); err != nil {
+	var pendingChanges *caps.FileCap
+	if err := deepcopy(&pendingChanges, cap); err != nil {
 		return nil, errors.Wrap(err, "could not deep copy cap")
 	}
 
@@ -117,10 +112,9 @@ func LoadPTPFile(filePath string) (*File, error) {
 
 // NewFileFromCap creates a new File instance from a shared
 // capability
-func NewFileFromCap(dataDir, capDir string, cap *FileCap, ipfs ipfsapi.IIpfs, storage *Storage) (*File, error) {
-	baseName := base64.URLEncoding.EncodeToString(cap.Id[:])
-	dataPath := dataDir + baseName
-	capPath := capDir + baseName
+func NewFileFromCap(dataDir, capDir string, cap *caps.FileCap, ipfs ipfsapi.IIpfs, storage *Storage) (*File, error) {
+	dataPath := dataDir + cap.FileName
+	capPath := capDir + cap.FileName
 
 	file := &File{
 		Cap:      cap,
@@ -137,7 +131,7 @@ func NewFileFromCap(dataDir, capDir string, cap *FileCap, ipfs ipfsapi.IIpfs, st
 	return file, nil
 }
 
-func (f *File) Update(cap *FileCap, storage *Storage, ipfs ipfsapi.IIpfs) error {
+func (f *File) Update(cap *caps.FileCap, storage *Storage, ipfs ipfsapi.IIpfs) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -148,7 +142,7 @@ func (f *File) Update(cap *FileCap, storage *Storage, ipfs ipfsapi.IIpfs) error 
 			return errors.Wrap(err, "could not save file meta data")
 		}
 
-		if err := deepcopy.Copy(&f.PendingChanges, f.Cap); err != nil {
+		if err := deepcopy(&f.PendingChanges, f.Cap); err != nil {
 			return errors.Wrap(err, "could not deep copy cap top pending changes")
 		}
 
@@ -163,6 +157,7 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 	patchStack := stack.New()
 
 	currentDiffIpfsHash := f.Cap.IpfsHash
+	currentDiffBoxer := f.Cap.DataKey
 	currentStr := ""
 	var origHash []byte
 	if utils.FileExists(f.OrigPath) {
@@ -172,14 +167,12 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 			return
 		}
 
-		hasher := crypto.NewKeccak256Hasher()
-		origHash = hasher.Sum(origData)
-
+		origHash = ethcrypto.Keccak256(origData)
 		currentStr = string(origData)
 	}
 
 	for {
-		data, err := storage.DownloadAndDecryptWithFileBoxer(f.Cap.DataKey, currentDiffIpfsHash, ipfs)
+		data, err := storage.DownloadAndDecryptWithFileBoxer(currentDiffBoxer, currentDiffIpfsHash, ipfs)
 		if err != nil {
 			glog.Error("could not download and decrypt diff node")
 			return
@@ -204,6 +197,7 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 		}
 
 		currentDiffIpfsHash = diff.Next
+		currentDiffBoxer = diff.NextBoxer
 	}
 
 	for {
@@ -227,17 +221,18 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 func (f *File) SaveMetadata() error {
 	jsonBytes, err := json.Marshal(f)
 	if err != nil {
-		return errors.Wrapf(err, "could not marshal file '%s': File.save", f.Cap.Id)
+		return errors.Wrapf(err, "could not marshal file '%s': File.save", f.Cap.FileName)
 	}
+	glog.Infof("%v", f)
 	if err := utils.WriteFile(f.CapPath, jsonBytes); err != nil {
-		return errors.Wrapf(err, "could not write file '%s': File.save", f.Cap.Id)
+		return errors.Wrapf(err, "could not write file '%s': File.save", f.Cap.FileName)
 	}
 
 	return nil
 }
 
-func GetCapListFromFileList(files []*File) []*FileCap {
-	var l []*FileCap
+func GetCapListFromFileList(files []*File) []*caps.FileCap {
+	var l []*caps.FileCap
 	for _, file := range files {
 		l = append(l, file.Cap)
 	}
@@ -308,15 +303,16 @@ func (f *File) RevokeWriteAccess(user, target ethcommon.Address) error {
 	return nil
 }
 
-func (f *File) diff() (*DiffNode, error) {
+func (f *File) diff(boxer tribecrypto.FileBoxer) (*DiffNode, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
 	dmp := diffmatchpatch.New()
 
 	diff := &DiffNode{
-		Hash: nil,
-		Next: "",
+		Hash:      nil,
+		Next:      "",
+		NextBoxer: boxer,
 	}
 
 	originalStr := ""
@@ -327,10 +323,7 @@ func (f *File) diff() (*DiffNode, error) {
 			return nil, errors.Wrap(err, "could not read original file")
 		}
 
-		hasher := crypto.NewKeccak256Hasher()
-		hash := hasher.Sum(originalData)
-
-		diff.Hash = hash
+		diff.Hash = ethcrypto.Keccak256(originalData)
 
 		originalStr = string(originalData)
 	}
@@ -353,7 +346,14 @@ func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
-	diff, err := f.diff()
+	var newKey [32]byte
+	if _, err := rand.Read(newKey[:]); err != nil {
+		return "", errors.Wrap(err, "could not read from crypto.rand")
+	}
+
+	f.PendingChanges.DataKey = tribecrypto.FileBoxer{Key: newKey}
+
+	diff, err := f.diff(f.PendingChanges.DataKey)
 	if err != nil {
 		return "", errors.Wrap(err, "could not get file diff")
 	}
@@ -369,4 +369,9 @@ func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
 	}
 
 	return newIpfsHash, nil
+}
+
+func deepcopy(orig, other interface{}) error {
+	data, _ := json.Marshal(orig)
+	return json.Unmarshal(data, other)
 }
