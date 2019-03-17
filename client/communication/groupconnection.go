@@ -98,7 +98,7 @@ func (conn *GroupConnection) connectionListener() {
 			{
 				pubsubRecord, err := conn.groupSubscription.Next()
 				if err != nil {
-					glog.Warning("could not get next pubsub record")
+					glog.Warningf("could not get next pubsub record: %s", err)
 					continue
 				}
 
@@ -119,7 +119,7 @@ func (conn *GroupConnection) connectionListener() {
 
 				msg, err := common.DecodeMessage(msgData)
 				if err != nil {
-					glog.Warning("could not decode pubsub record message")
+					glog.Warningf("could not decode pubsub record message: %s", err)
 					continue
 				}
 
@@ -151,7 +151,7 @@ func (conn *GroupConnection) connectionListener() {
 					conn.repo,
 					conn.sessionClosed)
 				if err != nil {
-					glog.Error("could not create new group session server: %s", err)
+					glog.Errorf("could not create new group session server: %s", err)
 					continue
 				}
 

@@ -90,14 +90,14 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 	}
 
 	groupContext.Repo = repo
-	groupContext.GroupConnection = com.NewGroupConnection(
-		config.Group,
-		repo,
-		config.Account,
-		config.AddressBook,
-		onSessionClosed,
-		config.P2P,
-		config.Ipfs)
+	//groupContext.GroupConnection = com.NewGroupConnection(
+	//	config.Group,
+	//	repo,
+	//	config.Account,
+	//	config.AddressBook,
+	//	onSessionClosed,
+	//	config.P2P,
+	//	config.Ipfs)
 
 	go groupContext.HandleGroupInvitationSentEvents(config.Eth.Group)
 	go groupContext.HandleGroupInvitationAcceptedEvents(config.Eth.Group)
