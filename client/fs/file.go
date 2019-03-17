@@ -12,7 +12,6 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/getlantern/deepcopy"
 	"github.com/golang-collections/collections/stack"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -54,7 +53,7 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 		return nil, errors.Wrap(err, "could not create cap for NewFile")
 	}
 	var pendingChanges *caps.FileCap
-	if err := deepcopy.Copy(&pendingChanges, cap); err != nil {
+	if err := deepcopy(&pendingChanges, cap); err != nil {
 		return nil, errors.Wrap(err, "could not deep copy cap")
 	}
 
@@ -82,7 +81,7 @@ func NewGroupFileFromCap(cap *caps.FileCap, groupId string, storage *Storage) (*
 	pendingPath := storage.GroupFileOrigDir(groupId) + cap.FileName
 
 	var pendingChanges *caps.FileCap
-	if err := deepcopy.Copy(&pendingChanges, cap); err != nil {
+	if err := deepcopy(&pendingChanges, cap); err != nil {
 		return nil, errors.Wrap(err, "could not deep copy cap")
 	}
 
@@ -143,7 +142,7 @@ func (f *File) Update(cap *caps.FileCap, storage *Storage, ipfs ipfsapi.IIpfs) e
 			return errors.Wrap(err, "could not save file meta data")
 		}
 
-		if err := deepcopy.Copy(&f.PendingChanges, f.Cap); err != nil {
+		if err := deepcopy(&f.PendingChanges, f.Cap); err != nil {
 			return errors.Wrap(err, "could not deep copy cap top pending changes")
 		}
 
@@ -370,4 +369,9 @@ func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
 	}
 
 	return newIpfsHash, nil
+}
+
+func deepcopy(orig, other interface{}) error {
+	data, _ := json.Marshal(orig)
+	return json.Unmarshal(data, other)
 }

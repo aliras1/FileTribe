@@ -2,6 +2,7 @@ package caps
 
 import (
 	"encoding/json"
+
 	ethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 

@@ -419,7 +419,7 @@ COMMANDS:
   BASIC COMMANDS:
     signup <username>                           Sign up to FileTribe    
     ls {-g|-i|-tx}                              List groups, pending invitations or pending Ethereum transactions
-    daemon <eth account key> ...                Start a running client daemon process                                                
+    daemon                                      Start a running client daemon process (configured from $HOME/.filetribe/config.json)                                                
     group                                       Interact with groups
 
   GROUP COMMANDS:
@@ -427,27 +427,29 @@ COMMANDS:
     invite <group address> <invitee address>    Invite a new member to the given group
     leave  <group address>                      Leave the given group
     ls <group address>                          List group members
-    repo <group address> ...                    Interact with the group repository
+    repo ...                                    Interact with the group repository
 
   REPO COMMANDS:
-    ls                                          List files
-    commit                                      Commit the pending changes in the repository
-    grant <file> <member>                       Grant write access for the given file to the given user
-    revoke <file> <member>                      Revoke write access for the given file to the given user
+    ls <group address>                          List files
+    commit <group address>                      Commit the pending changes in the repository
+    grant <group address> <file> <member>       Grant write access for the given file to the given user
+    revoke <group address> <file> <member>      Revoke write access for the given file to the given user
 
-  DAEMON OPTIONS:
-    -ipfs=<api address>                         http address of a running IPFS daemon's API
-    -eth=<api address>                          websocket address of an Ethereum full node
-    -p=<port>                                   Port number on which the daemon will be listening
-
+  CONFIG.JSON OPTIONS:
+    APIAddress                                  Address on which the daemon will be listening    
+    IpfsAPIAddress                              http address of a running IPFS daemon's API
+    EthFullNodeAddress                          websocket address of an Ethereum full node
+    EthAccountKeyPath                           Path to an Ethereum account key file
+    EthAccountPasswordFilePath                  Path to the password file of the corresponding Ethereum account
+    FileTribeDAppAddress                        Address of the FileTribeDApp contract
+    LogLevel {INFO|WARNING|ERROR}               Level of logs that will be printed to stdout                                   
 
 OPTIONS:
-  -h --help                                     Show this screen.
-  -a=<address>                                  http address of a running client daemon`)
+  -h --help                                     Show this screen`)
 }
 
 func printHelpAndExit(message string) {
-	fmt.Printf("%s\nUse 'filetribe -h' to learn more about its usage.\n", message)
+	fmt.Printf("%s\nUse 'filetribe --help' to learn more about its usage.\n", message)
 	os.Exit(1)
 }
 
