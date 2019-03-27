@@ -66,13 +66,21 @@ func (groupCtx *GroupContext) HandleNewConsensusEvents(group *ethgroup.Group) {
 }
 
 func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
-	glog.Info("new CONSENSUS")
+	glog.Infof("new CONSENSUS: %s", e.Consensus.String())
 
 	cons, err := ethcons.NewConsensus(e.Consensus, groupCtx.eth.Backend)
 	if err != nil {
 		glog.Errorf("could not create new consensus instance from eth: %s", err)
 		return
 	}
+
+	voters, err := cons.MembersThatApproved(&bind.CallOpts{Pending:true})
+	if err != nil {
+		glog.Errorf("could not get voters of the new proposal: %s", err)
+		return
+	}
+
+	glog.Infof("voters: %v", voters)
 
 	proposer, err := cons.Proposer(&bind.CallOpts{Pending:true})
 	if err != nil {
@@ -93,7 +101,7 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 		return
 	}
 
-	glog.Infof("stored payload from: %s", proposer.String())
+	glog.Infof("stored payload '%v' from: %s", payload, proposer.String())
 	groupCtx.proposedPayloads.Put(proposer, payload)
 
 
@@ -169,6 +177,8 @@ func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address
 		glog.Errorf("could not approve consensus: %s", err)
 		return
 	}
+
+	glog.Info("consensus approved")
 
 	groupCtx.proposedPayloads.Put(proposer, nil)
 }

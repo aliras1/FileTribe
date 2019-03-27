@@ -47,22 +47,22 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 	}
 
 	fileName := path.Base(filePath)
-
-	cap, err := caps.NewGroupFileCap(fileName, writeAccessList)
+	fileMeta, err := caps.NewGroupFileCap(fileName, writeAccessList)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create cap for NewFile")
-	}
-	var pendingChanges *caps.FileCap
-	if err := deepcopy(&pendingChanges, cap); err != nil {
-		return nil, errors.Wrap(err, "could not deep copy cap")
+		return nil, errors.Wrap(err, "could not create fileMeta for NewFile")
 	}
 
-	capPath := storage.GroupFileCapDir(groupId) + cap.FileName
-	origPath := storage.GroupFileOrigDir(groupId) + fileName
+	var pendingChanges caps.FileCap
+	if err := deepcopy(&pendingChanges, fileMeta); err != nil {
+		return nil, errors.Wrap(err, "could not deep copy fileMeta")
+	}
+
+	capPath := storage.GroupFileCapDir(groupId) + fileMeta.FileName
+	origPath := storage.GroupFileOrigDir(groupId) + fileMeta.FileName
 
 	file := &File{
-		Cap:            cap,
-		PendingChanges: pendingChanges,
+		Cap:            fileMeta,
+		PendingChanges: &pendingChanges,
 		DataPath:       filePath,
 		CapPath:        capPath,
 		OrigPath:       origPath,
@@ -221,11 +221,11 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 func (f *File) SaveMetadata() error {
 	jsonBytes, err := json.Marshal(f)
 	if err != nil {
-		return errors.Wrapf(err, "could not marshal file '%s': File.save", f.Cap.FileName)
+		return errors.Wrapf(err, "could not marshal file '%s'", f.Cap.FileName)
 	}
 	glog.Infof("%v", f)
 	if err := utils.WriteFile(f.CapPath, jsonBytes); err != nil {
-		return errors.Wrapf(err, "could not write file '%s': File.save", f.Cap.FileName)
+		return errors.Wrapf(err, "could not write file '%s'", f.Cap.FileName)
 	}
 
 	return nil
@@ -371,7 +371,7 @@ func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
 	return newIpfsHash, nil
 }
 
-func deepcopy(orig, other interface{}) error {
-	data, _ := json.Marshal(orig)
-	return json.Unmarshal(data, other)
+func deepcopy(dst, src interface{}) error {
+	data, _ := json.Marshal(src)
+	return json.Unmarshal(data, dst)
 }

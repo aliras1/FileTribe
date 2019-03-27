@@ -176,7 +176,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 
 	hash, err := groupCtx.Repo.CommitChanges(newKey)
 	if err != nil {
-		return errors.Wrap(err, "could commit group repo's changes")
+		return errors.Wrap(err, "could not commit group repo's changes")
 	}
 
 	encIpfsHash := newKey.BoxSeal([]byte(hash))
@@ -193,7 +193,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 
 
 func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight bool) error {
-	glog.Infof("[*] Inviting account '%s' into group '%s'...\n", newMember.String(), groupCtx.Group.Name)
+	glog.Infof("[*] Inviting account '%s' into group '%s'...\n", newMember.String(), groupCtx.Group.Name())
 
 	tx, err := groupCtx.eth.Group.Invite(groupCtx.eth.Auth.TxOpts, newMember)
 	if err != nil {
@@ -388,7 +388,7 @@ func (groupCtx *GroupContext) approveConsensus(cons *ethcons.Consensus) error {
 
 	tx, err := cons.Approve(groupCtx.eth.Auth.TxOpts, r, s, v)
 	if err != nil {
-		return errors.Wrap(err, "could not send consensus approve tx")
+		return errors.Wrapf(err, "could not send consensus approve tx with arguments: %v, %v, %v, %v", r, s, v, groupCtx.eth.Auth.TxOpts)
 	}
 
 	groupCtx.Transactions.Add(tx)

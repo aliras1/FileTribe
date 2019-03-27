@@ -29,6 +29,7 @@ func NewAuth(ethKeyPath string, password string) (*Auth, error) {
 	}
 
 	txOpts := bind.NewKeyedTransactor(key.PrivateKey)
+	txOpts.GasLimit = 47000000
 
 	return &Auth{
 		Address: key.Address,

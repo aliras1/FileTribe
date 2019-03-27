@@ -9,14 +9,14 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/getlantern/deepcopy"
+	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
 	"github.com/aliras1/FileTribe/client/fs/caps"
 	"github.com/aliras1/FileTribe/client/interfaces"
 	. "github.com/aliras1/FileTribe/collections"
-	"github.com/aliras1/FileTribe/tribecrypto"
 	"github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type IpfsAddOperation func(reader io.Reader) (string, error)
@@ -121,14 +121,15 @@ func (repo *GroupRepo) Files() []*File {
 
 func (repo *GroupRepo) getPendingChanges() ([]*caps.FileCap, error) {
 	dir := repo.storage.GroupFileDataDir(repo.group.Address().String())
-	files, err := ioutil.ReadDir(dir)
+	filesInLocalDir, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open group file data dir")
 	}
 	var listPendingChanges []*caps.FileCap
 
-	for _, f := range files {
+	for _, f := range filesInLocalDir {
 		filePath := dir + f.Name()
+		glog.Infof("file path: %s", filePath)
 		var file *File
 
 		fileInt := repo.files.Get(f.Name())
@@ -193,7 +194,7 @@ func (repo *GroupRepo) getFileCaps() []*caps.FileCap {
 	for fileInterface := range repo.files.VIterator() {
 		file := fileInterface.(*File)
 		var capCopy *caps.FileCap
-		deepcopy.Copy(capCopy, file.Cap)
+		deepcopy(capCopy, file.Cap)
 		capabilities = append(capabilities,  capCopy)
 	}
 

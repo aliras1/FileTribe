@@ -86,4 +86,8 @@ contract Consensus {
     function proposer() public view returns(address) {
         return _proposer;
     }
+
+    function membersThatApproved() public view returns(address[] memory) {
+        return _membersThatApproved;
+    }
 }

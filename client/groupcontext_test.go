@@ -1,17 +1,19 @@
 package client
 
 import (
-	"github.com/ethereum/go-ethereum/common"
-	"ipfs-share/utils"
-	"testing"
-
+	"crypto/ecdsa"
 	"flag"
 	"fmt"
-	"github.com/golang/glog"
+	"github.com/ethereum/go-ethereum/core/types"
+	"io/ioutil"
+	"os"
+	"testing"
 	"time"
 
-	"crypto/ecdsa"
-	"io/ioutil"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/golang/glog"
+
+	"github.com/aliras1/FileTribe/utils"
 )
 
 
@@ -118,7 +120,7 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	fmt.Println("----------- Alice init commit ------------")
 
-	fileAlice := "./0xab083E63Cfc7525634642075d49A0DE31374bc0f/data/userdata/root/" + groupAtAlice.Group.Address().String() + "/rrrepo.go"
+	fileAlice := os.Getenv("HOME") + "/.filetribe/0xab083E63Cfc7525634642075d49A0DE31374bc0f/data/userdata/root/" + groupAtAlice.Group.Address().String() + "/rrrepo.go"
 	if err := utils.CopyFile("./account.go", fileAlice); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +136,7 @@ func TestGroupContext_Invite(t *testing.T) {
 	fmt.Println("----------- Bob tries to change the file ------------")
 	bobGroups := bob.Groups()
 	groupAtBob := bobGroups[0].(*GroupContext)
-	fileBob := "./0xbE9678b9882dAc288093b9D38ea7382f21479c77/data/userdata/root/" + groupAtBob.Group.Address().String() + "/rrrepo.go"
+	fileBob := os.Getenv("HOME") + "/.filetribe/0xbE9678b9882dAc288093b9D38ea7382f21479c77/data/userdata/root/" + groupAtBob.Group.Address().String() + "/rrrepo.go"
 	if err := AppendToFile(fileBob, "Bob's modification (should fail)\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -172,8 +174,28 @@ func TestGroupContext_Invite(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	sim.Commit()
 	time.Sleep(3 * time.Second)
+	sim.Commit()
+	time.Sleep(5 * time.Second)
 
+	glog.Info("ALICE TX")
+	txInt := alice.transactions.Get(alice.transactions.Count() - 1)
+	rec, err := sim.TransactionReceipt(nil, txInt.(*types.Transaction).Hash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	glog.Info(rec.Status)
+	glog.Info(rec.Logs)
+	glog.Info(rec.Bloom)
 
+	glog.Info("CHARLIE TX")
+	txInt = charlie.transactions.Get(charlie.transactions.Count() - 1)
+	rec, err = sim.TransactionReceipt(nil, txInt.(*types.Transaction).Hash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	glog.Info(rec.Status)
+	glog.Info(rec.Logs)
+	glog.Info(rec.Bloom)
 
 
 	//fmt.Println("----------- Alice modif  ------------")

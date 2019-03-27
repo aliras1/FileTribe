@@ -175,8 +175,8 @@ contract Group is Ownable {
         emit InvitationDeclined(address(this), account);
     }
 
-    function getConsensus(address member) public view returns(address) {
-        return _consensuses[_memberToIdx[member]];
+    function getConsensus(address owner) public view returns(address) {
+        return _consensuses[_memberToIdx[owner]];
     }
 
     function threshold() public view returns(uint256) {
