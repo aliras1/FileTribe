@@ -418,7 +418,7 @@ COMMANDS:
     APIAddress                                  Address on which the daemon will be listening    
     IpfsAPIAddress                              http address of a running IPFS daemon's API
     EthFullNodeAddress                          websocket address of an Ethereum full node
-    EthAccountMnemonic                           Path to an Ethereum account key file
+    EthAccountMnemonic                          Mnemonic that generates your Ethereum account
     EthAccountPasswordFilePath                  Path to the password file of the corresponding Ethereum account
     FileTribeDAppAddress                        Address of the FileTribeDApp contract
     LogLevel {INFO|WARNING|ERROR}               Level of logs that will be printed to stdout                                   

@@ -4,34 +4,35 @@ type truffle >/dev/null 2>&1 || { echo >&2 "I require Truffle but it's not insta
 
 echo [*] Creating environment...
 
-#ws=./build/go_workspace
-#mkdir -p ${ws}
-#cd ${ws}
-#export GOPATH=$PWD
-#
-#root=./src/github.com/aliras1/
-#mkdir -p ${root}
-#cd ${root}
-#ln -s ../../../../../. FileTribe
-#cd ../../../../../
-#
-#echo [*] Getting dependencies...
-#
-#go get -u github.com/golang-collections/collections
-#go get -u github.com/sergi/go-diff/...
-#go get -u github.com/pkg/errors
-#go get -u github.com/golang/glog
-#go get -u github.com/whyrusleeping/tar-utils
-#go get -u golang.org/x/crypto/...
-#go get -u github.com/ethereum/go-ethereum
-#go get -u github.com/gorilla/mux
-#go get -u github.com/ipfs/go-ipfs-api
-#go get -u github.com/ugorji/go/codec
+ws=./build/go_workspace
+mkdir -p ${ws}
+cd ${ws}
+export GOPATH=$PWD
+
+root=./src/github.com/aliras1/
+mkdir -p ${root}
+cd ${root}
+ln -s ../../../../../. FileTribe
+cd ../../../../../
+
+echo [*] Getting dependencies...
+
+go get -u github.com/golang-collections/collections
+go get -u github.com/sergi/go-diff/...
+go get -u github.com/pkg/errors
+go get -u github.com/golang/glog
+go get -u github.com/whyrusleeping/tar-utils
+go get -u golang.org/x/crypto/...
+go get -u github.com/ethereum/go-ethereum
+go get -u github.com/gorilla/mux
+go get -u github.com/ipfs/go-ipfs-api
+go get -u github.com/ugorji/go/codec
+go get -u github.com/miguelmota/go-ethereum-hdwallet
 
 echo [*] Generating abi APIs...
 
 cd ./eth
-#./compile.sh
+./compile.sh
 
 echo [*] Building FileTribe...
 
