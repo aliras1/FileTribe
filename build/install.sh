@@ -28,11 +28,12 @@ go get -u github.com/gorilla/mux
 go get -u github.com/ipfs/go-ipfs-api
 go get -u github.com/ugorji/go/codec
 go get -u github.com/miguelmota/go-ethereum-hdwallet
-go get -u -v github.com/tools/godep
+#go get -u -v github.com/tools/godep
 
 export CURRENT_DIR=$PWD
 cd ${GOPATH}/src/github.com/ethereum/go-ethereum
-${GOPATH}/bin/godep go install ./cmd/abigen
+dep init ./cmd/abigen
+dep insure ./cmd/abigen
 cd ${CURRENT_DIR}
 
 echo [*] Generating abi APIs...
