@@ -3,7 +3,7 @@
 FileTribe is a blockchain-based decentralized file-sharing and editing system built on [Ethereum](https://www.ethereum.org/) and [IPFS](https://ipfs.io/).
 
 ##### :warning: WARNING :warning:
-FileTribe is still in pre-alpha state. Do NOT use it for storing or sharing sensitive data. All branches are highly unstable.  
+FileTribe is still in pre-alpha state. Do **NOT** use it for storing or sharing sensitive data. All branches are highly unstable.  
 
 ## Dependency
 
@@ -66,11 +66,13 @@ ipfs config --json Experimental.Libp2pStreamMounting true
 
 #### Start the client application
 
-If you have a running Ethereum network, on which the FileTribe contracts were deployed and an IPFS daemon you can start the client: `./filetribe <eth account key> [-ipfs=<addr>] [-eth=<addr>] [-p=<port>]`
+You can configure the FileTribe daemon with `$HOME/.filetribe/config.json`. If you have a running Ethereum network, on which the FileTribe contracts were deployed and an IPFS daemon you can start the client:
  
-`./filetribe /path/to/ethereum_account.key -ipfs=http://127.0.0.1:5001 -eth=ws://127.0.0.1:8001`
+```
+$ filetribe daemon
+```
 
-## Using Docker Compose
+## Using Docker Compose (currently not working)
 
 Alternatively, instead of manually setting up an Ethereum network, you can use FileTribe's prepared test environment which includes a full Ethereum node and three individual clients, all of them running in their separate containers. The following port mappings are available
 
@@ -80,7 +82,9 @@ Alternatively, instead of manually setting up an Ethereum network, you can use F
 
 meaning you can access all three clients from your localhost. To use this simple environment type:
 
-`docker-compose up`
+```
+docker-compose up
+```
 
 ## Execute commands on the client
 
