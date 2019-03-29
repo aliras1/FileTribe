@@ -30,6 +30,8 @@ import (
 	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 )
 
+// HandleAccountCreatedEvents listens to 'AccountCreated' blockchain events
+// and if one belongs to the current user, creates its appropriate UserContext
 func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.FileTribeDApp) {
 	glog.Info("HandleAccountCreatedEvents...")
 	ch := make(chan *ethapp.FileTribeDAppAccountCreated)
@@ -76,6 +78,7 @@ func (ctx *UserContext) onAccountCreated(e *ethapp.FileTribeDAppAccountCreated) 
 	glog.Infof("Account created: %s --> %s (%s)", ctx.account.Name(), e.Account.String(), e.Owner.String())
 }
 
+// HandleGroupInvitationEvents
 func (ctx *UserContext) HandleGroupInvitationEvents(acc *ethacc.Account) {
 	glog.Info("groupInvitation handling...")
 	ch := make(chan *ethacc.AccountNewInvitation)

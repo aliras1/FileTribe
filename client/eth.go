@@ -23,12 +23,17 @@ import (
 	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 )
 
+// Eth is a collection of those objects that are necessary for
+// performing operations on the blockchain such as authentication
+// data, DApp contract and a full ethereum node
 type Eth struct {
 	Auth    *Auth
 	App 	*ethapp.FileTribeDApp
 	Backend chequebook.Backend
 }
 
+// GroupEth stores a GroupContract and a pointer to all the
+// general Eth data
 type GroupEth struct {
 	*Eth
 	Group *ethgroup.Group

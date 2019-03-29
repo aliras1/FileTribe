@@ -7,6 +7,10 @@ FileTribe is still in pre-alpha state. Do <strong>NOT</strong> use it for storin
 <p align="center">
   <img src="doc/logo.png" width="350">
 </p>
+<p align="center">
+  <a href="https://travis-ci.org/aliras1/FileTribe"><img src="https://travis-ci.org/aliras1/FileTribe.svg?branch=master" alt="Build Status"></img></a>
+  <a href="https://goreportcard.com/report/github.com/aliras1/FileTribe"><img src="https://goreportcard.com/badge/github.com/aliras1/FileTribe" /></a>
+</p>
 
 ## FileTribe
 

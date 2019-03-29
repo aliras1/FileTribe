@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Auth stores all the information of an Ethereum account with which one can sign transactions
 type Auth struct {
 	wallet  *hdwallet.Wallet
 	account accounts.Account
@@ -32,6 +33,7 @@ type Auth struct {
 	TxOpts  *bind.TransactOpts
 }
 
+// NewAuth creates an Auth object from a mnemonic
 func NewAuth(mnemonic string) (*Auth, error) {
 	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
 	if err != nil {
@@ -64,6 +66,7 @@ func NewAuth(mnemonic string) (*Auth, error) {
 	}, nil
 }
 
+// Sign signs a hash with its Ethereum account's private key
 func (auth *Auth) Sign(hash []byte) ([]byte, error) {
 	return auth.wallet.SignHash(auth.account, hash)
 }
