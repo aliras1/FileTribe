@@ -21,11 +21,14 @@ install:
   - npm install -g truffle
   - npm install
   - npm install --save-dev solidity-coverage
+  - npm install truffle-hdwallet-provider
 
 script:
   - cd eth
-  - truffle test
-  - ../node_modules/.bin/solidity-coverage 
+  - truffle test --network development
+  - ../node_modules/.bin/solidity-coverage
+  - cd ..
+  - make all
 
 after_script:
   - docker kill ethdevnet
