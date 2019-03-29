@@ -1,6 +1,8 @@
 # FileTribe
 
-![logo](doc/logo.png)
+<p align="center">
+  <img src="doc/logo.png" width="200">
+</p>
 
 FileTribe is a blockchain-based decentralized file-sharing and editing system built on [Ethereum](https://www.ethereum.org/) and [IPFS](https://ipfs.io/).
 

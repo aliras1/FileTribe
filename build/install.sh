@@ -28,6 +28,7 @@ go get -u github.com/gorilla/mux
 go get -u github.com/ipfs/go-ipfs-api
 go get -u github.com/ugorji/go/codec
 go get -u github.com/miguelmota/go-ethereum-hdwallet
+go get -u github.com/tools/godep
 
 export CURRENT_DIR=$PWD
 cd ${GOPATH}/src/github.com/ethereum/go-ethereum
