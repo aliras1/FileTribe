@@ -23,7 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
-	"github.com/aliras1/FileTribe/client/fs/caps"
+	"github.com/aliras1/FileTribe/client/fs/meta"
 	"github.com/aliras1/FileTribe/tribecrypto"
 	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
 	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
@@ -36,7 +36,7 @@ func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.FileTribeDApp) {
 
 	sub, err := app.WatchAccountCreated(&bind.WatchOpts{Context:ctx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
-		glog.Errorf("could not subscribe to AccountCreated events")
+		glog.Errorf("could not subscribe to AccountCreated events: %s", err)
 		return
 	}
 
@@ -58,14 +58,15 @@ func (ctx *UserContext) onAccountCreated(e *ethapp.FileTribeDAppAccountCreated) 
 		return
 	}
 
-	contract, err := ethacc.NewAccount(e.Account, ctx.eth.Backend)
-	if err != nil {
-		glog.Errorf("could not create account on eth: could not instanciate new account")
+	if err := acc.SetContract(e.Account, ctx.eth.Backend); err != nil {
+		glog.Errorf("could not set account contract: %s, err")
 		return
 	}
 
-	acc.SetContractAddress(e.Account)
-	acc.SetContract(contract)
+	if err := acc.Save(); err != nil {
+		glog.Errorf("could not save IAccount: %s", err)
+		return
+	}
 
 	if err := ctx.Init(acc); err != nil {
 		glog.Errorf("could not initialize user context: %s", err)
@@ -81,7 +82,7 @@ func (ctx *UserContext) HandleGroupInvitationEvents(acc *ethacc.Account) {
 
 	sub, err := acc.WatchNewInvitation(&bind.WatchOpts{Context:ctx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
-		glog.Errorf("could not subscribe to AccountNewInvitation events")
+		glog.Errorf("could not subscribe to AccountNewInvitation events: %s", err)
 		return
 	}
 
@@ -106,7 +107,7 @@ func (ctx *UserContext) HandleInvitationAcceptedEvents(acc *ethacc.Account) {
 
 	sub, err := acc.WatchInvitationAccepted(&bind.WatchOpts{Context:ctx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
-		glog.Errorf("could not subscribe to InvitationAccepted events")
+		glog.Errorf("could not subscribe to InvitationAccepted events: %s", err)
 		return
 	}
 
@@ -132,7 +133,7 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 
 	members, err := group.Members(&bind.CallOpts{Pending:true})
 	if err != nil {
-		glog.Errorf("could not get group members from eth")
+		glog.Errorf("could not get group members from eth: %s", err)
 		return
 	}
 
@@ -165,7 +166,7 @@ func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tr
 		return
 	}
 
-	cap := &caps.GroupAccessCap{Address:groupAddress, Boxer:boxer}
+	cap := &meta.GroupMeta{Address: groupAddress, Boxer:boxer}
 
 	if err := ctx.storage.SaveGroupAccessCap(cap); err != nil {
 		glog.Errorf("could not save group access cap: %s", err)

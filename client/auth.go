@@ -17,38 +17,53 @@
 package client
 
 import (
-	"io/ioutil"
-
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-
-	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/miguelmota/go-ethereum-hdwallet"
+	"github.com/pkg/errors"
 )
 
 type Auth struct {
+	wallet  *hdwallet.Wallet
+	account accounts.Account
 	Address ethcommon.Address
-	Signer  *tribecrypto.Signer
 	TxOpts  *bind.TransactOpts
 }
 
-func NewAuth(ethKeyPath string, password string) (*Auth, error) {
-
-	ethKeyData, err := ioutil.ReadFile(ethKeyPath)
+func NewAuth(mnemonic string) (*Auth, error) {
+	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could not get wallet from mnemonic")
 	}
 
-	key, err := keystore.DecryptKey(ethKeyData, password)
+	path := hdwallet.MustParseDerivationPath("m/44'/60'/0'/0/0") // path string: Metamask compatible BIP44 derivation
+	account, err := wallet.Derive(path, true)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could not derive account from wallet")
 	}
+	
+	txOpts := &bind.TransactOpts{
+		From: account.Address,
+		GasLimit: 8000000,
+		Signer: func(signer types.Signer, address ethcommon.Address, tx *types.Transaction) (*types.Transaction, error) {
+			if address != account.Address {
+				return nil, errors.New("not authorized to sign this account")
+			}
 
-	txOpts := bind.NewKeyedTransactor(key.PrivateKey)
+			return wallet.SignTx(account, tx, nil)
+		},
+	}
 
 	return &Auth{
-		Address: key.Address,
-		Signer:  &tribecrypto.Signer{PrivateKey: key.PrivateKey},
+		wallet:wallet,
+		account:account,
+		Address: account.Address,
 		TxOpts:  txOpts,
 	}, nil
+}
+
+func (auth *Auth) Sign(hash []byte) ([]byte, error) {
+	return auth.wallet.SignHash(auth.account, hash)
 }

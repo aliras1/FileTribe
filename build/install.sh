@@ -27,6 +27,7 @@ go get -u github.com/ethereum/go-ethereum
 go get -u github.com/gorilla/mux
 go get -u github.com/ipfs/go-ipfs-api
 go get -u github.com/ugorji/go/codec
+go get -u github.com/miguelmota/go-ethereum-hdwallet
 
 echo [*] Generating abi APIs...
 
@@ -40,6 +41,8 @@ mkdir ./build/bin
 
 cd ./main
 go build -o ../build/bin/filetribe main.go
+
+echo [*] Creating symbolic link
 
 cd ../
 ln -s $PWD/build/bin/filetribe $HOME/.local/bin/filetribe

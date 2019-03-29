@@ -45,6 +45,10 @@ contract FileTribeDApp is Ownable {
         emit AccountCreated(msg.sender, acc);
     }
 
+    function removeAccount() public {
+        _accounts[msg.sender] = address(0);
+    }
+
     function createGroup(string calldata name) external returns(address group) {
         return IGroupFactory(_groupFactory).create(msg.sender, name);
     }

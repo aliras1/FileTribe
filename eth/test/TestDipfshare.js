@@ -6,7 +6,7 @@ const Group = artifacts.require('Group');
 const GroupFactory = artifacts.require('GroupFactory');
 const Consensus = artifacts.require('Consensus');
 const ConsensusFactory = artifacts.require('ConsensusFactory');
-const Dipfshare = artifacts.require('Dipfshare');
+const FileTribeDApp = artifacts.require('FileTribeDApp');
 
 var ipfsHashChange = false;
 
@@ -213,7 +213,7 @@ async function changeKey(fromAddress, ipfsHash, approverAddresses, group) {
     assert.equal(await group.ipfsHash(), ipfsHash);
 }
 
-contract('Dipfshare', accounts => {
+contract('FileTribeDApp', accounts => {
     let dipfshare;
     let accountFactory;
     let groupFactory;
@@ -226,7 +226,7 @@ contract('Dipfshare', accounts => {
     const charlesAddress = accounts[2];
 
     beforeEach(async function () {
-        // dipfshare = await Dipfshare.new({ from: creator });
+        // dipfshare = await FileTribeDApp.new({ from: creator });
         // let receipt = await web3.eth.getTransactionReceipt(dipfshare.transactionHash);
         // console.log("app: " + receipt.gasUsed);
         // accountFactory = await AccountFactory.new({ from: creator });
@@ -247,7 +247,7 @@ contract('Dipfshare', accounts => {
         // await groupFactory.setParent(dipfshare.address);
         // await consensusFactory.setParent(dipfshare.address);
 
-        dipfshare = await Dipfshare.deployed();
+        dipfshare = await FileTribeDApp.deployed();
     });
 
     // it('check owner', async function () {
@@ -341,12 +341,12 @@ contract('Dipfshare', accounts => {
         await invite(group, alice, aliceAddress, bob, bobAddress);
         await invite(group, alice, aliceAddress, charles, charlesAddress);
 
-        var acc;
-
-        for (let i = 4; i < 10; i++) {
-            acc = await createAccount(dipfshare, ethAccounts[i], "Acc"+i, "ipfs"+i, "0x06");
-            await invite(group, alice, aliceAddress, acc, ethAccounts[i]);
-        }
+        // var acc;
+        //
+        // for (let i = 4; i < 10; i++) {
+        //     acc = await createAccount(dipfshare, ethAccounts[i], "Acc"+i, "ipfs"+i, "0x06");
+        //     await invite(group, alice, aliceAddress, acc, ethAccounts[i]);
+        // }
 
         // check members
         let members = await group.members();
@@ -355,9 +355,23 @@ contract('Dipfshare', accounts => {
         // console.log(await bob.owner());
 
         // members commit their changes
-        await commit(ethAccounts[8], "0x01", ethAccounts, group);
-        // await commit(aliceAddress, "0x01", [bobAddress, charlesAddress], group);
-        // await sleep(1000);
+        // await commit(ethAccounts[8], "0x01", ethAccounts, group);
+        await commit(aliceAddress, "0x01", [bobAddress, charlesAddress], group);
+        await sleep(1000);
+
+        let consensusAddress;
+        result = await group.changeIpfsHash("0x02", {from: bobAddress});
+        console.log("change ipfs hash: " + result.receipt.gasUsed);
+        truffleAssert.eventEmitted(result, 'NewConsensus', (ev) => {
+            consensusAddress = ev.consensus;
+            return true;
+        }, 'No NewConsensus event!');
+
+        await commit(aliceAddress, "0x03", [bobAddress, charlesAddress], group);
+        await sleep(1000);
+        await commit(bobAddress, "0x04", [aliceAddress, charlesAddress], group);
+        await sleep(1000);
+
         // await commit(bobAddress, "0x03", [ethAccounts[4], charlesAddress], group);
         // await sleep(1000);
         // await commit(bobAddress, "0x05", [ethAccounts[4], charlesAddress], group);
@@ -377,8 +391,5 @@ contract('Dipfshare', accounts => {
         // let numMembers = await group.members();
         // console.log(numMembers.length());
         // assert.equal(numMembers, 2, "expected number of members is 2, got " + numMembers)
-
-        await changeKeyDecline(aliceAddress, "0x88", ethAccounts, group);
-        await changeKey(bobAddress, "0x99", ethAccounts, group);
     });
 });

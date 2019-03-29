@@ -33,7 +33,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sergi/go-diff/diffmatchpatch"
 
-	"github.com/aliras1/FileTribe/client/fs/caps"
+	"github.com/aliras1/FileTribe/client/fs/meta"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 	"github.com/aliras1/FileTribe/tribecrypto"
 	"github.com/aliras1/FileTribe/utils"
@@ -48,8 +48,8 @@ type IFile interface {
 // File represents a file that
 // is shared in a peer to peer mode
 type File struct {
-	Cap            *caps.FileCap
-	PendingChanges *caps.FileCap
+	Cap            *meta.FileMeta
+	PendingChanges *meta.FileMeta
 	DataPath       string
 	CapPath        string
 	OrigPath       string
@@ -63,22 +63,22 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 	}
 
 	fileName := path.Base(filePath)
-
-	cap, err := caps.NewGroupFileCap(fileName, writeAccessList)
+	fileMeta, err := meta.NewGroupFileMeta(fileName, writeAccessList)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create cap for NewFile")
-	}
-	var pendingChanges *caps.FileCap
-	if err := deepcopy(&pendingChanges, cap); err != nil {
-		return nil, errors.Wrap(err, "could not deep copy cap")
+		return nil, errors.Wrap(err, "could not create fileMeta for NewFile")
 	}
 
-	capPath := storage.GroupFileCapDir(groupId) + cap.FileName
-	origPath := storage.GroupFileOrigDir(groupId) + fileName
+	var pendingChanges meta.FileMeta
+	if err := deepcopy(&pendingChanges, fileMeta); err != nil {
+		return nil, errors.Wrap(err, "could not deep copy fileMeta")
+	}
+
+	capPath := storage.GroupFileCapDir(groupId) + fileMeta.FileName
+	origPath := storage.GroupFileOrigDir(groupId) + fileMeta.FileName
 
 	file := &File{
-		Cap:            cap,
-		PendingChanges: pendingChanges,
+		Cap:            fileMeta,
+		PendingChanges: &pendingChanges,
 		DataPath:       filePath,
 		CapPath:        capPath,
 		OrigPath:       origPath,
@@ -91,12 +91,12 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 	return file, nil
 }
 
-func NewGroupFileFromCap(cap *caps.FileCap, groupId string, storage *Storage) (*File, error) {
+func NewGroupFileFromCap(cap *meta.FileMeta, groupId string, storage *Storage) (*File, error) {
 	capPath := storage.GroupFileCapDir(groupId) + cap.FileName
 	dataPath := storage.GroupFileDataDir(groupId) + cap.FileName
 	pendingPath := storage.GroupFileOrigDir(groupId) + cap.FileName
 
-	var pendingChanges *caps.FileCap
+	var pendingChanges *meta.FileMeta
 	if err := deepcopy(&pendingChanges, cap); err != nil {
 		return nil, errors.Wrap(err, "could not deep copy cap")
 	}
@@ -128,7 +128,7 @@ func LoadPTPFile(filePath string) (*File, error) {
 
 // NewFileFromCap creates a new File instance from a shared
 // capability
-func NewFileFromCap(dataDir, capDir string, cap *caps.FileCap, ipfs ipfsapi.IIpfs, storage *Storage) (*File, error) {
+func NewFileFromCap(dataDir, capDir string, cap *meta.FileMeta, ipfs ipfsapi.IIpfs, storage *Storage) (*File, error) {
 	dataPath := dataDir + cap.FileName
 	capPath := capDir + cap.FileName
 
@@ -147,7 +147,7 @@ func NewFileFromCap(dataDir, capDir string, cap *caps.FileCap, ipfs ipfsapi.IIpf
 	return file, nil
 }
 
-func (f *File) Update(cap *caps.FileCap, storage *Storage, ipfs ipfsapi.IIpfs) error {
+func (f *File) Update(cap *meta.FileMeta, storage *Storage, ipfs ipfsapi.IIpfs) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -237,18 +237,18 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 func (f *File) SaveMetadata() error {
 	jsonBytes, err := json.Marshal(f)
 	if err != nil {
-		return errors.Wrapf(err, "could not marshal file '%s': File.save", f.Cap.FileName)
+		return errors.Wrapf(err, "could not marshal file '%s'", f.Cap.FileName)
 	}
 	glog.Infof("%v", f)
 	if err := utils.WriteFile(f.CapPath, jsonBytes); err != nil {
-		return errors.Wrapf(err, "could not write file '%s': File.save", f.Cap.FileName)
+		return errors.Wrapf(err, "could not write file '%s'", f.Cap.FileName)
 	}
 
 	return nil
 }
 
-func GetCapListFromFileList(files []*File) []*caps.FileCap {
-	var l []*caps.FileCap
+func GetCapListFromFileList(files []*File) []*meta.FileMeta {
+	var l []*meta.FileMeta
 	for _, file := range files {
 		l = append(l, file.Cap)
 	}
@@ -387,7 +387,7 @@ func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
 	return newIpfsHash, nil
 }
 
-func deepcopy(orig, other interface{}) error {
-	data, _ := json.Marshal(orig)
-	return json.Unmarshal(data, other)
+func deepcopy(dst, src interface{}) error {
+	data, _ := json.Marshal(src)
+	return json.Unmarshal(data, dst)
 }

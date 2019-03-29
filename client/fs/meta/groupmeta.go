@@ -14,21 +14,27 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 
-package interfaces
+package meta
 
 import (
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
+	"encoding/json"
 
-	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
+	ethCommon "github.com/ethereum/go-ethereum/common"
+	"github.com/pkg/errors"
+
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
-type IAccount interface {
-	ContractAddress() ethcommon.Address
-	Contract() *ethacc.Account
-	Name() string
-	Boxer() tribecrypto.AnonymBoxer
-	SetContract(addr ethcommon.Address, backend chequebook.Backend) error
-	Save() error
+type GroupMeta struct {
+	Address ethCommon.Address
+	Boxer   tribecrypto.SymmetricKey
+}
+
+func (meta *GroupMeta) Encode() ([]byte, error) {
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not json marshal group access capability")
+	}
+
+	return data, nil
 }

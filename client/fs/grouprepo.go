@@ -25,13 +25,14 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
-	"github.com/aliras1/FileTribe/client/fs/caps"
+	"github.com/aliras1/FileTribe/client/fs/meta"
 	"github.com/aliras1/FileTribe/client/interfaces"
 	. "github.com/aliras1/FileTribe/collections"
-	"github.com/aliras1/FileTribe/tribecrypto"
 	"github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type IpfsAddOperation func(reader io.Reader) (string, error)
@@ -51,11 +52,14 @@ type GroupRepo struct {
 func NewGroupRepo(group interfaces.IGroup, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
 	storage.MakeGroupDir(group.Address().String())
 
-	var capabilities []*caps.FileCap
-
-	data, err := caps.EncodeFileCapList(capabilities)
+	metas, err := storage.GetGroupFileMetas(group.Address().String())
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode empty cap list")
+		glog.Warningf("could not load group file metas: %s", err)
+	}
+
+	data, err := meta.EncodeFileMetaList(metas)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not encode empty file meta list")
 	}
 
 	boxer := group.Boxer()
@@ -134,16 +138,17 @@ func (repo *GroupRepo) Files() []*File {
 	return files
 }
 
-func (repo *GroupRepo) getPendingChanges() ([]*caps.FileCap, error) {
+func (repo *GroupRepo) getPendingChanges() ([]*meta.FileMeta, error) {
 	dir := repo.storage.GroupFileDataDir(repo.group.Address().String())
-	files, err := ioutil.ReadDir(dir)
+	filesInLocalDir, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open group file data dir")
 	}
-	var listPendingChanges []*caps.FileCap
+	var listPendingChanges []*meta.FileMeta
 
-	for _, f := range files {
+	for _, f := range filesInLocalDir {
 		filePath := dir + f.Name()
+		glog.Infof("file path: %s", filePath)
 		var file *File
 
 		fileInt := repo.files.Get(f.Name())
@@ -185,7 +190,7 @@ func (repo *GroupRepo) CommitChanges(boxer tribecrypto.SymmetricKey) (string, er
 		return "", errors.Wrap(err, "could not get pending changes")
 	}
 
-	data, err := caps.EncodeFileCapList(pendingChanges)
+	data, err := meta.EncodeFileMetaList(pendingChanges)
 	if err != nil {
 		return "", errors.Wrap(err, "could not encode file cap list")
 	}
@@ -200,14 +205,14 @@ func (repo *GroupRepo) CommitChanges(boxer tribecrypto.SymmetricKey) (string, er
 }
 
 
-func (repo *GroupRepo) getFileCaps() []*caps.FileCap {
+func (repo *GroupRepo) getFileCaps() []*meta.FileMeta {
 	repo.lock.RLock()
 	defer repo.lock.RUnlock()
 
-	var capabilities []*caps.FileCap
+	var capabilities []*meta.FileMeta
 	for fileInterface := range repo.files.VIterator() {
 		file := fileInterface.(*File)
-		var capCopy *caps.FileCap
+		var capCopy *meta.FileMeta
 		deepcopy(capCopy, file.Cap)
 		capabilities = append(capabilities,  capCopy)
 	}
@@ -348,7 +353,7 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
-	if strings.Compare(newIpfsHash, "") == 0 {
+	if strings.EqualFold(newIpfsHash, "") || strings.EqualFold(newIpfsHash, repo.ipfsHash) {
 		return nil
 	}
 
@@ -386,13 +391,13 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 	return nil
 }
 
-func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer tribecrypto.SymmetricKey) ([]*caps.FileCap, error) {
+func (repo *GroupRepo) getGroupFileCapsFromIpfs(ipfsHash string, boxer tribecrypto.SymmetricKey) ([]*meta.FileMeta, error) {
 	data, err := repo.storage.DownloadAndDecryptWithSymmetricKey(boxer, ipfsHash, repo.ipfs)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not download group data")
 	}
 
-	capabilities, err := caps.DecodeFileCapList(data)
+	capabilities, err := meta.DecodeFileMetaList(data)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decode file cap list")
 	}

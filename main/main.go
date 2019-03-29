@@ -37,13 +37,13 @@ import (
 )
 
 type Config struct {
-	APIAddress string
-	IpfsAPIAddress string
-	EthFullNodeAddress string
-	EthAccountKeyPath string
+	APIAddress                 string
+	IpfsAPIAddress             string
+	EthFullNodeAddress         string
+	EthAccountMnemonic         string
 	EthAccountPasswordFilePath string
-	FileTribeDAppAddress string
-	LogLevel string
+	FileTribeDAppAddress       string
+	LogLevel                   string
 }
 
 const configPath = "./config.json"
@@ -62,41 +62,6 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 		errorHandler(w, r, fmt.Sprintf("could not sign up: %s: %s", username, err))
 		return
 	}
-}
-
-func signIn(w http.ResponseWriter, r *http.Request) {
-	//if client != nil {
-	//	client.SignOut()
-	//	client = nil
-	//}
-	//
-	//params := mux.Vars(r)
-	//var err error
-	//
-	//var ethKeyPath string
-	//if err := json.NewDecoder(r.Body).Decode(&ethKeyPath); err != nil {
-	//	errorHandler(w, r, "could not decode ethkeypath")
-	//	return
-	//}
-	//
-	//network, err = nw.NewNetwork(ethWSAddress, ethKeyPath, contractAddress, "pwd")
-	//if err != nil {
-	//	errorHandler(w, r, fmt.Sprintf("could not connect to ethereum network: %s", err))
-	//	return
-	//}
-	//
-	//client, err = ipfs_share.NewUserContextFromSignIn(
-	//	params["username"],
-	//	params["password"],
-	//	ethKeyPath,
-	//	params["username"], // data directory
-	//	network,
-	//	ipfs,
-	//	"2001",
-	//)
-	//if err != nil {
-	//	glog.Error(err)
-	//}
 }
 
 func signOut(w http.ResponseWriter, r *http.Request) {
@@ -344,7 +309,13 @@ func listTransactions(w http.ResponseWriter, r *http.Request) {
 		errorHandler(w, r, fmt.Sprintf(fmt.Sprintf("could not get tx's: %s", err)))
 	}
 
-	if err := json.NewEncoder(w).Encode(txList); err != nil {
+	// just send back tx hashes for now
+	var txs []string
+	for _, tx := range txList {
+		txs = append(txs, tx.Hash().Hex())
+	}
+
+	if err := json.NewEncoder(w).Encode(txs); err != nil {
 		errorHandler(w, r, fmt.Sprintf("could not encode txMap list: %s", err))
 	}
 }
@@ -367,18 +338,11 @@ func startDaemon() {
 		panic(fmt.Sprintf("could not unmarshal config json: %s", err))
 	}
 
-	passwordBytes, err := ioutil.ReadFile(config.EthAccountPasswordFilePath)
-	if err != nil {
-		panic(fmt.Sprintf("could not read password file: %s", err))
-	}
-
-	password := strings.Replace(string(passwordBytes), "\n", "", -1)
-
 	if err := flag.Set("stderrthreshold", config.LogLevel); err != nil {
 		panic(fmt.Sprintf("could not set log level: %s", err))
 	}
 
-	auth, err := ipfs_share.NewAuth(config.EthAccountKeyPath, password)
+	auth, err := ipfs_share.NewAuth(config.EthAccountMnemonic)
 	if err != nil {
 		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
 	}
@@ -387,9 +351,7 @@ func startDaemon() {
 
 	ethNode, err := ethclient.Dial(config.EthFullNodeAddress)
 	if err != nil {
-		if err != nil {
-			panic(fmt.Sprintf("could not connect to ethereum node: %s", err))
-		}
+		panic(fmt.Sprintf("could not connect to ethereum node: %s", err))
 	}
 
 	client, err = ipfs_share.NewUserContext(
@@ -406,7 +368,6 @@ func startDaemon() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/signup/{username}", signUp).Methods("POST")
-	router.HandleFunc("/signin/{username}", signIn).Methods("POST")
 	router.HandleFunc("/signout", signOut).Methods("GET")
 
 	router.HandleFunc("/group/create", createGroup).Methods("POST")
@@ -421,6 +382,8 @@ func startDaemon() {
 
 	router.HandleFunc("/ls/groups", lsGroups).Methods("GET")
 	router.HandleFunc("/ls/tx", listTransactions).Methods("GET")
+
+	glog.Infof("serving on: %s", config.APIAddress)
 
 	glog.Fatal(http.ListenAndServe(config.APIAddress, router))
 }
@@ -455,7 +418,7 @@ COMMANDS:
     APIAddress                                  Address on which the daemon will be listening    
     IpfsAPIAddress                              http address of a running IPFS daemon's API
     EthFullNodeAddress                          websocket address of an Ethereum full node
-    EthAccountKeyPath                           Path to an Ethereum account key file
+    EthAccountMnemonic                          Mnemonic that generates your Ethereum account
     EthAccountPasswordFilePath                  Path to the password file of the corresponding Ethereum account
     FileTribeDAppAddress                        Address of the FileTribeDApp contract
     LogLevel {INFO|WARNING|ERROR}               Level of logs that will be printed to stdout                                   

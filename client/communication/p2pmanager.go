@@ -32,7 +32,6 @@ import (
 	"github.com/aliras1/FileTribe/client/interfaces"
 	. "github.com/aliras1/FileTribe/collections"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
-	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 
@@ -40,7 +39,7 @@ type P2PHandleConnection func(addressBook *Map, conn *common.P2PConn, stop chan 
 
 type P2PManager struct {
 	account        interfaces.IAccount
-	signer		   *tribecrypto.Signer
+	signer		   common.Signer
 	sessions       *Map
 	addressBook    *common.AddressBook
 	p2pListener    *ipfsapi.P2PListener
@@ -53,7 +52,7 @@ type P2PManager struct {
 func NewP2PManager(
 	port string,
 	account interfaces.IAccount,
-	signer *tribecrypto.Signer,
+	signer common.Signer,
 	addressBook *common.AddressBook,
 	ctxCallback sesscommon.CtxCallback,
 	ipfs ipfsapi.IIpfs,

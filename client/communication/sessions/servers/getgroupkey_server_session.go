@@ -26,7 +26,6 @@ import (
 
 	comcommon "github.com/aliras1/FileTribe/client/communication/common"
 	"github.com/aliras1/FileTribe/client/communication/sessions/common"
-	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 type GetGroupKeySessionServer struct {
@@ -36,7 +35,7 @@ type GetGroupKeySessionServer struct {
 	sender          ethcommon.Address
 	groupDataMsg	comcommon.GroupDataMessage
 	callback        common.CtxCallback
-	signer          *tribecrypto.Signer
+	signer          comcommon.Signer
 	challenge       [32]byte
 	onSessionClosed common.SessionClosedCallback
 	lock            sync.RWMutex
@@ -221,7 +220,7 @@ func NewGetGroupDataSessionServer(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
 	sender ethcommon.Address,
-	signer *tribecrypto.Signer,
+	signer comcommon.Signer,
 	callback common.CtxCallback,
 	onSessionClosed common.SessionClosedCallback,
 ) (*GetGroupKeySessionServer, error) {

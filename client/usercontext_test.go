@@ -17,27 +17,27 @@
 package client
 
 import (
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/pkg/errors"
-	ethapp "ipfs-share/eth/gen/Dipfshare"
-	"ipfs-share/eth/gen/factory/AccountFactory"
-	"ipfs-share/eth/gen/factory/ConsensusFactory"
-	"ipfs-share/eth/gen/factory/GroupFactory"
-	"math/big"
-	"testing"
-
+	"crypto/ecdsa"
 	"flag"
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/golang/glog"
+	"io/ioutil"
+	"math/big"
+	"testing"
 	"time"
 
-	"crypto/ecdsa"
-	"io/ioutil"
-	ipfsapi "ipfs-share/ipfs"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/golang/glog"
+	"github.com/pkg/errors"
+
+	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
+	"github.com/aliras1/FileTribe/eth/gen/factory/AccountFactory"
+	"github.com/aliras1/FileTribe/eth/gen/factory/ConsensusFactory"
+	"github.com/aliras1/FileTribe/eth/gen/factory/GroupFactory"
+	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
 
@@ -57,7 +57,7 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 	var auths []*bind.TransactOpts
 	for _, key := range keys {
 		auth := bind.NewKeyedTransactor(key)
-		auth.GasLimit = 47000000
+		auth.GasLimit = 470000000
 
 		auths = append(auths, auth)
 	}
@@ -67,9 +67,9 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 		alloc[auth.From] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
 	}
 
-	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 47000000)
+	simulator := backends.NewSimulatedBackend(core.GenesisAlloc(alloc), 480000000)
 
-	appAdrr, _, app, err := ethapp.DeployDipfshare(auths[0], simulator)
+	appAdrr, _, app, err := ethapp.DeployFileTribeDApp(auths[0], simulator)
 	if err != nil {
 		return nil, common.Address{}, errors.Wrap(err, "could not deploy app contract on simulated chain")
 	}
