@@ -2,10 +2,11 @@ package client
 
 import (
 	"bytes"
-	"context"
+	"fmt"
 	"os"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -17,7 +18,7 @@ import (
 	"github.com/aliras1/FileTribe/client/fs"
 	"github.com/aliras1/FileTribe/client/interfaces"
 	. "github.com/aliras1/FileTribe/collections"
-	ethApp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
+	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
 	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 	"github.com/aliras1/FileTribe/tribecrypto"
@@ -30,7 +31,7 @@ type IUserFacade interface {
 	User() interfaces.IAccount
 	Groups() []IGroupFacade
 	SignOut()
-	Transactions() ([]*types.Receipt, error)
+	Transactions() ([]*types.Transaction, error)
 }
 
 type UserContext struct {
@@ -51,6 +52,64 @@ type UserContext struct {
 	lock 			sync.RWMutex
 }
 
+func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
+	var err error
+	var ctx UserContext
+
+	appContract, err := ethapp.NewFileTribeDApp(appContractAddress, backend)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create account contract instance")
+	}
+
+	ctx.eth = &Eth{
+		Backend:	backend,
+		App:		appContract,
+		Auth:		auth,
+	}
+	ctx.p2pPort = p2pPort
+	ctx.ipfs = ipfs
+	ctx.groups = NewConcurrentMap()
+	ctx.addressBook = common.NewAddressBook(backend, appContract, ipfs)
+	ctx.transactions = NewConcurrentList()
+	ctx.invitations = NewConcurrentList()
+	ctx.subs = NewConcurrentList()
+	ctx.channelStop = make(chan int)
+	ctx.storage = fs.NewStorage(os.Getenv("HOME") + "/.filetribe/" + auth.Address.String())
+
+	accountAddress, err := appContract.GetAccount(&bind.CallOpts{}, auth.Address)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get account address")
+	}
+
+	fmt.Print(accountAddress.Hex())
+
+	if bytes.Equal(accountAddress.Bytes(), bytes.Repeat([]byte{0}, 40)) {
+		fmt.Println("No FileTribe account found associated with current ethereum account. Use 'filetribe signup <username>' to sign up")
+
+		go ctx.HandleAccountCreatedEvents(ctx.eth.App)
+	} else {
+		account, err := NewAccountFromStorage(ctx.storage, ctx.eth.Backend)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not create account object")
+		}
+
+		if !bytes.Equal(account.ContractAddress().Bytes(), accountAddress.Bytes()) {
+			if err := account.SetContract(accountAddress, ctx.eth.Backend); err != nil {
+				return nil, errors.Wrap(err, "could not set contract")
+			}
+
+			if err := account.Save(); err != nil {
+				return nil, errors.Wrap(err, "could not save account object")
+			}
+		}
+
+		if err := ctx.Init(account); err != nil {
+			return nil, errors.Wrap(err, "could not initialize user context")
+		}
+	}
+
+	return &ctx, nil
+}
 
 func (ctx *UserContext) SignUp(username string) error {
 	glog.Infof("[*] Account '%s' signing in...", username)
@@ -130,7 +189,7 @@ func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	p2p, err := com.NewP2PManager(
 		ctx.p2pPort,
 		acc,
-		ctx.eth.Auth.Signer,
+		ctx.eth.Auth.Sign,
 		ctx.addressBook,
 		ctx,
 		ctx.ipfs)
@@ -152,36 +211,6 @@ func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	}
 
 	return nil
-}
-
-func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
-	var err error
-	var ctx UserContext
-
-	appContract, err := ethApp.NewFileTribeDApp(appContractAddress, backend)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create account contract instance")
-	}
-
-	ctx.eth = &Eth{
-		Backend:	backend,
-		App:		appContract,
-		Auth:		auth,
-	}
-	ctx.p2pPort = p2pPort
-	ctx.ipfs = ipfs
-	ctx.groups = NewConcurrentMap()
-	ctx.addressBook = common.NewAddressBook(backend, appContract, ipfs)
-	ctx.transactions = NewConcurrentList()
-	ctx.invitations = NewConcurrentList()
-	ctx.subs = NewConcurrentList()
-	ctx.channelStop = make(chan int)
-	ctx.storage = fs.NewStorage(os.Getenv("HOME") + "/.filetribe/" + auth.Address.String())
-
-	// app events
-	go ctx.HandleAccountCreatedEvents(ctx.eth.App)
-
-	return &ctx, nil
 }
 
 func (ctx *UserContext) GetGroupData(addr ethcommon.Address) (interfaces.IGroup, *fs.GroupRepo) {
@@ -219,33 +248,47 @@ func (ctx *UserContext) SignOut() {
 }
 
 func (ctx *UserContext) BuildGroups() error {
-	//glog.Infof("Building Groups for account '%s'...", ctx.account.Name())
-	//caps, err := ctx.storage.GetGroupCaps()
-	//if err != nil {
-	//	return errors.Wrap(err, "could not get group caps")
-	//}
-	//
-	//for _, cap := range caps {
-	//	groupContract, err := ethGroup.NewGroup(cap.Address, ctx.backend)
-	//
-	//	groupCtx, err := NewGroupContextFromCAP(
-	//		&cap,
-	//		ctx.account,
-	//		ctx.p2p,
-	//		ctx.addressBook,
-	//		groupContract,
-	//		ctx.ipfs,
-	//		ctx.storage,
-	//		ctx.transactions,
-	//	)
-	//	if err != nil {
-	//		return errors.Wrap(err, "could not create new group context")
-	//	}
-	//	if err := ctx.groups.Put(groupCtx); err != nil {
-	//		glog.Warningf("could not append elem: %s", err)
-	//	}
-	//}
-	//glog.Infof("Building Groups ended")
+	glog.Infof("Building Groups for account '%s'...", ctx.account.Name())
+
+	caps, err := ctx.storage.GetGroupMetas()
+	if err != nil {
+		return errors.Wrap(err, "could not get group caps")
+	}
+
+	for _, cap := range caps {
+		contract, err := ethgroup.NewGroup(cap.Address, ctx.eth.Backend)
+		if err != nil {
+			return errors.Wrap(err, "could not create new eth group instance")
+		}
+
+		config := &GroupContextConfig{
+			Group: NewGroupFromCap(cap, ctx.storage),
+			Account: ctx.account,
+			P2P: ctx.p2p,
+			AddressBook: ctx.addressBook,
+			Ipfs: ctx.ipfs,
+			Storage: ctx.storage,
+			Transactions: ctx.transactions,
+			Eth:&GroupEth{
+				Group:contract,
+				Eth:ctx.eth,
+			},
+		}
+
+		groupCtx, err := NewGroupContext(config)
+		if err != nil {
+			return errors.Wrap(err, "could not create new group context")
+		}
+
+		if err := groupCtx.Update(); err != nil {
+			return errors.Wrap(err, "could not update group ctx")
+		}
+
+		ctx.groups.Put(groupCtx.Address(), groupCtx)
+	}
+
+	glog.Infof("Building Groups ended")
+
 	return nil
 }
 
@@ -318,16 +361,11 @@ func (ctx *UserContext) List() map[string][]string {
 	return list
 }
 
-func (ctx *UserContext) Transactions() ([]*types.Receipt, error) {
-	var list []*types.Receipt
+func (ctx *UserContext) Transactions() ([]*types.Transaction, error) {
+	var list []*types.Transaction
 
 	for txInt := range ctx.transactions.Iterator() {
-		r, err := ctx.eth.Backend.TransactionReceipt(context.Background(), txInt.(*types.Transaction).Hash())
-		if err != nil {
-			return nil, errors.Wrap(err, "could not get tx receipt")
-		}
-
-		list = append(list, r)
+		list = append(list, txInt.(*types.Transaction))
 	}
 
 	return list, nil

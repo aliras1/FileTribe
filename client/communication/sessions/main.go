@@ -9,7 +9,6 @@ import (
 	"github.com/aliras1/FileTribe/client/communication/sessions/servers"
 	"github.com/aliras1/FileTribe/client/fs"
 	"github.com/aliras1/FileTribe/client/interfaces"
-	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 
@@ -18,7 +17,7 @@ func NewServerSession(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
 	account ethcommon.Address,
-	signer *tribecrypto.Signer,
+	signer comcommon.Signer,
 	callback common.CtxCallback,
 	sessionClosed common.SessionClosedCallback,
 ) (common.ISession, error) {

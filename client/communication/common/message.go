@@ -7,8 +7,6 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethcrypto"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
-
-	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 // MessageType ...
@@ -53,7 +51,7 @@ type Proposal struct {
 }
 
 
-func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer *tribecrypto.Signer) (*Message, error) {
+func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer Signer) (*Message, error) {
 	msg := &Message{
 		From: from,
 		Type: msgType,
@@ -61,7 +59,7 @@ func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, p
 		Payload: payload,
 	}
 
-	sig, err := signer.Sign(msg.Digest())
+	sig, err := signer(msg.Digest())
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign message")
 	}

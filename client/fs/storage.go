@@ -12,7 +12,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
-	"github.com/aliras1/FileTribe/client/fs/caps"
+	"github.com/aliras1/FileTribe/client/fs/meta"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 	"github.com/aliras1/FileTribe/tribecrypto"
 	"github.com/aliras1/FileTribe/utils"
@@ -125,35 +125,73 @@ func (storage *Storage) LoadAccountData() ([]byte, error) {
 
 // Gets all the locally stored group access capabilities from
 // directory data/userdata/caps/GA/
-func (storage *Storage) GetGroupCaps() ([]caps.GroupAccessCap, error) {
-	var capabilities []caps.GroupAccessCap
-	// read capabilities from caps and try to refresh them
+func (storage *Storage) GetGroupMetas() ([]*meta.GroupMeta, error) {
+	var groupMetas []*meta.GroupMeta
+	// read groupMetas from caps and try to refresh them
 	groupCapFiles, err := ioutil.ReadDir(storage.capsGAPath)
 	if err != nil {
-		return capabilities, err
+		return groupMetas, err
 	}
+
 	for _, groupCapFile := range groupCapFiles {
 		if groupCapFile.IsDir() {
 			continue // do not care about directories
 		}
+
 		filePath := storage.capsGAPath + "/" + groupCapFile.Name()
 		capBytes, err := ioutil.ReadFile(filePath)
 		if err != nil {
-			glog.Warning("could not read file '%s': Storage.GetGroupCaps: %s", filePath, err)
+			glog.Warning("could not read file '%s': Storage.GetGroupMetas: %s", filePath, err)
 			continue
 		}
-		var cap caps.GroupAccessCap
-		if err := json.Unmarshal(capBytes, &cap); err != nil {
-			glog.Warning("could not unmarshal group cap: Storage.GetGroupCaps: %s", err)
+
+		var groupMeta meta.GroupMeta
+		if err := json.Unmarshal(capBytes, &groupMeta); err != nil {
+			glog.Warning("could not unmarshal group groupMeta: Storage.GetGroupMetas: %s", err)
 			continue
 		}
-		cap.Boxer.RNG = rand.Reader
-		capabilities = append(capabilities, cap)
+
+		groupMeta.Boxer.RNG = rand.Reader
+		groupMetas = append(groupMetas, &groupMeta)
 	}
-	return capabilities, nil
+
+	return groupMetas, nil
 }
 
-func (storage *Storage) SaveGroupAccessCap(cap *caps.GroupAccessCap) error {
+func (storage *Storage) GetGroupFileMetas(groupAddress string) ([]*meta.FileMeta, error) {
+	var fileMetas []*meta.FileMeta
+
+	baseDir := storage.GroupFileCapDir(groupAddress)
+	metaFiles, err := ioutil.ReadDir(baseDir)
+	if err != nil {
+		return fileMetas, err
+	}
+
+	for _, metaFile := range metaFiles {
+		if metaFile.IsDir() {
+			continue // do not care about directories
+		}
+
+		filePath := baseDir + "/" + metaFile.Name()
+		metaBytes, err := ioutil.ReadFile(filePath)
+		if err != nil {
+			glog.Warning("could not read file '%s': Storage.GetGroupFileMetas: %s", filePath, err)
+			continue
+		}
+
+		var fileMeta meta.FileMeta
+		if err := json.Unmarshal(metaBytes, &fileMeta); err != nil {
+			glog.Warning("could not unmarshal group fileMeta: Storage.GetGroupFileMetas: %s", err)
+			continue
+		}
+
+		fileMetas = append(fileMetas, &fileMeta)
+	}
+
+	return fileMetas, nil
+}
+
+func (storage *Storage) SaveGroupAccessCap(cap *meta.GroupMeta) error {
 	capJson, err := json.Marshal(cap)
 	if err != nil {
 		return errors.Wrap(err, "could not marshal group access capability")

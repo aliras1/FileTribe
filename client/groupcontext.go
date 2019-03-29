@@ -376,7 +376,7 @@ func (groupCtx *GroupContext) approveConsensus(cons *ethcons.Consensus) error {
 		return errors.Wrap(err, "could not get digest from consensus")
 	}
 
-	sig, err := groupCtx.eth.Auth.Signer.Sign(digest[:])
+	sig, err := groupCtx.eth.Auth.Sign(digest[:])
 	if err != nil {
 		return errors.WithMessage(err, "could not sign digest")
 	}

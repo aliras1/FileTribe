@@ -1,4 +1,4 @@
-package caps
+package meta
 
 import (
 	"encoding/json"
@@ -9,13 +9,13 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
-type GroupAccessCap struct {
+type GroupMeta struct {
 	Address ethCommon.Address
 	Boxer   tribecrypto.SymmetricKey
 }
 
-func (cap *GroupAccessCap) Encode() ([]byte, error) {
-	data, err := json.Marshal(cap)
+func (meta *GroupMeta) Encode() ([]byte, error) {
+	data, err := json.Marshal(meta)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not json marshal group access capability")
 	}

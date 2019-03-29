@@ -1,9 +1,9 @@
 {
   "APIAddress": "127.0.0.1:3333",
   "IpfsAPIAddress": "http://127.0.0.1:5001",
-  "EthFullNodeAddress": "ws://127.0.0.1:8001",
-  "EthAccountKeyPath": "/home/alice/ethkeystore/UTC--2018-05-19T19-06-19.498239404Z--c4f45f1822b614116ea5b68d4020f3ae1a0179e5",
+  "EthFullNodeAddress": "wss://ropsten.infura.io/ws/v3/ab40f8d7630e424b8a9e816ca1148f16",
+  "EthAccountMnemonic": "apple orange banana...",
   "EthAccountPasswordFilePath": "/tmp/password",
-  "FileTribeDAppAddress": "0x41cf9ED28C99cC5eBd531bD1929a7E99c122fED8",
+  "FileTribeDAppAddress": "0xec189ACCfbCAb44ED7b7665F293D45287120419b",
   "LogLevel": "INFO"
 }

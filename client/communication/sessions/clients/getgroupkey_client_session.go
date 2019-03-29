@@ -15,14 +15,14 @@ import (
 )
 
 type GetGroupDataSessionClient struct {
-	sessionId          uint32
-	state              uint8
-	receiver           *comcommon.Contact
-	groupDataMsg comcommon.GroupDataMessage
+	sessionId          	uint32
+	state              	uint8
+	receiver           	*comcommon.Contact
+	groupDataMsg 		comcommon.GroupDataMessage
 
-	sender          ethcommon.Address
-	onSessionClosed common.SessionClosedCallback
-	signer          *tribecrypto.Signer
+	sender          	ethcommon.Address
+	onSessionClosed 	common.SessionClosedCallback
+	signer          	comcommon.Signer
 
 	lock 				sync.RWMutex
 	stop			    chan bool
@@ -121,7 +121,7 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 	case 1:
 		{
 			glog.Infof("client %s [1] --> %s", session.sender.String(), session.receiver.AccAddr.String())
-			sig, err := session.signer.Sign(data)
+			sig, err := session.signer(data)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not sign challenge")
 				session.close()
@@ -192,7 +192,7 @@ func NewGetGroupDataSessionClient(
 	groupMsgPayload []byte,
 	contact *comcommon.Contact,
 	sender ethcommon.Address,
-	signer *tribecrypto.Signer,
+	signer comcommon.Signer,
 	onSessionClosed common.SessionClosedCallback,
 	onSuccess common.OnGetGroupKeySuccessCallback,
 ) *GetGroupDataSessionClient {

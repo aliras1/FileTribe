@@ -45,12 +45,16 @@ func (acc *Account) Contract() *ethacc.Account {
 	return acc.contract
 }
 
-func (acc *Account) SetContract(contract *ethacc.Account) {
-	acc.contract = contract
-}
+func (acc *Account) SetContract(address ethcommon.Address, backend chequebook.Backend) error {
+	contract, err := ethacc.NewAccount(address, backend)
+	if err != nil {
+		return err
+	}
 
-func (acc *Account) SetContractAddress(addr ethcommon.Address) {
-	acc.data.ContractAddress = addr
+	acc.data.ContractAddress = address
+	acc.contract = contract
+
+	return nil
 }
 
 func (acc *Account) Save() error {

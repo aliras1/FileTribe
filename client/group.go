@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/aliras1/FileTribe/client/fs"
-	"github.com/aliras1/FileTribe/client/fs/caps"
+	"github.com/aliras1/FileTribe/client/fs/meta"
 	"github.com/aliras1/FileTribe/client/interfaces"
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
@@ -41,7 +41,7 @@ func NewGroup(address ethcommon.Address, groupName string, storage *fs.Storage) 
 	}
 }
 
-func NewGroupFromCap(cap *caps.GroupAccessCap, storage *fs.Storage) interfaces.IGroup {
+func NewGroupFromCap(cap *meta.GroupMeta, storage *fs.Storage) interfaces.IGroup {
 	return &Group {
 		address: 	cap.Address,
 		boxer: 		cap.Boxer,
@@ -70,7 +70,7 @@ func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
 	//	}
 	//	contact := ctx.addressBook.Get(NewAddressId(&c.Address)).(*comcommon.Contact)
 	//
-	//	err = ctx.p2p.StartGetGroupKeySession(groupId, contact, ctx.account, ctx.storage, func(cap *caps.GroupAccessCap) {
+	//	err = ctx.p2p.StartGetGroupKeySession(groupId, contact, ctx.account, ctx.storage, func(cap *caps.GroupMeta) {
 	//		groupCtx, err := NewGroupContextFromCAP(
 	//			cap,
 	//			ctx.account,
@@ -107,7 +107,7 @@ func (g *Group) Encode() ([]byte, error) {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	cap := caps.GroupAccessCap{
+	cap := meta.GroupMeta{
 		Address: g.address,
 		Boxer:   g.boxer,
 	}
@@ -126,7 +126,7 @@ func (g *Group) Save() error {
 	//	return errors.Wrap(err, "could not encode group")
 	//}
 
-	cap := caps.GroupAccessCap{
+	cap := meta.GroupMeta{
 		Address: g.address,
 		Boxer:   g.boxer,
 	}
