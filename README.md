@@ -1,15 +1,18 @@
-# FileTribe
+<p align="center">
+<strong><em>WARNING:</em></strong>
+FileTribe is still in pre-alpha state. Do <strong>NOT</strong> use it for storing or sharing sensitive data. All branches are highly unstable.
+</p>
+<hr/>
 
 <p align="center">
-  <img src="doc/logo.png" width="200">
+  <img src="doc/logo.png" width="350">
 </p>
 
-FileTribe is a blockchain-based decentralized file-sharing and editing system built on [Ethereum](https://www.ethereum.org/) and [IPFS](https://ipfs.io/).
+## FileTribe
 
-##### :warning: WARNING :warning:
-FileTribe is still in pre-alpha state. Do **NOT** use it for storing or sharing sensitive data. All branches are highly unstable.  
+FileTribe is a blockchain-based decentralized file-sharing and editing system built on [Ethereum](https://www.ethereum.org/) and [IPFS](https://ipfs.io/).  
 
-Contract address of the development version on Ropsten: [0xec189ACCfbCAb44ED7b7665F293D45287120419b](https://ropsten.etherscan.io/address/0xec189ACCfbCAb44ED7b7665F293D45287120419b)
+> Contract address of the development version on Ropsten: [0xec189ACCfbCAb44ED7b7665F293D45287120419b](https://ropsten.etherscan.io/address/0xec189ACCfbCAb44ED7b7665F293D45287120419b)
 
 ### Dependency
 
