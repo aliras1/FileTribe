@@ -68,7 +68,8 @@ func NewGroupFromMeta(meta *meta.GroupMeta, storage *fs.Storage) interfaces.IGro
 	}
 }
 
-func NewGroupFromId(groupId [32]byte, ctx *UserContext) error {
+// GetGroupKeyFromAddress tries to get the group key of a group with the given address
+func GetGroupKeyFromAddress(address ethcommon.Address, ctx *UserContext) error {
 	//_, members, _, _, err := ctx.network.GetGroup(groupId)
 	//if err != nil {
 	//	errors.Wrap(err, "could not get group from network")
@@ -241,7 +242,7 @@ func (g *Group) RemoveMember(account ethcommon.Address) {
 	}
 }
 
-// Member returns the list of members
+// Members returns the list of members
 func (g *Group) Members() []ethcommon.Address {
 	g.lock.RLock()
 	defer g.lock.RUnlock()

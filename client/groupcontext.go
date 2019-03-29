@@ -39,6 +39,8 @@ import (
 	"github.com/aliras1/FileTribe/utils"
 )
 
+// IGroupFacade is an interface to main.go through which it can communicate
+// with a GroupContext
 type IGroupFacade interface {
 	Address() ethcommon.Address
 	GrantWriteAccess(filePath string, user ethcommon.Address) error
@@ -50,6 +52,8 @@ type IGroupFacade interface {
 	ListMembers() []ethcommon.Address
 }
 
+// GroupContext represents a groups current state and is responsible for
+// all the communication, storage, encryption work
 type GroupContext struct {
 	account          interfaces.IAccount
 	Group            interfaces.IGroup
