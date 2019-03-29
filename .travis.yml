@@ -23,6 +23,7 @@ install:
   - npm install --save-dev solidity-coverage
   - npm install -g ganache-cli
   - npm install truffle-hdwallet-provider
+  - npm install truffle-assertions
 
 script:
   - ganache-cli &
