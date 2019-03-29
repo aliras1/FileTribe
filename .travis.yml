@@ -18,6 +18,7 @@ before_install:
   - sleep 180
 
 install:
+  - apt-get -y install golang
   - npm install -g truffle
   - npm install
   - npm install --save-dev solidity-coverage

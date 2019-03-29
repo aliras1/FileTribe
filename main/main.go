@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
@@ -50,8 +49,6 @@ const configPath = "./config.json"
 
 var client ipfs_share.IUserFacade
 var ipfs ipfsapi.IIpfs
-var ethNode chequebook.Backend
-var auth *ipfs_share.Auth
 
 func signUp(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
