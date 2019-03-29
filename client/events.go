@@ -78,7 +78,8 @@ func (ctx *UserContext) onAccountCreated(e *ethapp.FileTribeDAppAccountCreated) 
 	glog.Infof("Account created: %s --> %s (%s)", ctx.account.Name(), e.Account.String(), e.Owner.String())
 }
 
-// HandleGroupInvitationEvents
+// HandleGroupInvitationEvents listens to GroupCreated blockchain events
+// and upon receiving one, it stores the invitation
 func (ctx *UserContext) HandleGroupInvitationEvents(acc *ethacc.Account) {
 	glog.Info("groupInvitation handling...")
 	ch := make(chan *ethacc.AccountNewInvitation)
@@ -104,6 +105,9 @@ func (ctx *UserContext) onGroupInvitation(e *ethacc.AccountNewInvitation) {
 	ctx.invitations.Add(e.Group)
 }
 
+// HandleInvitationAcceptedEvents listens to InvitationAccapted blockchain events
+// and upon receiving one, it tries to get the group key and upon its success it
+// creates the group's appropriate GroupContext
 func (ctx *UserContext) HandleInvitationAcceptedEvents(acc *ethacc.Account) {
 	glog.Info("HandleInvitationAcceptedEvents...")
 	ch := make(chan *ethacc.AccountInvitationAccepted)
@@ -183,12 +187,12 @@ func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tr
 	}
 
 	config := &GroupContextConfig{
-		Group: NewGroupFromCap(cap, ctx.storage),
-		Account: ctx.account,
-		P2P: ctx.p2p,
-		AddressBook: ctx.addressBook,
-		Ipfs: ctx.ipfs,
-		Storage: ctx.storage,
+		Group:        NewGroupFromMeta(cap, ctx.storage),
+		Account:      ctx.account,
+		P2P:          ctx.p2p,
+		AddressBook:  ctx.addressBook,
+		Ipfs:         ctx.ipfs,
+		Storage:      ctx.storage,
 		Transactions: ctx.transactions,
 		Eth:&GroupEth{
 			Group:contract,
@@ -212,6 +216,8 @@ func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tr
 	glog.Info("group ctx created")
 }
 
+// HandleGroupCreatedEvents listens to GroupCreated blockchain events
+// and upon receiving one, it creates the group's appropriate GroupContext
 func (ctx *UserContext) HandleGroupCreatedEvents(acc *ethacc.Account) {
 	glog.Info("GroupCreatedEvents...")
 	ch := make(chan *ethacc.AccountGroupCreated)

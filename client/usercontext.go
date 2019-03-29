@@ -278,12 +278,12 @@ func (ctx *UserContext) BuildGroups() error {
 		}
 
 		config := &GroupContextConfig{
-			Group: NewGroupFromCap(cap, ctx.storage),
-			Account: ctx.account,
-			P2P: ctx.p2p,
-			AddressBook: ctx.addressBook,
-			Ipfs: ctx.ipfs,
-			Storage: ctx.storage,
+			Group:        NewGroupFromMeta(cap, ctx.storage),
+			Account:      ctx.account,
+			P2P:          ctx.p2p,
+			AddressBook:  ctx.addressBook,
+			Ipfs:         ctx.ipfs,
+			Storage:      ctx.storage,
 			Transactions: ctx.transactions,
 			Eth:&GroupEth{
 				Group:contract,
