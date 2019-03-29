@@ -37,7 +37,7 @@ contains the necessary information to reach that application.
 1. To use FileTribe you need to edit `$HOME/.filetribe/config.json`
 to include your mnemonic that generates your ethereum account. If you do not have any, you can generate one
 using an [online mnemonic generator](https://iancoleman.io/bip39/) or by using [MetaMask](https://metamask.io/).
-    ```
+    ```json
     "EthAccountMnemonic": "your own long nice menmonic...",
     ```
 

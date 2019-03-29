@@ -5,20 +5,15 @@ language: node_js
 node_js:
   - "9"
 
-services:
-- docker
-
 cache:
   directories:
   - node_modules
 
 before_install:
-  - docker build -f ./misc/eth/Dockerfile -t eth .
-  - docker run --rm -dit -p 30304:30304 -p 8000:8000 --name ethdevnet eth:latest
-  - sleep 180
+  - sudo apt-get update
+  - sudo apt-get install -y golang
 
 install:
-  - apt-get -y install golang
   - npm install -g truffle
   - npm install
   - npm install --save-dev solidity-coverage
@@ -34,6 +29,6 @@ script:
   - cd ..
   - make all
 
-after_script:
-  - docker kill ethdevnet
+#after_script:
+#  - docker kill ethdevnet
 #- npm run coverage && cat coverage/lcov.info | coveralls
