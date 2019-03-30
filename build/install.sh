@@ -35,7 +35,7 @@ go get -u github.com/tools/godep
 
 CURRENT_DIR=$PWD
 cd ${GOPATH}/src/github.com/ethereum/go-ethereum
-${GOPATH}/bin/godep install ./cmd/abigen/
+${GOPATH}/bin/godep go install ./cmd/abigen/
 cd ${CURRENT_DIR}
 
 echo [*] Generating abi APIs...
