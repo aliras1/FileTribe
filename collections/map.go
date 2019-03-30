@@ -20,24 +20,26 @@ import (
 	"sync"
 )
 
-type Compare func(interface{}, interface{}) bool
-
+// KeyValuePair is used by the Map iterator
 type KeyValuePair struct {
-	Key interface{}
+	Key   interface{}
 	Value interface{}
 }
 
+// Map is a concurrent map
 type Map struct {
 	lock sync.RWMutex
 	data map[interface{}]interface{}
 }
 
+// NewConcurrentMap creates a new Map
 func NewConcurrentMap() *Map {
 	return &Map{
 		data: make(map[interface{}]interface{}),
 	}
 }
 
+// Put puts a key value pair into the map
 func (c *Map) Put(key interface{}, value interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -45,11 +47,13 @@ func (c *Map) Put(key interface{}, value interface{}) {
 	c.data[key] = value
 }
 
+// Reset resets the map, losing all its previous data in the process
 func (c *Map) Reset() {
 	c.data = make(map[interface{}]interface{})
 }
 
-func (c *Map) VIterator() <- chan interface{} {
+// VIterator is the value iterator of the map
+func (c *Map) VIterator() <-chan interface{} {
 	channel := make(chan interface{})
 
 	go func() {
@@ -65,7 +69,8 @@ func (c *Map) VIterator() <- chan interface{} {
 	return channel
 }
 
-func (c *Map) KIterator() <- chan interface{} {
+// KIterator is the key iterator of the map
+func (c *Map) KIterator() <-chan interface{} {
 	channel := make(chan interface{})
 
 	go func() {
@@ -73,7 +78,7 @@ func (c *Map) KIterator() <- chan interface{} {
 		defer c.lock.RUnlock()
 		defer close(channel)
 
-		for k, _ := range c.data {
+		for k := range c.data {
 			channel <- k
 		}
 	}()
@@ -81,7 +86,8 @@ func (c *Map) KIterator() <- chan interface{} {
 	return channel
 }
 
-func (c *Map) KVIterator() <- chan KeyValuePair {
+// KVIterator is the key-value iterator of the map
+func (c *Map) KVIterator() <-chan KeyValuePair {
 	channel := make(chan KeyValuePair)
 
 	go func() {
@@ -90,14 +96,14 @@ func (c *Map) KVIterator() <- chan KeyValuePair {
 		defer close(channel)
 
 		for k, v := range c.data {
-			channel <- KeyValuePair{Key:k, Value:v}
+			channel <- KeyValuePair{Key: k, Value: v}
 		}
 	}()
 
 	return channel
 }
 
-
+// Delete deletes an item with the specified key
 func (c *Map) Delete(key interface{}) interface{} {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -109,6 +115,7 @@ func (c *Map) Delete(key interface{}) interface{} {
 	return v
 }
 
+// Get gets an item from the map with the specified key
 func (c *Map) Get(key interface{}) interface{} {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -116,27 +123,7 @@ func (c *Map) Get(key interface{}) interface{} {
 	return c.data[key]
 }
 
-//func (c *Map) FirstOrDefault(id IIdentifier) interface{} {
-//	c.lock.RLock()
-//	defer c.lock.RUnlock()
-//
-//	if len(c.list) == 0 {
-//		return nil
-//	}
-//
-//	if id == nil {
-//		return c.list[0]
-//	}
-//
-//	for _, elem := range c.list {
-//		if elem.ID().Equal(id) {
-//			return elem
-//		}
-//	}
-//
-//	return c.list[0]
-//}
-
+// ToList converts the map into a list
 func (c *Map) ToList() []interface{} {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -149,7 +136,7 @@ func (c *Map) ToList() []interface{} {
 	return l
 }
 
-
+// Count returns how many elements are stored in the map
 func (c *Map) Count() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()

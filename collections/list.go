@@ -18,17 +18,20 @@ package collections
 
 import "sync"
 
+// List is a concurrent list
 type List struct {
 	data []interface{}
 	lock sync.RWMutex
 }
 
+// NewConcurrentList creates a new concurrent list
 func NewConcurrentList() *List {
 	return &List{
 		data: []interface{}{},
 	}
 }
 
+// Add adds an item to the list
 func (l *List) Add(item interface{}) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
@@ -36,7 +39,8 @@ func (l *List) Add(item interface{}) {
 	l.data = append(l.data, item)
 }
 
-func (l *List) Iterator() <- chan interface{} {
+// Iterator can be used for 'for' loops
+func (l *List) Iterator() <-chan interface{} {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
@@ -55,6 +59,7 @@ func (l *List) Iterator() <- chan interface{} {
 	return channel
 }
 
+// Get gets the item with index i
 func (l *List) Get(i int) interface{} {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
@@ -66,6 +71,7 @@ func (l *List) Get(i int) interface{} {
 	return l.data[i]
 }
 
+// Count returns the length of the list
 func (l *List) Count() int {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
