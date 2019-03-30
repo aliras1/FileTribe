@@ -39,7 +39,7 @@ $ make all
 ```
 This will download the [Go](https://golang.org/) dependencies, compile the solidity sources and create [Go](https://golang.org/) bindings to them. Note that you may have to use make in `sudo` mode since go-ethereum's abigen might fail when trying to resolve the dependencies of the generated [Go](https://golang.org/) files. 
 
-### How to use
+### Getting started
 
 An unsafe developer version of FileTribe is deployed on the **Ropsten** test network. The default `config.json` 
 contains the necessary information to reach that application. 
@@ -85,11 +85,43 @@ You can configure the FileTribe daemon with `$HOME/.filetribe/config.json`. If y
 $filetribe daemon
 ```
 
-##### Execute commands on the client
-
 Now that you have a running filetribe daemon you can start interacting with it. Since most of the operations you perform 
 will result in a contract method call on the blockchain, these operations will not come into force in an instant.
-You can check your pending transactions by executing `filetribe ls -tx` and lookup the results on [Etherscan's Ropsten part](https://ropsten.etherscan.io/). 
+
+>You can check your pending transactions by executing `filetribe ls -tx` and lookup the results on [Etherscan's Ropsten part](https://ropsten.etherscan.io/).
+
+1. ###### Sign up
+
+    Execute 
+    ```
+    $filetribe signup <username>
+    ```
+    to sign up and wait for the blockchain transaction to complete.
+    After successfully signe up, a `filetribe/<usnername>` directory should appear in your `$HOME` directory.
+
+2. ###### Create a group
+    Execute 
+    ```
+    $filetribe group create <groupname>
+    ```
+    to create a group. As usually, wait for the transaction to complete.
+    After it is done, the directory `$HOME/filetribe/<username>/<groupname>` should appear.
+    This will be the group's repository. You can share your files with your group by copying them into this folder.
+ 
+3. ###### Invite others
+    You can invite other users by executing
+    ```
+    $filetribe group invite <groupaddress> <other user's filetribe account address>
+    ```
+    
+4. ###### Commit changes
+    Do not forget to commit your changes, as your file shares/modifications will be visible to
+    your group mates only if you have committed them. Execute
+    ```
+    $filetribe group repo commit <groupaddress>
+    ```
+ 
+#### Usage
 
 ```
 $filetribe --help

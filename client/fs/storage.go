@@ -42,6 +42,7 @@ const (
 // functions that are responsible for the file level
 // functionalities
 type Storage struct {
+	basePath        string
 	dataPath        string
 	publicPath      string
 	publicFilesPath string
@@ -58,39 +59,39 @@ type Storage struct {
 	contextDataPath string
 }
 
-// NewStorage creates the directory structure
-func NewStorage(dataPath string) *Storage {
-	glog.Info(dataPath)
-
+// NewStorage creates a new Storage object
+func NewStorage(basePath string) *Storage {
 	var storage Storage
-	storage.dataPath = dataPath + "/data/"
-	storage.publicPath = storage.dataPath + "public/"
-	storage.publicFilesPath = storage.dataPath + "public/files/"
-	storage.publicForPath = storage.dataPath + "public/for/"
-	storage.userDataPath = storage.dataPath + "userdata/"
-	storage.metasPath = storage.dataPath + "userdata/metas/"
-	storage.origPath = storage.dataPath + "userdata/orig/"
-	storage.metasGAPath = storage.dataPath + "userdata/metas/GA/"
-	storage.fileRootPath = storage.dataPath + "userdata/root/"
-	storage.myFilesPath = storage.dataPath + "userdata/root/MyFiles/"
-	storage.sharedPath = storage.dataPath + "userdata/shared/"
-	storage.tmpPath = storage.dataPath + "userdata/tmp/"
-	storage.contextDataPath = storage.dataPath + "userdata/context/"
+
+	storage.basePath = basePath + "/filetribe/"
+
+	return &storage
+}
+
+// Init creates the directory structure defined in Storage
+func (storage *Storage) Init(username string) {
+	storage.dataPath = storage.basePath + username + "/"
+	//storage.publicPath = storage.dataPath + "public/"
+	//storage.publicFilesPath = storage.dataPath + "public/files/"
+	storage.userDataPath = storage.dataPath + ".userdata/"
+	storage.metasPath = storage.dataPath + ".userdata/metas/"
+	storage.origPath = storage.dataPath + ".userdata/orig/"
+	storage.metasGAPath = storage.dataPath + ".userdata/metas/GA/"
+	storage.fileRootPath = storage.dataPath
+	storage.myFilesPath = storage.dataPath + "MyFiles/"
+	storage.tmpPath = storage.dataPath + ".userdata/tmp/"
+	storage.contextDataPath = storage.dataPath + ".userdata/context/"
 
 	os.MkdirAll(storage.dataPath, 0770)
-	os.MkdirAll(storage.publicFilesPath, 0770)
-	os.MkdirAll(storage.publicForPath, 0770)
+	//os.MkdirAll(storage.publicFilesPath, 0770)
+	//os.MkdirAll(storage.publicForPath, 0770)
 	os.MkdirAll(storage.metasPath, 0770)
 	os.MkdirAll(storage.origPath, 0770)
 	os.MkdirAll(storage.metasGAPath, 0770)
 	os.MkdirAll(storage.fileRootPath, 0770)
 	os.MkdirAll(storage.myFilesPath, 0770)
-	os.MkdirAll(storage.sharedPath, 0770)
 	os.MkdirAll(storage.tmpPath, 0770)
-	os.MkdirAll(storage.ipfsFilesPath, 0770)
 	os.MkdirAll(storage.contextDataPath, 0770)
-
-	return &storage
 }
 
 // UserFilesPath returns the path to the user's files

@@ -138,7 +138,27 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 	return simulator, appAdrr, nil
 }
 
-func NewTestCtx(username string, signup bool, mnemonic string, sim *backends.SimulatedBackend, appAddr common.Address, p2pPort string) (*UserContext, error) {
+func NewTestAuth(keyPath string, password string) (*Auth, error) {
+	ethKeyData, err := ioutil.ReadFile(keyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := keystore.DecryptKey(ethKeyData, password)
+	if err != nil {
+		return nil, err
+	}
+
+	txOpts := bind.NewKeyedTransactor(key.PrivateKey)
+	txOpts.GasLimit = 47000000
+
+	return &Auth{
+		Address: key.Address,
+		TxOpts:  txOpts,
+	}, nil
+}
+
+func NewTestCtx(username string, signup bool, keyPath string, sim *backends.SimulatedBackend, appAddr common.Address, p2pPort string) (*UserContext, error) {
 	t := time.Now()
 	glog.Info("ipfs inst: ", time.Since(t))
 
@@ -164,7 +184,7 @@ func NewTestCtx(username string, signup bool, mnemonic string, sim *backends.Sim
 		}
 	}
 
-	auth, err := NewAuth(mnemonic)
+	auth, err := NewTestAuth(keyPath, "pwd")
 	if err != nil {
 		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
 	}

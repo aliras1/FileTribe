@@ -49,7 +49,7 @@ type GroupRepo struct {
 
 // NewGroupRepo creates a new GroupRepo
 func NewGroupRepo(group interfaces.IGroup, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
-	storage.MakeGroupDir(group.Address().String())
+	storage.MakeGroupDir(group.Name())
 
 	metas, err := storage.GetGroupFileMetas(group.Address().String())
 	if err != nil {

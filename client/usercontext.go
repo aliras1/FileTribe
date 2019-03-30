@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -95,7 +96,7 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	ctx.invitations = NewConcurrentList()
 	ctx.subs = NewConcurrentList()
 	ctx.channelStop = make(chan int)
-	ctx.storage = fs.NewStorage(os.Getenv("HOME") + "/.filetribe/" + auth.Address.String())
+	ctx.storage = fs.NewStorage(os.Getenv("HOME"))
 
 	accountAddress, err := appContract.GetAccount(&bind.CallOpts{}, auth.Address)
 	if err != nil {
@@ -104,7 +105,7 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 
 	fmt.Print(accountAddress.Hex())
 
-	if bytes.Equal(accountAddress.Bytes(), bytes.Repeat([]byte{0}, 40)) {
+	if strings.EqualFold(accountAddress.String(), "0x" + strings.Repeat("0", 40)) {
 		fmt.Println("No FileTribe account found associated with current ethereum account. Use 'filetribe signup <username>' to sign up")
 
 		go ctx.HandleAccountCreatedEvents(ctx.eth.App)
@@ -140,6 +141,8 @@ func (ctx *UserContext) SignUp(username string) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create new account")
 	}
+
+	ctx.storage.Init(username)
 
 	if err := acc.Save(); err != nil {
 		return errors.Wrap(err, "could not save account")
