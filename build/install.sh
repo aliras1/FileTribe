@@ -4,6 +4,8 @@ type truffle >/dev/null 2>&1 || { echo >&2 "I require Truffle but it's not insta
 
 echo [*] Creating environment...
 go version
+echo GOROOT: ${GOROOT}
+echo GOPATH: ${GOPATH}
 
 ws=./build/go_workspace
 mkdir -p ${ws}

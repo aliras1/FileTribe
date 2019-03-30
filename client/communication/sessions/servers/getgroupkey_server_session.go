@@ -148,7 +148,7 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 
 			switch session.groupDataMsg.Data {
 			case comcommon.GetGroupKey:
-				boxer, err := session.callback.Boxer(session.groupDataMsg.Group)
+				boxer, err := session.callback.GetBoxerOfGroup(session.groupDataMsg.Group)
 				if err != nil {
 					session.error = errors.Wrap(err, "could not get group boxer")
 					session.close()
@@ -163,7 +163,7 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 				}
 				key = data
 			case comcommon.GetProposedGroupKey:
-				boxer, err := session.callback.ProposedBoxer(session.groupDataMsg.Group, ethcommon.BytesToAddress(session.groupDataMsg.Payload))
+				boxer, err := session.callback.GetProposedBoxerOfGroup(session.groupDataMsg.Group, ethcommon.BytesToAddress(session.groupDataMsg.Payload))
 				if err != nil {
 					session.error = errors.Wrapf(err, "%s could not get proposed group boxer", session.sender.String())
 					session.close()

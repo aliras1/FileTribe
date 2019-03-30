@@ -29,6 +29,7 @@ import (
 )
 
 
+// HandleGroupInvitationSentEvents listens to GroupInvitationSent events on the blockchain
 func (groupCtx *GroupContext) HandleGroupInvitationSentEvents(group *ethgroup.Group) {
 	glog.Info("HandleGroupInvitationSentEvents...")
 	ch := make(chan *ethgroup.GroupInvitationSent)
@@ -46,6 +47,8 @@ func (groupCtx *GroupContext) HandleGroupInvitationSentEvents(group *ethgroup.Gr
 	}
 }
 
+// HandleGroupInvitationAcceptedEvents listens to GroupInvitationAccepted events on the
+// blockchain and adds the new member to the group, if it receives one
 func (groupCtx *GroupContext) HandleGroupInvitationAcceptedEvents(group *ethgroup.Group) {
 	glog.Info("HandleGroupInvitationAcceptedEvents...")
 	ch := make(chan *ethgroup.GroupInvitationAccepted)
@@ -64,6 +67,8 @@ func (groupCtx *GroupContext) HandleGroupInvitationAcceptedEvents(group *ethgrou
 	}
 }
 
+// HandleNewConsensusEvents listens to NewConsensus events on the blockchain
+// and checks if the target of the consensus is correct. If so it approves it
 func (groupCtx *GroupContext) HandleNewConsensusEvents(group *ethgroup.Group) {
 	glog.Info("HandleNewConsensusEvents...")
 	ch := make(chan *ethgroup.GroupNewConsensus)
@@ -199,6 +204,8 @@ func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address
 	groupCtx.proposedPayloads.Put(proposer, nil)
 }
 
+// HandleIpfsHashChangedEvents listens to IpfsHashChanged events on the blockchain
+// and if it receives one, it updates the group IPFS hash and fetches its contents
 func (groupCtx *GroupContext) HandleIpfsHashChangedEvents(group *ethgroup.Group) {
 	glog.Info("HandleIpfsHashChangedEvents...")
 	ch := make(chan *ethgroup.GroupIpfsHashChanged)

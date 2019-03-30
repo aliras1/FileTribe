@@ -318,7 +318,7 @@ func (groupCtx *GroupContext) startGetKey(encNewIpfsHash []byte) error {
 	//			c,
 	//			groupCtx.account.ContractAddress(),
 	//			func(cap *caps.GroupAccessCap) {
-	//				groupCtx.onGetKeySuccess(cap.Boxer)
+	//				groupCtx.onGetKeySuccess(cap.GetBoxerOfGroup)
 	//			},
 	//		);	err != nil {
 	//			glog.Errorf("could not start get group key session: %s", err)

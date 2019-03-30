@@ -40,6 +40,8 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// IUserFacade is an interface through which main.go can communicate
+// with its UserContext
 type IUserFacade interface {
 	SignUp(username string) error
 	CreateGroup(groupname string) error
@@ -50,6 +52,8 @@ type IUserFacade interface {
 	Transactions() ([]*types.Transaction, error)
 }
 
+// UserContext stores all the user data and it is responsible
+// for handling communication, events, encryption, etc.
 type UserContext struct {
 	account      	interfaces.IAccount
 	eth             *Eth
@@ -68,6 +72,7 @@ type UserContext struct {
 	lock 			sync.RWMutex
 }
 
+// NewUserContext creates a new UserContext with the data provided
 func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	var err error
 	var ctx UserContext
@@ -127,6 +132,7 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	return &ctx, nil
 }
 
+// SignUp creates a new Account, saves it and registers it on the blockchain
 func (ctx *UserContext) SignUp(username string) error {
 	glog.Infof("[*] Account '%s' signing in...", username)
 
@@ -154,17 +160,8 @@ func (ctx *UserContext) SignUp(username string) error {
 	return nil
 }
 
-func (ctx *UserContext) SignIn(username string) error {
-	//auth, err := NewAuth(ethKeyPath, password)
-	//if err != nil {
-	//	return errors.Wrap(err, "could not create Auth")
-	//}
-	//
-	//acc, err := NewAccount()
-
-	return errors.New("not implemented")
-}
-
+// IsMember returns whether a given user is a member of a given group or not.
+// It is used by communication sessions that have no direct access to GroupContexts.
 func (ctx *UserContext) IsMember(group ethcommon.Address, account ethcommon.Address) error {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
@@ -178,7 +175,9 @@ func (ctx *UserContext) IsMember(group ethcommon.Address, account ethcommon.Addr
 	return nil
 }
 
-func (ctx *UserContext) Boxer(group ethcommon.Address) (tribecrypto.SymmetricKey, error) {
+// GetBoxerOfGroup returns the secret key of the given group. It is used
+// by communication sessions that have no direct access to GroupContexts
+func (ctx *UserContext) GetBoxerOfGroup(group ethcommon.Address) (tribecrypto.SymmetricKey, error) {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
 		return tribecrypto.SymmetricKey{}, errors.New("no group found")
@@ -187,7 +186,9 @@ func (ctx *UserContext) Boxer(group ethcommon.Address) (tribecrypto.SymmetricKey
 	return groupInt.(*GroupContext).Group.Boxer(), nil
 }
 
-func (ctx *UserContext) ProposedBoxer(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error) {
+// GetProposedBoxerOfGroup returns the secret key of the given group. It is
+// used by communication sessions that have no direct access to GroupContexts
+func (ctx *UserContext) GetProposedBoxerOfGroup(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error) {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
 		return tribecrypto.SymmetricKey{}, errors.New("no group found")

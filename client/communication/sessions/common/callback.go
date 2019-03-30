@@ -40,7 +40,7 @@ type Broadcast func(msg []byte) error
 type CtxCallback interface {
 	IsMember(group ethcommon.Address, account ethcommon.Address) error
 
-	Boxer(group ethcommon.Address) (tribecrypto.SymmetricKey, error)
+	GetBoxerOfGroup(group ethcommon.Address) (tribecrypto.SymmetricKey, error)
 
-	ProposedBoxer(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error)
+	GetProposedBoxerOfGroup(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error)
 }
