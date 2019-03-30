@@ -17,9 +17,9 @@
 package utils
 
 import (
-	"os"
-	"io"
 	"github.com/pkg/errors"
+	"io"
+	"os"
 )
 
 // CopyFile copies a file from the source to the given destination

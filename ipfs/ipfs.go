@@ -123,7 +123,7 @@ func (ipfs *Ipfs) P2PListen(ctx context.Context, protocol, maddr string) (*P2PLi
 	}
 	var response *P2PListener
 	err := ipfs.shell.Request("p2p/listener/open").
-					  Arguments(protocol, maddr).Exec(ctx, &response)
+		Arguments(protocol, maddr).Exec(ctx, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (ipfs *Ipfs) P2PCloseListener(ctx context.Context, protocol string, closeAl
 	// Note that this feature is not implemented yet by the official api
 
 	req := ipfs.shell.Request("p2p/listener/close").
-				      Option("all", strconv.FormatBool(closeAll))
+		Option("all", strconv.FormatBool(closeAll))
 	if protocol != "" {
 		req.Arguments(protocol)
 	}

@@ -20,7 +20,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"testing"
-
 )
 
 func TestSecretBox(t *testing.T) {

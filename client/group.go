@@ -52,16 +52,16 @@ func NewGroup(address ethcommon.Address, groupName string, storage *fs.Storage) 
 	}
 
 	return &Group{
-		address:	address,
-		name: 		groupName,
-		boxer: 		boxer,
-		storage:    storage,
+		address: address,
+		name:    groupName,
+		boxer:   boxer,
+		storage: storage,
 	}
 }
 
 // NewGroupFromMeta creates a new Group from an existing GroupMeta file stored on disk
 func NewGroupFromMeta(meta *meta.GroupMeta, storage *fs.Storage) interfaces.IGroup {
-	return &Group {
+	return &Group{
 		address: meta.Address,
 		boxer:   meta.Boxer,
 		storage: storage,
@@ -153,7 +153,7 @@ func (g *Group) Save() error {
 		Boxer:   g.boxer,
 	}
 
-	if err := g.storage.SaveGroupAccessCap(&cap); err != nil {
+	if err := g.storage.SaveGroupMeta(&cap); err != nil {
 		return errors.Wrap(err, "could not save group cap")
 	}
 

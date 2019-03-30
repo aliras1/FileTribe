@@ -19,15 +19,15 @@ package client
 import (
 	"bytes"
 
-	"github.com/golang/glog"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/golang/glog"
 
 	"github.com/aliras1/FileTribe/client/fs/meta"
-	"github.com/aliras1/FileTribe/tribecrypto"
 	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
 	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
 	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
+	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 // HandleAccountCreatedEvents listens to 'AccountCreated' blockchain events
@@ -36,7 +36,7 @@ func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.FileTribeDApp) {
 	glog.Info("HandleAccountCreatedEvents...")
 	ch := make(chan *ethapp.FileTribeDAppAccountCreated)
 
-	sub, err := app.WatchAccountCreated(&bind.WatchOpts{Context:ctx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := app.WatchAccountCreated(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to AccountCreated events: %s", err)
 		return
@@ -84,7 +84,7 @@ func (ctx *UserContext) HandleGroupInvitationEvents(acc *ethacc.Account) {
 	glog.Info("groupInvitation handling...")
 	ch := make(chan *ethacc.AccountNewInvitation)
 
-	sub, err := acc.WatchNewInvitation(&bind.WatchOpts{Context:ctx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := acc.WatchNewInvitation(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to AccountNewInvitation events: %s", err)
 		return
@@ -112,7 +112,7 @@ func (ctx *UserContext) HandleInvitationAcceptedEvents(acc *ethacc.Account) {
 	glog.Info("HandleInvitationAcceptedEvents...")
 	ch := make(chan *ethacc.AccountInvitationAccepted)
 
-	sub, err := acc.WatchInvitationAccepted(&bind.WatchOpts{Context:ctx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := acc.WatchInvitationAccepted(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to InvitationAccepted events: %s", err)
 		return
@@ -138,7 +138,7 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 		return
 	}
 
-	members, err := group.Members(&bind.CallOpts{Pending:true})
+	members, err := group.Members(&bind.CallOpts{Pending: true})
 	if err != nil {
 		glog.Errorf("could not get group members from eth: %s", err)
 		return
@@ -161,7 +161,7 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 			contact,
 			e.Account,
 			ctx.onGetKeySuccess,
-		);	err != nil {
+		); err != nil {
 			glog.Errorf("could not start get group key session: %s", err)
 		}
 	}
@@ -173,30 +173,30 @@ func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tr
 		return
 	}
 
-	cap := &meta.GroupMeta{Address: groupAddress, Boxer:boxer}
+	groupMeta := &meta.GroupMeta{Address: groupAddress, Boxer: boxer}
 
-	if err := ctx.storage.SaveGroupAccessCap(cap); err != nil {
-		glog.Errorf("could not save group access cap: %s", err)
+	if err := ctx.storage.SaveGroupMeta(groupMeta); err != nil {
+		glog.Errorf("could not save group access groupMeta: %s", err)
 		return
 	}
 
-	contract, err := ethgroup.NewGroup(cap.Address, ctx.eth.Backend)
+	contract, err := ethgroup.NewGroup(groupMeta.Address, ctx.eth.Backend)
 	if err != nil {
 		glog.Errorf("could not create new eth group instance: %s", err)
 		return
 	}
 
 	config := &GroupContextConfig{
-		Group:        NewGroupFromMeta(cap, ctx.storage),
+		Group:        NewGroupFromMeta(groupMeta, ctx.storage),
 		Account:      ctx.account,
 		P2P:          ctx.p2p,
 		AddressBook:  ctx.addressBook,
 		Ipfs:         ctx.ipfs,
 		Storage:      ctx.storage,
 		Transactions: ctx.transactions,
-		Eth:&GroupEth{
-			Group:contract,
-			Eth:ctx.eth,
+		Eth: &GroupEth{
+			Group: contract,
+			Eth:   ctx.eth,
 		},
 	}
 
@@ -222,7 +222,7 @@ func (ctx *UserContext) HandleGroupCreatedEvents(acc *ethacc.Account) {
 	glog.Info("GroupCreatedEvents...")
 	ch := make(chan *ethacc.AccountGroupCreated)
 
-	sub, err := acc.WatchGroupCreated(&bind.WatchOpts{Context:ctx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := acc.WatchGroupCreated(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to GroupCreated events")
 		return
@@ -234,7 +234,6 @@ func (ctx *UserContext) HandleGroupCreatedEvents(acc *ethacc.Account) {
 		go ctx.onGroupCreated(e)
 	}
 }
-
 
 func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 	glog.Info("got a group created event")
@@ -249,7 +248,7 @@ func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 		return
 	}
 
-	groupName, err := groupContract.Name(&bind.CallOpts{Pending:true})
+	groupName, err := groupContract.Name(&bind.CallOpts{Pending: true})
 	if err != nil {
 		glog.Errorf("could not get group name: %s", err)
 		return
@@ -258,16 +257,16 @@ func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 	group := NewGroup(e.Group, groupName, ctx.storage)
 
 	config := &GroupContextConfig{
-		Group: group,
-		Account: ctx.account,
-		P2P: ctx.p2p,
-		AddressBook: ctx.addressBook,
-		Ipfs: ctx.ipfs,
-		Storage: ctx.storage,
+		Group:        group,
+		Account:      ctx.account,
+		P2P:          ctx.p2p,
+		AddressBook:  ctx.addressBook,
+		Ipfs:         ctx.ipfs,
+		Storage:      ctx.storage,
 		Transactions: ctx.transactions,
-		Eth:&GroupEth{
-			Group:groupContract,
-			Eth:ctx.eth,
+		Eth: &GroupEth{
+			Group: groupContract,
+			Eth:   ctx.eth,
 		},
 	}
 

@@ -73,14 +73,14 @@ type GroupContext struct {
 
 // GroupContextConfig is a configuration struct for creating GroupContext
 type GroupContextConfig struct {
-	Group 			interfaces.IGroup
-	Account 		interfaces.IAccount
-	P2P 			*com.P2PManager
-	AddressBook 	*common.AddressBook
-	Eth 			*GroupEth
-	Ipfs 			ipfsapi.IIpfs
-	Storage 		*fs.Storage
-	Transactions 	*List
+	Group        interfaces.IGroup
+	Account      interfaces.IAccount
+	P2P          *com.P2PManager
+	AddressBook  *common.AddressBook
+	Eth          *GroupEth
+	Ipfs         ipfsapi.IIpfs
+	Storage      *fs.Storage
+	Transactions *List
 }
 
 // Address returns the smart contract address of the group
@@ -131,7 +131,7 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 }
 
 func onSessionClosed(session sesscommon.ISession) {
-	glog.Infof("session %d closed with error: %s", session.Id(), session.Error())
+	glog.Infof("session %d closed with error: %s", session.ID(), session.Error())
 }
 
 // Update fetches all the current group information from the blockchain
@@ -139,12 +139,12 @@ func onSessionClosed(session sesscommon.ISession) {
 func (groupCtx *GroupContext) Update() error {
 	contract := groupCtx.eth.Group
 
-	name, err := contract.Name(&bind.CallOpts{Pending:true})
+	name, err := contract.Name(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return errors.Wrap(err, "could not get group name")
 	}
 
-	members, err := contract.Members(&bind.CallOpts{Pending:true})
+	members, err := contract.Members(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return errors.Wrap(err, "could not get group members")
 	}
@@ -255,7 +255,7 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 			filePath,
 			[]ethcommon.Address{groupCtx.account.ContractAddress()},
 			groupCtx.Group.Address().String(),
-			groupCtx.Storage,)
+			groupCtx.Storage)
 		if err != nil {
 			return errors.Wrap(err, "could not create new group file")
 		}
@@ -281,7 +281,7 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 			filePath,
 			[]ethcommon.Address{groupCtx.account.ContractAddress()},
 			groupCtx.Group.Address().String(),
-			groupCtx.Storage,)
+			groupCtx.Storage)
 		if err != nil {
 			return errors.Wrap(err, "could not create new group file")
 		}
@@ -294,7 +294,6 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 
 	return nil
 }
-
 
 func (groupCtx *GroupContext) startGetKey(encNewIpfsHash []byte) error {
 	//newBoxer, ok := groupCtx.proposedKeys[encNewIpfsHashBase64]
@@ -348,7 +347,7 @@ func (groupCtx *GroupContext) ListFiles() []string {
 	files := groupCtx.Repo.Files()
 
 	for _, file := range files {
-		fileNames = append(fileNames, file.Cap.FileName)
+		fileNames = append(fileNames, file.Meta.FileName)
 	}
 
 	return fileNames
@@ -382,7 +381,7 @@ func (groupCtx *GroupContext) p2pBroadcast(msg []byte) error {
 }
 
 func (groupCtx *GroupContext) approveConsensus(cons *ethcons.Consensus) error {
-	digest, err := cons.Digest(&bind.CallOpts{Pending:true})
+	digest, err := cons.Digest(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return errors.Wrap(err, "could not get digest from consensus")
 	}

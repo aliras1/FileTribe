@@ -28,12 +28,15 @@ import (
 	"github.com/aliras1/FileTribe/client/communication/sessions/common"
 )
 
+// GetGroupKeySessionServer is a server session that will send the requested
+// group data to the sender if he can authenticate itself and has access to
+// the given data
 type GetGroupKeySessionServer struct {
-	sessionId       uint32
+	sessionID       uint32
 	state           uint8
 	contact         *comcommon.Contact
 	sender          ethcommon.Address
-	groupDataMsg	comcommon.GroupDataMessage
+	groupDataMsg    comcommon.GroupDataMessage
 	callback        common.CtxCallback
 	signer          comcommon.Signer
 	challenge       [32]byte
@@ -44,6 +47,7 @@ type GetGroupKeySessionServer struct {
 	keyType         comcommon.MessageType
 }
 
+// Error returns any errors that may have occurred during the session
 func (session *GetGroupKeySessionServer) Error() error {
 	return session.error
 }
@@ -53,6 +57,7 @@ func (session *GetGroupKeySessionServer) close() {
 	session.onSessionClosed(session)
 }
 
+// State returns the session's current state
 func (session *GetGroupKeySessionServer) State() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
@@ -60,10 +65,12 @@ func (session *GetGroupKeySessionServer) State() uint8 {
 	return session.state
 }
 
-func (session *GetGroupKeySessionServer) Id() uint32 {
-	return session.sessionId
+// ID returns the session id
+func (session *GetGroupKeySessionServer) ID() uint32 {
+	return session.sessionID
 }
 
+// Abort aborts the session
 func (session *GetGroupKeySessionServer) Abort() {
 	if !session.isAlive() {
 		return
@@ -72,6 +79,7 @@ func (session *GetGroupKeySessionServer) Abort() {
 	session.close()
 }
 
+// IsAlive returns if the session is active or not
 func (session *GetGroupKeySessionServer) IsAlive() bool {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
@@ -83,10 +91,12 @@ func (session *GetGroupKeySessionServer) isAlive() bool {
 	return session.state != common.EndOfSession
 }
 
+// Run starts the session
 func (session *GetGroupKeySessionServer) Run() {
 	session.NextState(nil, nil)
 }
 
+// NextState moves the FSM's state. For more information see ISession
 func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, data []byte) {
 	session.lock.Lock()
 	defer session.lock.Unlock()
@@ -94,18 +104,18 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 	switch session.state {
 	case 0:
 		{
-			glog.Infof("server [%d] {%s} [0] --> %s", session.sessionId, session.sender.String(), session.contact.AccAddr.String())
+			glog.Infof("server [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.contact.AccAddr.String())
 			if err := session.callback.IsMember(session.groupDataMsg.Group, session.contact.AccAddr); err != nil {
 				session.error = errors.Wrap(err, "could not verify group membership")
 				session.close()
 				return
 			}
-			glog.Infof("server [%d] [0][0]", session.sessionId)
+			glog.Infof("server [%d] [0][0]", session.sessionID)
 
 			msg, err := comcommon.NewMessage(
 				session.sender,
 				comcommon.GetGroupData,
-				session.sessionId,
+				session.sessionID,
 				session.challenge[:],
 				session.signer,
 			)
@@ -114,7 +124,7 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 				session.close()
 				return
 			}
-			glog.Infof("server [%d] [0][1]", session.sessionId)
+			glog.Infof("server [%d] [0][1]", session.sessionID)
 
 			encMsg, err := msg.Encode()
 			if err != nil {
@@ -122,14 +132,14 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 				session.close()
 				return
 			}
-			glog.Infof("server [%d] [0][2]", session.sessionId)
+			glog.Infof("server [%d] [0][2]", session.sessionID)
 
 			if err := session.contact.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
 				session.close()
 				return
 			}
-			glog.Infof("server [%d] [0][3]", session.sessionId)
+			glog.Infof("server [%d] [0][3]", session.sessionID)
 
 			session.state = 1
 
@@ -137,7 +147,7 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 		}
 	case 1:
 		{
-			glog.Infof("server [%d] {%s} [1] --> %s", session.sessionId, session.sender.String(), session.contact.AccAddr.String())
+			glog.Infof("server [%d] {%s} [1] --> %s", session.sessionID, session.sender.String(), session.contact.AccAddr.String())
 			if !session.contact.VerifySignature(session.challenge[:], data) {
 				session.error = errors.New("invalid signature")
 				session.close()
@@ -179,11 +189,10 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 				key = data
 			}
 
-
 			msg, err := comcommon.NewMessage(
 				session.sender,
 				comcommon.GetGroupData,
-				session.sessionId,
+				session.sessionID,
 				key,
 				session.signer,
 			)
@@ -216,6 +225,8 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 	}
 }
 
+// NewGetGroupDataSessionServer creates a new session server that will
+// send the requested group data to the sender
 func NewGetGroupDataSessionServer(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
@@ -236,12 +247,12 @@ func NewGetGroupDataSessionServer(
 	}
 
 	return &GetGroupKeySessionServer{
-		sessionId:       msg.SessionId,
+		sessionID:       msg.SessionID,
 		contact:         contact,
-		callback:		 callback,
+		callback:        callback,
 		sender:          sender,
-		signer:			 signer,
-		groupDataMsg:	 *groupDataMsg,
+		signer:          signer,
+		groupDataMsg:    *groupDataMsg,
 		onSessionClosed: onSessionClosed,
 		state:           0,
 		challenge:       challenge,

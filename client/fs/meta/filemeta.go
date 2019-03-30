@@ -28,6 +28,7 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// FileMeta stores all data that is necessary to reach and read a file from IPFS
 type FileMeta struct {
 	FileName        string
 	IpfsHash        string
@@ -35,6 +36,7 @@ type FileMeta struct {
 	WriteAccessList []ethcommon.Address // if empty --> everyone has write access to it
 }
 
+// Equal decides if two files are identical to each other or not
 func (meta *FileMeta) Equal(other *FileMeta) bool {
 	if strings.Compare(meta.FileName, other.FileName) != 0 {
 		return false
@@ -61,7 +63,7 @@ func (meta *FileMeta) Equal(other *FileMeta) bool {
 	return true
 }
 
-
+// Encode encodes a file meta
 func (meta *FileMeta) Encode() ([]byte, error) {
 	data, err := json.Marshal(meta)
 	if err != nil {
@@ -71,15 +73,17 @@ func (meta *FileMeta) Encode() ([]byte, error) {
 	return data, nil
 }
 
+// EncodeFileMetaList encodes a list of file metas
 func EncodeFileMetaList(lst []*FileMeta) ([]byte, error) {
 	data, err := json.Marshal(lst)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not json marshal: FileCapList")
+		return nil, errors.Wrap(err, "could not json marshal: FileMetaList")
 	}
 
 	return data, nil
 }
 
+// DecodeFileMeta decodes a single file meta
 func DecodeFileMeta(data []byte) (*FileMeta, error) {
 	var meta FileMeta
 	if err := json.Unmarshal(data, &meta); err != nil {
@@ -89,6 +93,7 @@ func DecodeFileMeta(data []byte) (*FileMeta, error) {
 	return &meta, nil
 }
 
+// DecodeFileMetaList decodes a list of file metas
 func DecodeFileMetaList(data []byte) ([]*FileMeta, error) {
 	var meta []*FileMeta
 	if err := json.Unmarshal(data, &meta); err != nil {
@@ -98,8 +103,8 @@ func DecodeFileMetaList(data []byte) ([]*FileMeta, error) {
 	return meta, nil
 }
 
-
-func NewGroupFileMeta(fileName string, hasWriteAccess []ethcommon.Address) (*FileMeta, error) {
+// NewFileMeta creates a new file meta
+func NewFileMeta(fileName string, hasWriteAccess []ethcommon.Address) (*FileMeta, error) {
 	var key [32]byte
 	if _, err := rand.Read(key[:]); err != nil {
 		return nil, errors.Wrap(err, "could not read from crypto/rand")

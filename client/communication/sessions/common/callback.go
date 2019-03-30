@@ -25,22 +25,34 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// OnGetGroupKeySuccessCallback is called when a group key is retrieved successfully
 type OnGetGroupKeySuccessCallback func(address ethcommon.Address, boxer tribecrypto.SymmetricKey)
 
+// OnClientSuccessCallback is called when a client session is ended
 type OnClientSuccessCallback func(args []interface{})
 
+// OnServerSuccessCallback is called when a server session is ended
 type OnServerSuccessCallback func(args []interface{}, groupId collections.IIdentifier)
 
+// SessionClosedCallback is called when a session is closed
 type SessionClosedCallback func(session ISession)
 
+// GetGroupDataCallback is used for retrieving group data
 type GetGroupDataCallback func(addr ethcommon.Address) (interfaces.IGroup, *fs.GroupRepo)
 
+// Broadcast ...
 type Broadcast func(msg []byte) error
 
+// CtxCallback is used by sessions to get specific group data
+// without access to all GroupContext functions and data
 type CtxCallback interface {
+	// IsMember returns if an account is a member of a group
 	IsMember(group ethcommon.Address, account ethcommon.Address) error
 
+	// GetBoxerOfGroup returns the current key of a group
 	GetBoxerOfGroup(group ethcommon.Address) (tribecrypto.SymmetricKey, error)
 
+	// GetProposedBoxerOfGroup returns the proposed group key of a group
+	// that was suggested the given member
 	GetProposedBoxerOfGroup(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error)
 }

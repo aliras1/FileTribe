@@ -45,9 +45,9 @@ func NewAuth(mnemonic string) (*Auth, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not derive account from wallet")
 	}
-	
+
 	txOpts := &bind.TransactOpts{
-		From: account.Address,
+		From:     account.Address,
 		GasLimit: 8000000,
 		Signer: func(signer types.Signer, address ethcommon.Address, tx *types.Transaction) (*types.Transaction, error) {
 			if address != account.Address {
@@ -59,8 +59,8 @@ func NewAuth(mnemonic string) (*Auth, error) {
 	}
 
 	return &Auth{
-		wallet:wallet,
-		account:account,
+		wallet:  wallet,
+		account: account,
 		Address: account.Address,
 		TxOpts:  txOpts,
 	}, nil

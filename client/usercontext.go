@@ -55,21 +55,21 @@ type IUserFacade interface {
 // UserContext stores all the user data and it is responsible
 // for handling communication, events, encryption, etc.
 type UserContext struct {
-	account      	interfaces.IAccount
-	eth             *Eth
-	groups       	*Map
-	addressBook  	*common.AddressBook
-	ipfs         	ipfsapi.IIpfs
-	storage      	*fs.Storage
-	p2p          	*com.P2PManager
-	p2pPort 		string
+	account     interfaces.IAccount
+	eth         *Eth
+	groups      *Map
+	addressBook *common.AddressBook
+	ipfs        ipfsapi.IIpfs
+	storage     *fs.Storage
+	p2p         *com.P2PManager
+	p2pPort     string
 
-	transactions 	*List
-	invitations     *List
-	subs 			*List
+	transactions *List
+	invitations  *List
+	subs         *List
 
-	channelStop 	chan int
-	lock 			sync.RWMutex
+	channelStop chan int
+	lock        sync.RWMutex
 }
 
 // NewUserContext creates a new UserContext with the data provided
@@ -83,9 +83,9 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	}
 
 	ctx.eth = &Eth{
-		Backend:	backend,
-		App:		appContract,
-		Auth:		auth,
+		Backend: backend,
+		App:     appContract,
+		Auth:    auth,
 	}
 	ctx.p2pPort = p2pPort
 	ctx.ipfs = ipfs
@@ -280,9 +280,9 @@ func (ctx *UserContext) BuildGroups() error {
 			Ipfs:         ctx.ipfs,
 			Storage:      ctx.storage,
 			Transactions: ctx.transactions,
-			Eth:&GroupEth{
-				Group:contract,
-				Eth:ctx.eth,
+			Eth: &GroupEth{
+				Group: contract,
+				Eth:   ctx.eth,
 			},
 		}
 

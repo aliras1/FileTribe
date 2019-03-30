@@ -20,8 +20,6 @@ before_install:
   - export GOROOT=/usr/local/go
   - export GOPATH=$HOME/go
   - export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
-#  - sudo apt-get install -y ethereum
-#  - sudo apt-get isntall go-dep
   - mkdir -p $HOME/.local/bin
 
 install:

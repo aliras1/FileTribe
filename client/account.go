@@ -111,9 +111,9 @@ func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (int
 	}
 
 	acc := &Account{
-		storage:	storage,
-		data:		&accData,
-		contract:	contract,
+		storage:  storage,
+		data:     &accData,
+		contract: contract,
 	}
 
 	return acc, nil
@@ -132,12 +132,12 @@ func NewAccount(username string, storage *fs.Storage) (interfaces.IAccount, erro
 
 	return &Account{
 		data: &AccountData{
-			Name:username,
+			Name: username,
 			Boxer: tribecrypto.AnonymBoxer{
 				PublicKey:  tribecrypto.AnonymPublicKey{Value: publicBoxerBytes},
 				PrivateKey: tribecrypto.AnonymPrivateKey{Value: secretBoxerBytes},
 			},
 		},
-		storage:storage,
+		storage: storage,
 	}, nil
 }

@@ -30,7 +30,7 @@ import (
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
-
+// GroupConnection is responsible for handling the group's IPFS pubsub subscription
 type GroupConnection struct {
 	group         interfaces.IGroup
 	repo          *fs.GroupRepo
@@ -41,12 +41,13 @@ type GroupConnection struct {
 
 	ipfs ipfsapi.IIpfs
 
-	channelState  chan []byte
-	channelStop   chan bool
+	channelState chan []byte
+	channelStop  chan bool
 
 	groupSubscription ipfsapi.IPubSubSubscription
 }
 
+// NewGroupConnection creates a new GroupConnection
 func NewGroupConnection(
 	group interfaces.IGroup,
 	repo *fs.GroupRepo,
@@ -55,7 +56,7 @@ func NewGroupConnection(
 	sessionClosed sesscommon.SessionClosedCallback,
 	p2p *P2PManager,
 	ipfs ipfsapi.IIpfs,
-	) *GroupConnection {
+) *GroupConnection {
 
 	glog.Infof("Creating group connection...")
 
@@ -85,7 +86,7 @@ func NewGroupConnection(
 	return &conn
 }
 
-
+// Broadcast publishes a message to the group topic
 func (conn *GroupConnection) Broadcast(msg []byte) error {
 	topic := conn.group.Address().String()
 
@@ -104,7 +105,7 @@ func (conn *GroupConnection) connectionListener() {
 	glog.Infof("%s: GroupConnection for group '%s' is running...", conn.account.Name(), conn.group.Address().String())
 	for {
 		select {
-		case <- conn.channelStop:
+		case <-conn.channelStop:
 			{
 				conn.groupSubscription.Cancel()
 				close(conn.channelStop)
@@ -154,7 +155,7 @@ func (conn *GroupConnection) connectionListener() {
 					continue
 				}
 
-				if err := msg.Validate(contact); err != nil {
+				if err := msg.Verify(contact); err != nil {
 					glog.Warningf("invalid pubsub message to group %v from account %v", conn.group.Address().String(), msg.From.Bytes())
 					continue
 				}
@@ -178,6 +179,7 @@ func (conn *GroupConnection) connectionListener() {
 	}
 }
 
+// Kill kills the group connection listener
 func (conn *GroupConnection) Kill() {
 	conn.channelStop <- true
 }

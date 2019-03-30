@@ -29,14 +29,14 @@ import (
 // This should be forgotten and use a standard stream cipher
 
 const (
-	chunkSize int = 104
-	overheadSize int = 40
-	maxUint uint64 = ^uint64(0) 
+	chunkSize    int    = 104
+	overheadSize int    = 40
+	maxUint      uint64 = ^uint64(0)
 )
 
 // FileBoxer is a stream cipher for encrypting huge files
 type FileBoxer struct {
-	Key [32]byte  `json:"key"`
+	Key [32]byte `json:"key"`
 }
 
 func updateNonce(base [24]byte) ([24]byte, error) {
@@ -65,7 +65,7 @@ func updateNonce(base [24]byte) ([24]byte, error) {
 	int64Chunk3++
 
 	buffer := bytes.NewBuffer(nil)
-	
+
 	if err := binary.Write(buffer, binary.BigEndian, &int64Chunk1); err != nil {
 		return [24]byte{}, fmt.Errorf("could not convert int to bin: chunkNonce %s", err)
 	}

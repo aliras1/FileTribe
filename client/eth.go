@@ -28,7 +28,7 @@ import (
 // data, DApp contract and a full ethereum node
 type Eth struct {
 	Auth    *Auth
-	App 	*ethapp.FileTribeDApp
+	App     *ethapp.FileTribeDApp
 	Backend chequebook.Backend
 }
 

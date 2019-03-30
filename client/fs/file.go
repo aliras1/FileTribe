@@ -48,22 +48,22 @@ type IFile interface {
 // File represents a file that
 // is shared in a peer to peer mode
 type File struct {
-	Cap            *meta.FileMeta
+	Meta           *meta.FileMeta
 	PendingChanges *meta.FileMeta
 	DataPath       string
-	CapPath        string
+	MetaPath       string
 	OrigPath       string
 	lock           sync.RWMutex
 }
 
-
-func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId string, storage *Storage) (*File, error) {
+// NewGroupFile creates a new file in the group's directory
+func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupAddress string, storage *Storage) (*File, error) {
 	if writeAccessList == nil {
 		return nil, errors.New("writeAccessList can not be nil")
 	}
 
 	fileName := path.Base(filePath)
-	fileMeta, err := meta.NewGroupFileMeta(fileName, writeAccessList)
+	fileMeta, err := meta.NewFileMeta(fileName, writeAccessList)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create fileMeta for NewFile")
 	}
@@ -73,14 +73,14 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 		return nil, errors.Wrap(err, "could not deep copy fileMeta")
 	}
 
-	capPath := storage.GroupFileCapDir(groupId) + fileMeta.FileName
-	origPath := storage.GroupFileOrigDir(groupId) + fileMeta.FileName
+	metaPath := storage.GroupFileMetaDir(groupAddress) + fileMeta.FileName
+	origPath := storage.GroupFileOrigDir(groupAddress) + fileMeta.FileName
 
 	file := &File{
-		Cap:            fileMeta,
+		Meta:           fileMeta,
 		PendingChanges: &pendingChanges,
 		DataPath:       filePath,
-		CapPath:        capPath,
+		MetaPath:       metaPath,
 		OrigPath:       origPath,
 	}
 
@@ -91,27 +91,27 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupId 
 	return file, nil
 }
 
-func NewGroupFileFromCap(cap *meta.FileMeta, groupId string, storage *Storage) (*File, error) {
-	capPath := storage.GroupFileCapDir(groupId) + cap.FileName
-	dataPath := storage.GroupFileDataDir(groupId) + cap.FileName
-	pendingPath := storage.GroupFileOrigDir(groupId) + cap.FileName
+// NewGroupFileFromMeta creates a new File from the given group file meta data
+func NewGroupFileFromMeta(fileMeta *meta.FileMeta, groupAddress string, storage *Storage) (*File, error) {
+	metaPath := storage.GroupFileMetaDir(groupAddress) + fileMeta.FileName
+	dataPath := storage.GroupFileDataDir(groupAddress) + fileMeta.FileName
+	pendingPath := storage.GroupFileOrigDir(groupAddress) + fileMeta.FileName
 
 	var pendingChanges *meta.FileMeta
-	if err := deepcopy(&pendingChanges, cap); err != nil {
-		return nil, errors.Wrap(err, "could not deep copy cap")
+	if err := deepcopy(&pendingChanges, fileMeta); err != nil {
+		return nil, errors.Wrap(err, "could not deep copy fileMeta")
 	}
 
 	file := &File{
-		Cap:            cap,
+		Meta:           fileMeta,
 		PendingChanges: pendingChanges,
 		DataPath:       dataPath,
-		CapPath:        capPath,
+		MetaPath:       metaPath,
 		OrigPath:       pendingPath,
 	}
 
 	return file, nil
 }
-
 
 // LoadPTPFile loads a File from the disk
 func LoadPTPFile(filePath string) (*File, error) {
@@ -126,20 +126,19 @@ func LoadPTPFile(filePath string) (*File, error) {
 	return &file, nil
 }
 
-// NewFileFromCap creates a new File instance from a shared
-// capability
-func NewFileFromCap(dataDir, capDir string, cap *meta.FileMeta, ipfs ipfsapi.IIpfs, storage *Storage) (*File, error) {
-	dataPath := dataDir + cap.FileName
-	capPath := capDir + cap.FileName
+// NewFileFromMeta creates a new File instance from shared file meta data
+func NewFileFromMeta(dataDir, metaDir string, fileMeta *meta.FileMeta, ipfs ipfsapi.IIpfs, storage *Storage) (*File, error) {
+	dataPath := dataDir + fileMeta.FileName
+	metaPath := metaDir + fileMeta.FileName
 
 	file := &File{
-		Cap:      cap,
+		Meta:     fileMeta,
 		DataPath: dataPath,
-		CapPath:   capPath,
+		MetaPath: metaPath,
 	}
 
 	if err := file.SaveMetadata(); err != nil {
-		return nil, errors.Wrapf(err, "could not save file '%s': NewFileFromCap", cap.FileName)
+		return nil, errors.Wrapf(err, "could not save file '%s': NewFileFromMeta", fileMeta.FileName)
 	}
 
 	go file.Download(storage, ipfs)
@@ -147,19 +146,21 @@ func NewFileFromCap(dataDir, capDir string, cap *meta.FileMeta, ipfs ipfsapi.IIp
 	return file, nil
 }
 
-func (f *File) Update(cap *meta.FileMeta, storage *Storage, ipfs ipfsapi.IIpfs) error {
+// Update updates the file's IPFS hash and if it has changed it
+// downloads its contents
+func (f *File) Update(fileMeta *meta.FileMeta, storage *Storage, ipfs ipfsapi.IIpfs) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
-	oldIpfsHash := f.Cap.IpfsHash
-	f.Cap = cap
-	if strings.Compare(oldIpfsHash, cap.IpfsHash) != 0 {
+	oldIpfsHash := f.Meta.IpfsHash
+	f.Meta = fileMeta
+	if strings.Compare(oldIpfsHash, fileMeta.IpfsHash) != 0 {
 		if err := f.SaveMetadata(); err != nil {
 			return errors.Wrap(err, "could not save file meta data")
 		}
 
-		if err := deepcopy(&f.PendingChanges, f.Cap); err != nil {
-			return errors.Wrap(err, "could not deep copy cap top pending changes")
+		if err := deepcopy(&f.PendingChanges, f.Meta); err != nil {
+			return errors.Wrap(err, "could not deep copy fileMeta top pending changes")
 		}
 
 		go f.Download(storage, ipfs)
@@ -167,13 +168,14 @@ func (f *File) Update(cap *meta.FileMeta, storage *Storage, ipfs ipfsapi.IIpfs) 
 	return nil
 }
 
-// Downloads, decrypts and verifies the content of file from Ipfs
+// Download downloads all the necessary DiffNodes and patches
+// the file along the way
 func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 	dmp := diffmatchpatch.New()
 	patchStack := stack.New()
 
-	currentDiffIpfsHash := f.Cap.IpfsHash
-	currentDiffBoxer := f.Cap.DataKey
+	currentDiffIpfsHash := f.Meta.IpfsHash
+	currentDiffBoxer := f.Meta.DataKey
 	currentStr := ""
 	var origHash []byte
 	if utils.FileExists(f.OrigPath) {
@@ -237,24 +239,17 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 func (f *File) SaveMetadata() error {
 	jsonBytes, err := json.Marshal(f)
 	if err != nil {
-		return errors.Wrapf(err, "could not marshal file '%s'", f.Cap.FileName)
+		return errors.Wrapf(err, "could not marshal file '%s'", f.Meta.FileName)
 	}
 	glog.Infof("%v", f)
-	if err := utils.CreateAndWriteFile(f.CapPath, jsonBytes); err != nil {
-		return errors.Wrapf(err, "could not write file '%s'", f.Cap.FileName)
+	if err := utils.CreateAndWriteFile(f.MetaPath, jsonBytes); err != nil {
+		return errors.Wrapf(err, "could not write file '%s'", f.Meta.FileName)
 	}
 
 	return nil
 }
 
-func GetCapListFromFileList(files []*File) []*meta.FileMeta {
-	var l []*meta.FileMeta
-	for _, file := range files {
-		l = append(l, file.Cap)
-	}
-	return l
-}
-
+// GrantWriteAccess grants write access to a user
 func (f *File) GrantWriteAccess(user, target ethcommon.Address) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -266,12 +261,12 @@ func (f *File) GrantWriteAccess(user, target ethcommon.Address) error {
 		}
 
 		if bytes.Equal(hasW.Bytes(), target.Bytes()) {
-			return errors.New("user already has Write access")
+			return errors.New("target user already has Write access")
 		}
 	}
 
 	if !hasWriteAccess {
-		return errors.New("user has no Write access")
+		return errors.New("you have no Write access to do so")
 	}
 
 	f.PendingChanges.WriteAccessList = append(f.PendingChanges.WriteAccessList, target)
@@ -282,6 +277,7 @@ func (f *File) GrantWriteAccess(user, target ethcommon.Address) error {
 	return nil
 }
 
+// RevokeWriteAccess revokes write access from a user
 func (f *File) RevokeWriteAccess(user, target ethcommon.Address) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -303,10 +299,10 @@ func (f *File) RevokeWriteAccess(user, target ethcommon.Address) error {
 	}
 
 	if !userHasWriteAccess {
-		return errors.New("user has no Write access")
+		return errors.New("you have no Write access")
 	}
 	if !targetHasWriteAccess {
-		return errors.New("target has no Write access")
+		return errors.New("target user has no Write access")
 	}
 
 	for i, hasW := range f.PendingChanges.WriteAccessList {
@@ -352,12 +348,12 @@ func (f *File) diff(boxer tribecrypto.FileBoxer) (*DiffNode, error) {
 	diffs := dmp.DiffMain(originalStr, string(currentData), true)
 
 	diff.Diff = diffs
-	diff.Next = f.Cap.IpfsHash
+	diff.Next = f.Meta.IpfsHash
 
 	return diff, nil
 }
 
-// uploads the diff
+// UploadDiff adds the current DiffNode to IPFS
 func (f *File) UploadDiff(ipfs ipfsapi.IIpfs) (string, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()

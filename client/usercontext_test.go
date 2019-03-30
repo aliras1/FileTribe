@@ -40,7 +40,6 @@ import (
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
-
 func NewEthAccount(ethKeyPath, password string) (*ecdsa.PrivateKey, error) {
 	json, err := ioutil.ReadFile(ethKeyPath)
 	if err != nil {
@@ -73,8 +72,6 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 	if err != nil {
 		return nil, common.Address{}, errors.Wrap(err, "could not deploy app contract on simulated chain")
 	}
-
-
 
 	simulator.Commit()
 
@@ -141,7 +138,6 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 	return simulator, appAdrr, nil
 }
 
-
 func NewTestCtx(username string, signup bool, mnemonic string, sim *backends.SimulatedBackend, appAddr common.Address, p2pPort string) (*UserContext, error) {
 	t := time.Now()
 	glog.Info("ipfs inst: ", time.Since(t))
@@ -195,7 +191,6 @@ func NewTestCtx(username string, signup bool, mnemonic string, sim *backends.Sim
 
 	return ctx, nil
 }
-
 
 func TestUserContext_SignUp(t *testing.T) {
 	flag.Set("alsologtostderr", fmt.Sprintf("%t", true))
@@ -252,4 +247,3 @@ func TestUserContext_SignUp(t *testing.T) {
 		t.Fatal("no groups found at alice")
 	}
 }
-
