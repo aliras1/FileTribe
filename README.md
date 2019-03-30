@@ -27,7 +27,13 @@ $ tar xvfz go-ipfs.tar.gz
 $ cd go-ipfs
 $ ./install.sh
 ```
-For more information see [here](https://docs.ipfs.io/introduction/install/).
+For more information see [here](https://docs.ipfs.io/introduction/install/). You also need go-ethereum's abigen, which is bundled
+into the basic ethereum package.
+```
+$ apt-get install ethereum 
+```
+
+Alternately you can build it as well. For more information on that see [here](https://github.com/ethereum/go-ethereum/wiki/Native-DApps:-Go-bindings-to-Ethereum-contracts). 
 
 ### Building the sources
 
@@ -72,9 +78,9 @@ that contract, you can set these in the `config.json` file.
 FileTribe uses [IPFS](https://ipfs.io/) as its data storage layer so the client needs an [IPFS](https://ipfs.io/) daemon which it can talk to. The clients communicate with each other through the [IPFS](https://ipfs.io/) daemon's built in [_libp2p_](https://libp2p.io/) service which has to be enabled explicitly.   
 
 ```
-ipfs init
-ipfs daemon --enable-pubsub-experiment </dev/null &>/dev/null &
-ipfs config --json Experimental.Libp2pStreamMounting true
+$ ipfs init
+$ ipfs daemon --enable-pubsub-experiment </dev/null &>/dev/null &
+$ ipfs config --json Experimental.Libp2pStreamMounting true
 ```
 
 ##### Start the client application
@@ -82,7 +88,7 @@ ipfs config --json Experimental.Libp2pStreamMounting true
 You can configure the FileTribe daemon with `$HOME/.filetribe/config.json`. If you have a running [Ethereum](https://www.ethereum.org/) network, on which the FileTribe contracts were deployed and an [IPFS](https://ipfs.io/) daemon you can start the client:
  
 ```
-$filetribe daemon
+$ filetribe daemon
 ```
 
 Now that you have a running filetribe daemon you can start interacting with it. Since most of the operations you perform 
@@ -111,20 +117,20 @@ will result in a contract method call on the blockchain, these operations will n
 3. ###### Invite others
     You can invite other users by executing
     ```
-    $filetribe group invite <groupaddress> <other user's filetribe account address>
+    $ filetribe group invite <groupaddress> <other user's filetribe account address>
     ```
     
 4. ###### Commit changes
     Do not forget to commit your changes, as your file shares/modifications will be visible to
     your group mates only if you have committed them. Execute
     ```
-    $filetribe group repo commit <groupaddress>
+    $ filetribe group repo commit <groupaddress>
     ```
  
 #### Usage
 
 ```
-$filetribe --help
+$ filetribe --help
 FileTribe
 
 USAGE:
