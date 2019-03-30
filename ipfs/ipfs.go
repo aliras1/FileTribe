@@ -26,17 +26,21 @@ import (
 	"strconv"
 )
 
+// IPubSubSubscription is an interface to IPFS pubsub subscriptions
 type IPubSubSubscription interface {
 	Cancel() error
 	Next() (*ipfsapi.Message, error)
 }
 
+// Own version of PubSubSubscription
 type PubSubSubscription ipfsapi.PubSubSubscription
 
+// Cancel cancels a pubsub subscription
 func (sub *PubSubSubscription) Cancel() error {
 	return (*ipfsapi.PubSubSubscription)(sub).Cancel()
 }
 
+// Next reads the next message in the subscription
 func (sub *PubSubSubscription) Next() (*ipfsapi.Message, error) {
 	return ((*ipfsapi.PubSubSubscription)(sub)).Next()
 }

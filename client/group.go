@@ -295,7 +295,7 @@ func (g *Group) EncryptedIpfsHash() []byte {
 	return g.encryptedIpfsHash
 }
 
-// GetBoxerOfGroup returns the group key
+// Boxer returns the group key
 func (g *Group) Boxer() tribecrypto.SymmetricKey {
 	g.lock.RLock()
 	defer g.lock.RUnlock()

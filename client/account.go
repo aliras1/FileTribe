@@ -55,7 +55,7 @@ func (acc *Account) Name() string {
 	return acc.data.Name
 }
 
-// GetBoxerOfGroup returns the private key of the account
+// Boxer returns the private key of the account
 func (acc *Account) Boxer() tribecrypto.AnonymBoxer {
 	return acc.data.Boxer
 }

@@ -145,12 +145,12 @@ func (ctx *UserContext) SignUp(username string) error {
 		return errors.Wrap(err, "could not save account")
 	}
 
-	ipfsId, err := ctx.ipfs.ID()
+	ipfsID, err := ctx.ipfs.ID()
 	if err != nil {
 		return errors.Wrap(err, "could not get ipfs id")
 	}
 
-	tx, err := ctx.eth.App.CreateAccount(ctx.eth.Auth.TxOpts, username, ipfsId.ID, acc.Boxer().PublicKey.Value)
+	tx, err := ctx.eth.App.CreateAccount(ctx.eth.Auth.TxOpts, username, ipfsID.ID, acc.Boxer().PublicKey.Value)
 	if err != nil {
 		return errors.Wrap(err, "could not send create account tx")
 	}
@@ -202,6 +202,7 @@ func (ctx *UserContext) GetProposedBoxerOfGroup(group ethcommon.Address, propose
 	return boxerInt.(tribecrypto.SymmetricKey), nil
 }
 
+// Init initializes a UserContext: it starts the P2P manager and the event handlers
 func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	p2p, err := com.NewP2PManager(
 		ctx.p2pPort,
@@ -230,21 +231,12 @@ func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	return nil
 }
 
-func (ctx *UserContext) GetGroupData(addr ethcommon.Address) (interfaces.IGroup, *fs.GroupRepo) {
-	groupCtxInt := ctx.groups.Get(addr)
-	if groupCtxInt == nil {
-		return nil, nil
-	}
-
-	groupCtx := groupCtxInt.(*GroupContext)
-
-	return groupCtx.Group, groupCtx.Repo
-}
-
+// User returns the Account interface
 func (ctx *UserContext) User() interfaces.IAccount {
 	return ctx.account
 }
 
+// Save saves all UserContext data
 func (ctx *UserContext) Save() error {
 	//if err := ctx.Storage.SaveContextData(ctx); err != nil {
 	//	return fmt.Errorf("could not save context data: %s", err)
@@ -253,6 +245,7 @@ func (ctx *UserContext) Save() error {
 	return nil
 }
 
+// SignOut tries to gracefully stop all started threads and processes
 func (ctx *UserContext) SignOut() {
 	glog.Infof("[*] Account '%s' signing out...\n", ctx.account.Name())
 	for groupCtx := range ctx.groups.VIterator() {
@@ -264,6 +257,7 @@ func (ctx *UserContext) SignOut() {
 	}
 }
 
+// BuildGroups builds up all groups found on disk
 func (ctx *UserContext) BuildGroups() error {
 	glog.Infof("Building Groups for account '%s'...", ctx.account.Name())
 
@@ -309,6 +303,7 @@ func (ctx *UserContext) BuildGroups() error {
 	return nil
 }
 
+// CreateGroup creates a group through a blockchain method invoke
 func (ctx *UserContext) CreateGroup(groupname string) error {
 	tx, err := ctx.account.Contract().CreateGroup(ctx.eth.Auth.TxOpts, groupname)
 	if err != nil {
@@ -320,6 +315,7 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 	return nil
 }
 
+// AcceptInvitation accepts a group invitation
 func (ctx *UserContext) AcceptInvitation(groupAddress ethcommon.Address) error {
 	for otherAddressInt := range ctx.invitations.Iterator() {
 		otherAddress := otherAddressInt.(ethcommon.Address)
@@ -360,6 +356,7 @@ func (ctx *UserContext) disposeGroup(groupAddr ethcommon.Address) error {
 	return nil
 }
 
+// Groups returns a list of group facades
 func (ctx *UserContext) Groups() []IGroupFacade {
 	var groups []IGroupFacade
 
@@ -372,12 +369,13 @@ func (ctx *UserContext) Groups() []IGroupFacade {
 	return groups
 }
 
-// Files lists the content of the account's repository
-func (ctx *UserContext) List() map[string][]string {
+// ListFiles lists the files names in the account's repository
+func (ctx *UserContext) ListFiles() map[string][]string {
 	list := make(map[string][]string)
 	return list
 }
 
+// Transactions returns a list of transactions initiated by the user
 func (ctx *UserContext) Transactions() ([]*types.Transaction, error) {
 	var list []*types.Transaction
 
@@ -386,23 +384,4 @@ func (ctx *UserContext) Transactions() ([]*types.Transaction, error) {
 	}
 
 	return list, nil
-}
-
-func (ctx *UserContext) OnChangeGroupKeyServerSessionSuccess(args []interface{}, groupId IIdentifier) {
-	//if len(args) < 2 {
-	//	glog.Error("error while OnServerSessionSuccess: invalid number of args")
-	//	return
-	//}
-	//
-	//boxer := args[1].(crypto.SymmetricKey)
-	//encNewIpfsHash := args[0].([]byte)
-	//encNewIpfsHashBase64 := base64.StdEncoding.EncodeToString(encNewIpfsHash)
-	//
-	//groupCtxInt := ctx.groups.Get(groupId)
-	//if groupCtxInt == nil {
-	//	glog.Error("no group found")
-	//}
-	//
-	//groupCtx := groupCtxInt.(*GroupContext)
-	//groupCtx.proposedKeys[encNewIpfsHashBase64] = boxer
 }
