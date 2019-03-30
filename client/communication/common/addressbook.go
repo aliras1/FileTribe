@@ -29,22 +29,25 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// AddressBook is a cache for fellow users' P2P contact data
 type AddressBook struct {
 	accToContactMap *collections.Map
-	backend chequebook.Backend
-	app *ethapp.FileTribeDApp
-	ipfs ipfs.IIpfs
+	backend         chequebook.Backend
+	app             *ethapp.FileTribeDApp
+	ipfs            ipfs.IIpfs
 }
 
+// NewAddressBook creates a new AddressBook
 func NewAddressBook(backend chequebook.Backend, app *ethapp.FileTribeDApp, ipfs ipfs.IIpfs) *AddressBook {
 	return &AddressBook{
-		backend: 			backend,
-		app:				app,
-		ipfs:				ipfs,
-		accToContactMap:	collections.NewConcurrentMap(),
+		backend:         backend,
+		app:             app,
+		ipfs:            ipfs,
+		accToContactMap: collections.NewConcurrentMap(),
 	}
 }
 
+// Get tries to retrieve the P2P contact data of a user
 func (a *AddressBook) Get(accAddr ethcommon.Address) (*Contact, error) {
 	var c *Contact
 
@@ -69,22 +72,22 @@ func (a *AddressBook) getContactFromEth(accAddr ethcommon.Address) (*Contact, er
 		return nil, errors.Wrap(err, "could not create account instance")
 	}
 
-	name, err := acc.Name(&bind.CallOpts{Pending:true})
+	name, err := acc.Name(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get account name")
 	}
 
-	ipfsId, err := acc.IpfsId(&bind.CallOpts{Pending:true})
+	ipfsID, err := acc.IpfsId(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get ipfs peer id")
 	}
 
-	owner, err := acc.Owner(&bind.CallOpts{Pending:true})
+	owner, err := acc.Owner(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get owner")
 	}
 
-	contact := NewContact(owner, accAddr, name, ipfsId, tribecrypto.AnonymPublicKey{}, a.ipfs)
+	contact := NewContact(owner, accAddr, name, ipfsID, tribecrypto.AnonymPublicKey{}, a.ipfs)
 
 	return contact, nil
 }

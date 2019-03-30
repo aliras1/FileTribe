@@ -40,7 +40,6 @@ import (
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
-
 func NewEthAccount(ethKeyPath, password string) (*ecdsa.PrivateKey, error) {
 	json, err := ioutil.ReadFile(ethKeyPath)
 	if err != nil {
@@ -73,8 +72,6 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 	if err != nil {
 		return nil, common.Address{}, errors.Wrap(err, "could not deploy app contract on simulated chain")
 	}
-
-
 
 	simulator.Commit()
 
@@ -141,13 +138,11 @@ func createApp(keys []*ecdsa.PrivateKey) (*backends.SimulatedBackend, common.Add
 	return simulator, appAdrr, nil
 }
 
-
-func NewTestCtx(username string, signup bool, ethKeyPath string, sim *backends.SimulatedBackend, appAddr common.Address, p2pPort string) (*UserContext, error) {
+func NewTestCtx(username string, signup bool, mnemonic string, sim *backends.SimulatedBackend, appAddr common.Address, p2pPort string) (*UserContext, error) {
 	t := time.Now()
 	glog.Info("ipfs inst: ", time.Since(t))
-	password := "pwd"
-	var err error
 
+	var err error
 	var ipfs ipfsapi.IIpfs
 
 	switch username {
@@ -169,12 +164,15 @@ func NewTestCtx(username string, signup bool, ethKeyPath string, sim *backends.S
 		}
 	}
 
-	auth, err := NewAuth(ethKeyPath, password)
+	auth, err := NewAuth(mnemonic)
 	if err != nil {
 		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
 	}
 
 	ctx, err := NewUserContext(auth, sim, appAddr, ipfs, p2pPort)
+	if err != nil {
+		panic(err)
+	}
 
 	if signup {
 		err = ctx.SignUp(username)
@@ -184,7 +182,7 @@ func NewTestCtx(username string, signup bool, ethKeyPath string, sim *backends.S
 		time.Sleep(2 * time.Second)
 		sim.Commit()
 	} else {
-		//testUser, err = NewUserContextFromSignIn(username, password, ethKeyPath, homeDir, network, ipfs, p2pPort)
+		//testUser, err = NewUserContextFromSignIn(username, password, mnemonic, homeDir, network, ipfs, p2pPort)
 		//if err != nil {
 		//	return nil, fmt.Errorf("could not sign in: %s: %s", username, err)
 		//}
@@ -193,7 +191,6 @@ func NewTestCtx(username string, signup bool, ethKeyPath string, sim *backends.S
 
 	return ctx, nil
 }
-
 
 func TestUserContext_SignUp(t *testing.T) {
 	flag.Set("alsologtostderr", fmt.Sprintf("%t", true))
@@ -250,4 +247,3 @@ func TestUserContext_SignUp(t *testing.T) {
 		t.Fatal("no groups found at alice")
 	}
 }
-

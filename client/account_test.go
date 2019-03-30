@@ -23,12 +23,11 @@ import (
 	"testing"
 )
 
-
 func TestAsd(t *testing.T) {
 	var (
-		handler codec.CborHandle
-		out []byte
-		message = "hello friend"
+		handler    codec.CborHandle
+		out        []byte
+		message    = "hello friend"
 		messageDec string
 	)
 
@@ -65,5 +64,3 @@ func TestBoxing(t *testing.T) {
 		t.Fatal("the original and the decrypted messages are not the same")
 	}
 }
-
-

@@ -26,21 +26,27 @@ import (
 	"strconv"
 )
 
+// IPubSubSubscription is an interface to IPFS pubsub subscriptions
 type IPubSubSubscription interface {
 	Cancel() error
 	Next() (*ipfsapi.Message, error)
 }
 
+// PubSubSubscription is an own version of PubSubSubscription
 type PubSubSubscription ipfsapi.PubSubSubscription
 
+// Cancel cancels a pubsub subscription
 func (sub *PubSubSubscription) Cancel() error {
 	return (*ipfsapi.PubSubSubscription)(sub).Cancel()
 }
 
+// Next reads the next message in the subscription
 func (sub *PubSubSubscription) Next() (*ipfsapi.Message, error) {
 	return ((*ipfsapi.PubSubSubscription)(sub)).Next()
 }
 
+// IIpfs is an interface to IPFS. It is done this way to be able
+// to mock IPFS in unit tests later
 type IIpfs interface {
 	ID() (*ipfsapi.IdOutput, error)
 	PubSubPublish(topic string, data string) error
@@ -55,48 +61,59 @@ type IIpfs interface {
 	P2PCloseStream(ctx context.Context, handlerID string, closeAll bool) error
 }
 
+// Ipfs is implementation of IIpfs
 type Ipfs struct {
 	shell *ipfsapi.Shell
 }
 
+// NewIpfs creates a new IPFS instance
 func NewIpfs(url string) *Ipfs {
 	return &Ipfs{shell: ipfsapi.NewShell(url)}
 }
 
+// ID returns the IPFS id
 func (ipfs *Ipfs) ID() (*ipfsapi.IdOutput, error) {
 	return ipfs.shell.ID()
 }
 
+// PubSubPublish publishes a message in the given topic
 func (ipfs *Ipfs) PubSubPublish(topic string, data string) error {
 	return ipfs.shell.PubSubPublish(topic, data)
 }
 
+// Get gets a file from ipfs
 func (ipfs *Ipfs) Get(hash string, outdir string) error {
 	return ipfs.shell.Get(hash, outdir)
 }
 
+// AddDir adds a whole directory to ipfs
 func (ipfs *Ipfs) AddDir(dir string) (string, error) {
 	return ipfs.shell.AddDir(dir)
 }
 
+// Publish publishes to IPNS
 func (ipfs *Ipfs) Publish(node string, value string) error {
 	return ipfs.shell.Publish(node, value)
 }
 
+// Add adds a file to IPFS
 func (ipfs *Ipfs) Add(r io.Reader) (string, error) {
 	return ipfs.shell.Add(r)
 }
 
+// PubSubSubscribe subscribes to a topic on IPFS pubsub
 func (ipfs *Ipfs) PubSubSubscribe(topic string) (IPubSubSubscription, error) {
 	sub, err := ipfs.shell.PubSubSubscribe(topic)
 	return (*PubSubSubscription)(sub), err
 }
 
+// P2PListener is a struct for storing the results of IPFS p2p listen
 type P2PListener struct {
 	Protocol string
 	Address  string
 }
 
+// P2PListen will listen on the given multiaddress for libp2p connections
 func (ipfs *Ipfs) P2PListen(ctx context.Context, protocol, maddr string) (*P2PListener, error) {
 	// TODO: replace with the official api version
 	// Note that this feature is not implemented yet by the official api
@@ -106,19 +123,20 @@ func (ipfs *Ipfs) P2PListen(ctx context.Context, protocol, maddr string) (*P2PLi
 	}
 	var response *P2PListener
 	err := ipfs.shell.Request("p2p/listener/open").
-					  Arguments(protocol, maddr).Exec(ctx, &response)
+		Arguments(protocol, maddr).Exec(ctx, &response)
 	if err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
+// P2PCloseListener closes an open P2P listener
 func (ipfs *Ipfs) P2PCloseListener(ctx context.Context, protocol string, closeAll bool) error {
 	// TODO: replace with the official api version
 	// Note that this feature is not implemented yet by the official api
 
 	req := ipfs.shell.Request("p2p/listener/close").
-				      Option("all", strconv.FormatBool(closeAll))
+		Option("all", strconv.FormatBool(closeAll))
 	if protocol != "" {
 		req.Arguments(protocol)
 	}
@@ -128,11 +146,14 @@ func (ipfs *Ipfs) P2PCloseListener(ctx context.Context, protocol string, closeAl
 	return nil
 }
 
+// P2PStream is a struct for storing the results of IPFS p2p stream dial...
 type P2PStream struct {
 	Protocol string
 	Address  string
 }
 
+// P2PStreamDial dials to the given IPFS id and forwards the message to the
+// listener multiaddress
 func (ipfs *Ipfs) P2PStreamDial(ctx context.Context, peerID, protocol, listenerMaddr string) (*P2PStream, error) {
 	// TODO: replace with the official api version
 	// Note that this feature is not implemented yet by the official api
@@ -152,6 +173,7 @@ func (ipfs *Ipfs) P2PStreamDial(ctx context.Context, peerID, protocol, listenerM
 	return response, nil
 }
 
+// P2PCloseStream closes an open libp2p stream
 func (ipfs *Ipfs) P2PCloseStream(ctx context.Context, handlerID string, closeAll bool) error {
 	// TODO: replace with the official api version
 	// Note that this feature is not implemented yet by the official api

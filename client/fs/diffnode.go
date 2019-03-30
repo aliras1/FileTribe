@@ -27,6 +27,8 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// DiffNode : Files are stored on IPFS as a linked list of diffs.
+// DiffNode is a node in this list.
 type DiffNode struct {
 	Hash      []byte
 	Diff      []diffmatchpatch.Diff
@@ -34,6 +36,7 @@ type DiffNode struct {
 	NextBoxer tribecrypto.FileBoxer
 }
 
+// Encode encodes the diff node
 func (diff *DiffNode) Encode() ([]byte, error) {
 	data, err := json.Marshal(diff)
 	if err != nil {
@@ -42,6 +45,7 @@ func (diff *DiffNode) Encode() ([]byte, error) {
 	return data, nil
 }
 
+// DecodeDiffNode decodes a DiffNode
 func DecodeDiffNode(data []byte) (*DiffNode, error) {
 	var diff DiffNode
 	if err := json.Unmarshal(data, &diff); err != nil {
@@ -50,6 +54,7 @@ func DecodeDiffNode(data []byte) (*DiffNode, error) {
 	return &diff, nil
 }
 
+// Encrypt encrypts the DiffNode with the given secret key
 func (diff *DiffNode) Encrypt(boxer tribecrypto.FileBoxer) (io.Reader, error) {
 	data, err := diff.Encode()
 	if err != nil {

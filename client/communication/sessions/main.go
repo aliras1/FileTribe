@@ -27,8 +27,7 @@ import (
 	"github.com/aliras1/FileTribe/client/interfaces"
 )
 
-
-
+// NewServerSession ...
 func NewServerSession(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
@@ -52,6 +51,7 @@ func NewServerSession(
 	}
 }
 
+// NewGroupServerSession ...
 func NewGroupServerSession(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,

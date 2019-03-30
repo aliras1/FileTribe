@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
@@ -36,6 +35,7 @@ import (
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
+// Config is holds the configuration information defined in .../.filetribe/config.json
 type Config struct {
 	APIAddress                 string
 	IpfsAPIAddress             string
@@ -50,8 +50,6 @@ const configPath = "./config.json"
 
 var client ipfs_share.IUserFacade
 var ipfs ipfsapi.IIpfs
-var ethNode chequebook.Backend
-var auth *ipfs_share.Auth
 
 func signUp(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
@@ -320,7 +318,6 @@ func listTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 func errorHandler(w http.ResponseWriter, r *http.Request, msg string) {
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte(msg))
@@ -433,7 +430,7 @@ func printHelpAndExit(message string) {
 }
 
 func main() {
-	fileTribeUrl := flag.String("a", "http://127.0.0.1:3333", "")
+	fileTribeURL := flag.String("a", "http://127.0.0.1:3333", "")
 
 	flag.Usage = usage
 	flag.Parse()
@@ -445,9 +442,9 @@ func main() {
 
 	var (
 		request *http.Request
-		err error
+		err     error
 	)
-	url := *fileTribeUrl
+	url := *fileTribeURL
 	command := args[0]
 	args = args[1:]
 
@@ -596,7 +593,6 @@ func main() {
 
 	if !strings.EqualFold(command, "daemon") {
 		fmt.Printf("requesting: %s\n", url)
-
 
 		client := &http.Client{}
 		resp, err := client.Do(request)

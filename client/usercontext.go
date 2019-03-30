@@ -40,6 +40,8 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// IUserFacade is an interface through which main.go can communicate
+// with its UserContext
 type IUserFacade interface {
 	SignUp(username string) error
 	CreateGroup(groupname string) error
@@ -50,24 +52,27 @@ type IUserFacade interface {
 	Transactions() ([]*types.Transaction, error)
 }
 
+// UserContext stores all the user data and it is responsible
+// for handling communication, events, encryption, etc.
 type UserContext struct {
-	account      	interfaces.IAccount
-	eth             *Eth
-	groups       	*Map
-	addressBook  	*common.AddressBook
-	ipfs         	ipfsapi.IIpfs
-	storage      	*fs.Storage
-	p2p          	*com.P2PManager
-	p2pPort 		string
+	account     interfaces.IAccount
+	eth         *Eth
+	groups      *Map
+	addressBook *common.AddressBook
+	ipfs        ipfsapi.IIpfs
+	storage     *fs.Storage
+	p2p         *com.P2PManager
+	p2pPort     string
 
-	transactions 	*List
-	invitations     *List
-	subs 			*List
+	transactions *List
+	invitations  *List
+	subs         *List
 
-	channelStop 	chan int
-	lock 			sync.RWMutex
+	channelStop chan int
+	lock        sync.RWMutex
 }
 
+// NewUserContext creates a new UserContext with the data provided
 func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	var err error
 	var ctx UserContext
@@ -78,9 +83,9 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	}
 
 	ctx.eth = &Eth{
-		Backend:	backend,
-		App:		appContract,
-		Auth:		auth,
+		Backend: backend,
+		App:     appContract,
+		Auth:    auth,
 	}
 	ctx.p2pPort = p2pPort
 	ctx.ipfs = ipfs
@@ -127,6 +132,7 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	return &ctx, nil
 }
 
+// SignUp creates a new Account, saves it and registers it on the blockchain
 func (ctx *UserContext) SignUp(username string) error {
 	glog.Infof("[*] Account '%s' signing in...", username)
 
@@ -139,12 +145,12 @@ func (ctx *UserContext) SignUp(username string) error {
 		return errors.Wrap(err, "could not save account")
 	}
 
-	ipfsId, err := ctx.ipfs.ID()
+	ipfsID, err := ctx.ipfs.ID()
 	if err != nil {
 		return errors.Wrap(err, "could not get ipfs id")
 	}
 
-	tx, err := ctx.eth.App.CreateAccount(ctx.eth.Auth.TxOpts, username, ipfsId.ID, acc.Boxer().PublicKey.Value)
+	tx, err := ctx.eth.App.CreateAccount(ctx.eth.Auth.TxOpts, username, ipfsID.ID, acc.Boxer().PublicKey.Value)
 	if err != nil {
 		return errors.Wrap(err, "could not send create account tx")
 	}
@@ -154,17 +160,8 @@ func (ctx *UserContext) SignUp(username string) error {
 	return nil
 }
 
-func (ctx *UserContext) SignIn(username string) error {
-	//auth, err := NewAuth(ethKeyPath, password)
-	//if err != nil {
-	//	return errors.Wrap(err, "could not create Auth")
-	//}
-	//
-	//acc, err := NewAccount()
-
-	return errors.New("not implemented")
-}
-
+// IsMember returns whether a given user is a member of a given group or not.
+// It is used by communication sessions that have no direct access to GroupContexts.
 func (ctx *UserContext) IsMember(group ethcommon.Address, account ethcommon.Address) error {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
@@ -178,7 +175,9 @@ func (ctx *UserContext) IsMember(group ethcommon.Address, account ethcommon.Addr
 	return nil
 }
 
-func (ctx *UserContext) Boxer(group ethcommon.Address) (tribecrypto.SymmetricKey, error) {
+// GetBoxerOfGroup returns the secret key of the given group. It is used
+// by communication sessions that have no direct access to GroupContexts
+func (ctx *UserContext) GetBoxerOfGroup(group ethcommon.Address) (tribecrypto.SymmetricKey, error) {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
 		return tribecrypto.SymmetricKey{}, errors.New("no group found")
@@ -187,7 +186,9 @@ func (ctx *UserContext) Boxer(group ethcommon.Address) (tribecrypto.SymmetricKey
 	return groupInt.(*GroupContext).Group.Boxer(), nil
 }
 
-func (ctx *UserContext) ProposedBoxer(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error) {
+// GetProposedBoxerOfGroup returns the secret key of the given group. It is
+// used by communication sessions that have no direct access to GroupContexts
+func (ctx *UserContext) GetProposedBoxerOfGroup(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error) {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
 		return tribecrypto.SymmetricKey{}, errors.New("no group found")
@@ -201,6 +202,7 @@ func (ctx *UserContext) ProposedBoxer(group ethcommon.Address, proposer ethcommo
 	return boxerInt.(tribecrypto.SymmetricKey), nil
 }
 
+// Init initializes a UserContext: it starts the P2P manager and the event handlers
 func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	p2p, err := com.NewP2PManager(
 		ctx.p2pPort,
@@ -229,21 +231,12 @@ func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	return nil
 }
 
-func (ctx *UserContext) GetGroupData(addr ethcommon.Address) (interfaces.IGroup, *fs.GroupRepo) {
-	groupCtxInt := ctx.groups.Get(addr)
-	if groupCtxInt == nil {
-		return nil, nil
-	}
-
-	groupCtx := groupCtxInt.(*GroupContext)
-
-	return groupCtx.Group, groupCtx.Repo
-}
-
+// User returns the Account interface
 func (ctx *UserContext) User() interfaces.IAccount {
 	return ctx.account
 }
 
+// Save saves all UserContext data
 func (ctx *UserContext) Save() error {
 	//if err := ctx.Storage.SaveContextData(ctx); err != nil {
 	//	return fmt.Errorf("could not save context data: %s", err)
@@ -252,6 +245,7 @@ func (ctx *UserContext) Save() error {
 	return nil
 }
 
+// SignOut tries to gracefully stop all started threads and processes
 func (ctx *UserContext) SignOut() {
 	glog.Infof("[*] Account '%s' signing out...\n", ctx.account.Name())
 	for groupCtx := range ctx.groups.VIterator() {
@@ -263,6 +257,7 @@ func (ctx *UserContext) SignOut() {
 	}
 }
 
+// BuildGroups builds up all groups found on disk
 func (ctx *UserContext) BuildGroups() error {
 	glog.Infof("Building Groups for account '%s'...", ctx.account.Name())
 
@@ -278,16 +273,16 @@ func (ctx *UserContext) BuildGroups() error {
 		}
 
 		config := &GroupContextConfig{
-			Group: NewGroupFromCap(cap, ctx.storage),
-			Account: ctx.account,
-			P2P: ctx.p2p,
-			AddressBook: ctx.addressBook,
-			Ipfs: ctx.ipfs,
-			Storage: ctx.storage,
+			Group:        NewGroupFromMeta(cap, ctx.storage),
+			Account:      ctx.account,
+			P2P:          ctx.p2p,
+			AddressBook:  ctx.addressBook,
+			Ipfs:         ctx.ipfs,
+			Storage:      ctx.storage,
 			Transactions: ctx.transactions,
-			Eth:&GroupEth{
-				Group:contract,
-				Eth:ctx.eth,
+			Eth: &GroupEth{
+				Group: contract,
+				Eth:   ctx.eth,
 			},
 		}
 
@@ -308,6 +303,7 @@ func (ctx *UserContext) BuildGroups() error {
 	return nil
 }
 
+// CreateGroup creates a group through a blockchain method invoke
 func (ctx *UserContext) CreateGroup(groupname string) error {
 	tx, err := ctx.account.Contract().CreateGroup(ctx.eth.Auth.TxOpts, groupname)
 	if err != nil {
@@ -319,6 +315,7 @@ func (ctx *UserContext) CreateGroup(groupname string) error {
 	return nil
 }
 
+// AcceptInvitation accepts a group invitation
 func (ctx *UserContext) AcceptInvitation(groupAddress ethcommon.Address) error {
 	for otherAddressInt := range ctx.invitations.Iterator() {
 		otherAddress := otherAddressInt.(ethcommon.Address)
@@ -359,6 +356,7 @@ func (ctx *UserContext) disposeGroup(groupAddr ethcommon.Address) error {
 	return nil
 }
 
+// Groups returns a list of group facades
 func (ctx *UserContext) Groups() []IGroupFacade {
 	var groups []IGroupFacade
 
@@ -371,12 +369,13 @@ func (ctx *UserContext) Groups() []IGroupFacade {
 	return groups
 }
 
-// Files lists the content of the account's repository
-func (ctx *UserContext) List() map[string][]string {
+// ListFiles lists the files names in the account's repository
+func (ctx *UserContext) ListFiles() map[string][]string {
 	list := make(map[string][]string)
 	return list
 }
 
+// Transactions returns a list of transactions initiated by the user
 func (ctx *UserContext) Transactions() ([]*types.Transaction, error) {
 	var list []*types.Transaction
 
@@ -385,23 +384,4 @@ func (ctx *UserContext) Transactions() ([]*types.Transaction, error) {
 	}
 
 	return list, nil
-}
-
-func (ctx *UserContext) OnChangeGroupKeyServerSessionSuccess(args []interface{}, groupId IIdentifier) {
-	//if len(args) < 2 {
-	//	glog.Error("error while OnServerSessionSuccess: invalid number of args")
-	//	return
-	//}
-	//
-	//boxer := args[1].(crypto.SymmetricKey)
-	//encNewIpfsHash := args[0].([]byte)
-	//encNewIpfsHashBase64 := base64.StdEncoding.EncodeToString(encNewIpfsHash)
-	//
-	//groupCtxInt := ctx.groups.Get(groupId)
-	//if groupCtxInt == nil {
-	//	glog.Error("no group found")
-	//}
-	//
-	//groupCtx := groupCtxInt.(*GroupContext)
-	//groupCtx.proposedKeys[encNewIpfsHashBase64] = boxer
 }

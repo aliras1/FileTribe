@@ -16,4 +16,5 @@
 
 package common
 
+// Signer is a function which signs a hash
 type Signer func(hash []byte) ([]byte, error)

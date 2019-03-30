@@ -22,8 +22,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// P2PConn is tcp connection to an IPFS p2p dial/stream endpoint
 type P2PConn net.TCPConn
 
+// ReadMessage reads a message from the connection socket
 func (conn *P2PConn) ReadMessage(addressBook *AddressBook) (*Message, error) {
 	data := make([]byte, 4096)
 
@@ -44,7 +46,7 @@ func (conn *P2PConn) ReadMessage(addressBook *AddressBook) (*Message, error) {
 		return nil, errors.Wrap(err, "could not get contact from address book")
 	}
 
-	if err := msg.Validate(contact); err != nil {
+	if err := msg.Verify(contact); err != nil {
 		return nil, errors.Wrapf(err, "invalid message")
 	}
 

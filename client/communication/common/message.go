@@ -21,58 +21,57 @@ import (
 	"encoding/json"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	ethcrypto"github.com/ethereum/go-ethereum/crypto"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 )
 
-// MessageType ...
+// MessageType is an enumeration of message types
 type MessageType byte
 
 const (
-	GetGroupData 		MessageType = 0
+	// GetGroupData enum value
+	GetGroupData MessageType = 0
 )
 
+// Message is a message struct
 type Message struct {
-	From    ethcommon.Address `json:"from"`
-	Type    MessageType `json:"type"`
-	SessionId uint32	`json:"session_id"`
-	Payload []byte `json:"payload"`
-	Sig     []byte	`json:"sig"`
+	From      ethcommon.Address `json:"from"`
+	Type      MessageType       `json:"type"`
+	SessionID uint32            `json:"session_id"`
+	Payload   []byte            `json:"payload"`
+	Sig       []byte            `json:"sig"`
 }
 
+// GroupData is an enumeration of which group data wants to be retrieved by peers
 type GroupData byte
 
 const (
-	GetGroupKey 		GroupData = 0
+	// GetGroupKey ...
+	GetGroupKey GroupData = 0
+	// GetProposedGroupKey ...
 	GetProposedGroupKey GroupData = 1
 )
 
+// GroupDataMessage is a wrapper for transferring group data like current key, a proposed key
 type GroupDataMessage struct {
-	Group ethcommon.Address `json:"group"`
-	Data GroupData `json:"data"`
+	Group   ethcommon.Address `json:"group"`
+	Data    GroupData         `json:"data"`
 	Payload []byte
 }
 
+// HeartBeat is a heartbeat message, currently not used
 type HeartBeat struct {
 	From string `json:"from"`
 	Rand []byte `json:"rand"`
 }
 
-type Proposal struct {
-	From     string   `json:"from"`
-	CMD      string   `json:"cmd"`
-	Args     []string `json:"args"`
-	PrevHash [32]byte `json:"prev_hash"`
-	NewHash  [32]byte `json:"new_hash"`
-}
-
-
-func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, payload []byte, signer Signer) (*Message, error) {
+// NewMessage creates a new message
+func NewMessage(from ethcommon.Address, msgType MessageType, sessionID uint32, payload []byte, signer Signer) (*Message, error) {
 	msg := &Message{
-		From: from,
-		Type: msgType,
-		SessionId: sessionId,
-		Payload: payload,
+		From:      from,
+		Type:      msgType,
+		SessionID: sessionID,
+		Payload:   payload,
 	}
 
 	sig, err := signer(msg.Digest())
@@ -85,6 +84,7 @@ func NewMessage(from ethcommon.Address, msgType MessageType, sessionId uint32, p
 	return msg, nil
 }
 
+// Encode encodes the message
 func (m *Message) Encode() ([]byte, error) {
 	enc, err := json.Marshal(m)
 	if err != nil {
@@ -94,6 +94,7 @@ func (m *Message) Encode() ([]byte, error) {
 	return enc, nil
 }
 
+// DecodeMessage decodes a message byte stream
 func DecodeMessage(data []byte) (*Message, error) {
 	var m Message
 	if err := json.Unmarshal(data, &m); err != nil {
@@ -103,7 +104,8 @@ func DecodeMessage(data []byte) (*Message, error) {
 	return &m, nil
 }
 
-func (m *Message) Validate(contact *Contact) error {
+// Verify verifies a message if it really originates from the sender
+func (m *Message) Verify(contact *Contact) error {
 	if !contact.VerifySignature(m.Digest(), m.Sig) {
 		return errors.New("invalid message")
 	}
@@ -111,19 +113,21 @@ func (m *Message) Validate(contact *Contact) error {
 	return nil
 }
 
+// Digest returns the message digest
 func (m *Message) Digest() []byte {
-	sessionIdBytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(sessionIdBytes, m.SessionId)
+	sessionIDBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(sessionIDBytes, m.SessionID)
 
 	digest := ethcrypto.Keccak256(
 		m.From.Bytes(),
 		[]byte{byte(m.Type)},
-		sessionIdBytes,
+		sessionIDBytes,
 		m.Payload,
 	)
 	return digest[:]
 }
 
+// Encode encodes the group data message
 func (m *GroupDataMessage) Encode() ([]byte, error) {
 	enc, err := json.Marshal(m)
 	if err != nil {
@@ -133,6 +137,7 @@ func (m *GroupDataMessage) Encode() ([]byte, error) {
 	return enc, nil
 }
 
+// DecodeGroupDataMessage decodes a group message data
 func DecodeGroupDataMessage(data []byte) (*GroupDataMessage, error) {
 	var m GroupDataMessage
 	if err := json.Unmarshal(data, &m); err != nil {

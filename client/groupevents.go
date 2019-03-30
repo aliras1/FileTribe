@@ -28,12 +28,12 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
-
+// HandleGroupInvitationSentEvents listens to GroupInvitationSent events on the blockchain
 func (groupCtx *GroupContext) HandleGroupInvitationSentEvents(group *ethgroup.Group) {
 	glog.Info("HandleGroupInvitationSentEvents...")
 	ch := make(chan *ethgroup.GroupInvitationSent)
 
-	sub, err := group.WatchInvitationSent(&bind.WatchOpts{Context:groupCtx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := group.WatchInvitationSent(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to GroupInvitationSent events")
 		return
@@ -46,11 +46,13 @@ func (groupCtx *GroupContext) HandleGroupInvitationSentEvents(group *ethgroup.Gr
 	}
 }
 
+// HandleGroupInvitationAcceptedEvents listens to GroupInvitationAccepted events on the
+// blockchain and adds the new member to the group, if it receives one
 func (groupCtx *GroupContext) HandleGroupInvitationAcceptedEvents(group *ethgroup.Group) {
 	glog.Info("HandleGroupInvitationAcceptedEvents...")
 	ch := make(chan *ethgroup.GroupInvitationAccepted)
 
-	sub, err := group.WatchInvitationAccepted(&bind.WatchOpts{Context:groupCtx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := group.WatchInvitationAccepted(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to InvitationAccepted events")
 		return
@@ -64,11 +66,13 @@ func (groupCtx *GroupContext) HandleGroupInvitationAcceptedEvents(group *ethgrou
 	}
 }
 
+// HandleNewConsensusEvents listens to NewConsensus events on the blockchain
+// and checks if the target of the consensus is correct. If so it approves it
 func (groupCtx *GroupContext) HandleNewConsensusEvents(group *ethgroup.Group) {
 	glog.Info("HandleNewConsensusEvents...")
 	ch := make(chan *ethgroup.GroupNewConsensus)
 
-	sub, err := group.WatchNewConsensus(&bind.WatchOpts{Context:groupCtx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := group.WatchNewConsensus(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to NewConsensus events: %s", err)
 		return
@@ -90,7 +94,7 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 		return
 	}
 
-	voters, err := cons.MembersThatApproved(&bind.CallOpts{Pending:true})
+	voters, err := cons.MembersThatApproved(&bind.CallOpts{Pending: true})
 	if err != nil {
 		glog.Errorf("could not get voters of the new proposal: %s", err)
 		return
@@ -98,7 +102,7 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 
 	glog.Infof("voters: %v", voters)
 
-	proposer, err := cons.Proposer(&bind.CallOpts{Pending:true})
+	proposer, err := cons.Proposer(&bind.CallOpts{Pending: true})
 	if err != nil {
 		glog.Errorf("could not get the proposer of consensus: %s", err)
 		return
@@ -111,7 +115,7 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 		return
 	}
 
-	payload, err := cons.Payload(&bind.CallOpts{Pending:true})
+	payload, err := cons.Payload(&bind.CallOpts{Pending: true})
 	if err != nil {
 		glog.Errorf("could not get consensus payload: %s", err)
 		return
@@ -119,7 +123,6 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 
 	glog.Infof("stored payload '%v' from: %s", payload, proposer.String())
 	groupCtx.proposedPayloads.Put(proposer, payload)
-
 
 	// TODO: only ask k' from those that have approved
 	// 1. get those that voted
@@ -147,7 +150,7 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 			contact,
 			groupCtx.account.ContractAddress(),
 			groupCtx.onGetProposedKeySuccess,
-		);	err != nil {
+		); err != nil {
 			glog.Errorf("could not start get group key session: %s", err)
 		}
 	}
@@ -166,7 +169,7 @@ func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address
 		return
 	}
 
-	consensusAddress, err := groupCtx.eth.Group.GetConsensus(&bind.CallOpts{Pending:true}, proposer)
+	consensusAddress, err := groupCtx.eth.Group.GetConsensus(&bind.CallOpts{Pending: true}, proposer)
 	if err != nil {
 		glog.Errorf("could not get member's consensus: %s", err)
 		return
@@ -199,11 +202,13 @@ func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address
 	groupCtx.proposedPayloads.Put(proposer, nil)
 }
 
+// HandleIpfsHashChangedEvents listens to IpfsHashChanged events on the blockchain
+// and if it receives one, it updates the group IPFS hash and fetches its contents
 func (groupCtx *GroupContext) HandleIpfsHashChangedEvents(group *ethgroup.Group) {
 	glog.Info("HandleIpfsHashChangedEvents...")
 	ch := make(chan *ethgroup.GroupIpfsHashChanged)
 
-	sub, err := group.WatchIpfsHashChanged(&bind.WatchOpts{Context:groupCtx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := group.WatchIpfsHashChanged(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts.Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to IpfsHashChanged events: %s", err)
 		return
@@ -253,7 +258,7 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 				contact,
 				groupCtx.account.ContractAddress(),
 				onGetKeySuccess,
-			);	err != nil {
+			); err != nil {
 				glog.Errorf("could not start get group key session: %s", err)
 			}
 		}

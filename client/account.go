@@ -31,36 +31,42 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// AccountData represents those data of an account object that can be saved on disk
 type AccountData struct {
 	Name            string
 	ContractAddress ethcommon.Address
-	Boxer           tribecrypto.AnonymBoxer
+	Boxer           tribecrypto.AnonymBoxer // might be deleted if libp2p is encrypted
 }
 
+// Account is a wrapper object around a smart contract of type Account
 type Account struct {
 	data     *AccountData
 	contract *ethacc.Account
 	storage  *fs.Storage
 }
 
-
+// ContractAddress returns the address of its smart contract
 func (acc *Account) ContractAddress() ethcommon.Address {
 	return acc.data.ContractAddress
 }
 
+// Name returns the name attribute of the account contract
 func (acc *Account) Name() string {
 	return acc.data.Name
 }
 
-
+// Boxer returns the private key of the account
 func (acc *Account) Boxer() tribecrypto.AnonymBoxer {
 	return acc.data.Boxer
 }
 
+// Contract returns the smart contract of the account
 func (acc *Account) Contract() *ethacc.Account {
 	return acc.contract
 }
 
+// SetContract stores the smart contract address of an
+// account and its smart contract object
 func (acc *Account) SetContract(address ethcommon.Address, backend chequebook.Backend) error {
 	contract, err := ethacc.NewAccount(address, backend)
 	if err != nil {
@@ -73,6 +79,7 @@ func (acc *Account) SetContract(address ethcommon.Address, backend chequebook.Ba
 	return nil
 }
 
+// Save saves acc.AccountData on disk
 func (acc *Account) Save() error {
 	dataEncoded, err := json.Marshal(acc.data)
 	if err != nil {
@@ -86,6 +93,7 @@ func (acc *Account) Save() error {
 	return nil
 }
 
+// NewAccountFromStorage loads an existing account from disk
 func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (interfaces.IAccount, error) {
 	dataEncoded, err := storage.LoadAccountData()
 	if err != nil {
@@ -103,14 +111,15 @@ func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (int
 	}
 
 	acc := &Account{
-		storage:	storage,
-		data:		&accData,
-		contract:	contract,
+		storage:  storage,
+		data:     &accData,
+		contract: contract,
 	}
 
 	return acc, nil
 }
 
+// NewAccount creates a new empty account without any smart contract data
 func NewAccount(username string, storage *fs.Storage) (interfaces.IAccount, error) {
 	var secretBoxerBytes [32]byte
 	var publicBoxerBytes [32]byte
@@ -123,12 +132,12 @@ func NewAccount(username string, storage *fs.Storage) (interfaces.IAccount, erro
 
 	return &Account{
 		data: &AccountData{
-			Name:username,
+			Name: username,
 			Boxer: tribecrypto.AnonymBoxer{
 				PublicKey:  tribecrypto.AnonymPublicKey{Value: publicBoxerBytes},
 				PrivateKey: tribecrypto.AnonymPrivateKey{Value: secretBoxerBytes},
 			},
 		},
-		storage:storage,
+		storage: storage,
 	}, nil
 }

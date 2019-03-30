@@ -28,48 +28,46 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 
-	. "github.com/aliras1/FileTribe/collections"
 	"github.com/aliras1/FileTribe/ipfs"
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
 const (
+	// P2PProtocolName will be used by libp2p streams
 	P2PProtocolName = "ipfsShareP2P"
 )
 
-
+// Contact stores necessary information for P2P communication with a user
 type Contact struct {
 	AccAddr    ethcommon.Address
 	Address    ethcommon.Address
 	Name       string
-	IpfsPeerId string
+	IpfsPeerID string
 	Boxer      tribecrypto.AnonymPublicKey
 	conn       *P2PConn
 	ipfs       ipfs.IIpfs
 }
 
+// NewContact creates a new contact
 func NewContact(
 	address ethcommon.Address,
 	accAddr ethcommon.Address,
 	name string,
-	ipfsPeerId string,
+	ipfsPeerID string,
 	boxer tribecrypto.AnonymPublicKey,
 	ipfs ipfs.IIpfs) *Contact {
 
 	return &Contact{
-		AccAddr:accAddr,
-		Address: 	address,
-		Name: 		name,
-		IpfsPeerId: ipfsPeerId,
-		Boxer: 		boxer,
-		ipfs:		ipfs,
+		AccAddr:    accAddr,
+		Address:    address,
+		Name:       name,
+		IpfsPeerID: ipfsPeerID,
+		Boxer:      boxer,
+		ipfs:       ipfs,
 	}
 }
 
-func (contact *Contact) Id() IIdentifier {
-	return NewAddressId(&contact.Address)
-}
-
+// Send sends a message to the given contact
 func (contact *Contact) Send(data []byte) error {
 	if contact.conn == nil {
 		conn, err := contact.dialP2PConn(contact.ipfs)
@@ -88,6 +86,8 @@ func (contact *Contact) Send(data []byte) error {
 	return nil
 }
 
+// VerifySignature verifies a signature if it really was made by the user
+// this contact is representing
 func (contact *Contact) VerifySignature(digest, signature []byte) bool {
 	pk, err := ethcrypto.SigToPub(digest, signature)
 	if err != nil {
@@ -101,15 +101,15 @@ func (contact *Contact) VerifySignature(digest, signature []byte) bool {
 
 func (contact *Contact) dialP2PConn(ipfs ipfs.IIpfs) (*P2PConn, error) {
 	id, _ := ipfs.ID()
-	glog.Infof("user with ipfs %s is P2P dialing to %s", id.ID, contact.IpfsPeerId)
+	glog.Infof("user with ipfs %s is P2P dialing to %s", id.ID, contact.IpfsPeerID)
 
 	if contact.conn != nil {
 		return contact.conn, nil
 	}
 
-	stream, err := ipfs.P2PStreamDial(context.Background(), contact.IpfsPeerId, P2PProtocolName, "")
+	stream, err := ipfs.P2PStreamDial(context.Background(), contact.IpfsPeerID, P2PProtocolName, "")
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not dial to stream %s", contact.IpfsPeerId)
+		return nil, errors.Wrapf(err, "could not dial to stream %s", contact.IpfsPeerID)
 	}
 
 	multiAddress := ma.StringCast(stream.Address)

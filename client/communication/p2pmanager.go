@@ -34,12 +34,10 @@ import (
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 )
 
-
-type P2PHandleConnection func(addressBook *Map, conn *common.P2PConn, stop chan struct{})
-
+// P2PManager is responsible for managing all the incoming libp2p connections
 type P2PManager struct {
 	account        interfaces.IAccount
-	signer		   common.Signer
+	signer         common.Signer
 	sessions       *Map
 	addressBook    *common.AddressBook
 	p2pListener    *ipfsapi.P2PListener
@@ -49,6 +47,7 @@ type P2PManager struct {
 	ipfs           ipfsapi.IIpfs
 }
 
+// NewP2PManager creates a new P2PManager
 func NewP2PManager(
 	port string,
 	account interfaces.IAccount,
@@ -56,18 +55,18 @@ func NewP2PManager(
 	addressBook *common.AddressBook,
 	ctxCallback sesscommon.CtxCallback,
 	ipfs ipfsapi.IIpfs,
-	) (*P2PManager, error) {
+) (*P2PManager, error) {
 
 	stop := make(chan struct{})
 
-	p2pListener, err := ipfs.P2PListen(context.Background(), common.P2PProtocolName, "/ip4/127.0.0.1/tcp/" + port)
+	p2pListener, err := ipfs.P2PListen(context.Background(), common.P2PProtocolName, "/ip4/127.0.0.1/tcp/"+port)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create P2P listener")
 	}
 
 	p2p := &P2PManager{
 		account:     account,
-		signer:		 signer,
+		signer:      signer,
 		addressBook: addressBook,
 		ctxCallback: ctxCallback,
 		sessions:    NewConcurrentMap(),
@@ -81,17 +80,18 @@ func NewP2PManager(
 	return p2p, nil
 }
 
+// AddSession adds a session to the managers session list
 func (p2p *P2PManager) AddSession(session sesscommon.ISession) {
-	p2p.sessions.Put(session.Id(), session)
+	p2p.sessions.Put(session.ID(), session)
 }
 
+// Stop gracefully kills all threads and processes
 func (p2p *P2PManager) Stop() {
 	close(p2p.stop)
 }
 
-
 func (p2p *P2PManager) connectionListener(port string) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:" + port)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:"+port)
 	if err != nil {
 		glog.Errorf("could not resolve tcp address: %s", err)
 	}
@@ -107,7 +107,7 @@ func (p2p *P2PManager) connectionListener(port string) {
 
 	for {
 		select {
-		case <- p2p.stop:
+		case <-p2p.stop:
 			{
 				glog.Infof("stopping P2P connection")
 
@@ -134,7 +134,7 @@ func (p2p *P2PManager) connectionListener(port string) {
 func (p2p *P2PManager) handleConnection(addressBook *common.AddressBook, conn *common.P2PConn, stop chan struct{}) {
 	for {
 		select {
-		case <- stop:
+		case <-stop:
 			{
 				close(stop)
 				conn.Close()
@@ -154,10 +154,10 @@ func (p2p *P2PManager) handleConnection(addressBook *common.AddressBook, conn *c
 					return
 				}
 
-				glog.Infof("%s: msg from: %s, sessid: %d", p2p.account.Name(), msg.From.String(), msg.SessionId)
+				glog.Infof("%s: msg from: %s, sessid: %d", p2p.account.Name(), msg.From.String(), msg.SessionID)
 
 				var session sesscommon.ISession
-				sessionInterface := p2p.sessions.Get(msg.SessionId)
+				sessionInterface := p2p.sessions.Get(msg.SessionID)
 
 				if sessionInterface == nil {
 					session, err = servers.NewGetGroupDataSessionServer(msg, contact, p2p.account.ContractAddress(), p2p.signer, p2p.ctxCallback, p2p.onSessionClosed)
@@ -166,7 +166,7 @@ func (p2p *P2PManager) handleConnection(addressBook *common.AddressBook, conn *c
 						continue
 					}
 
-					p2p.sessions.Put(session.Id(), session)
+					p2p.sessions.Put(session.ID(), session)
 					go session.Run()
 					continue
 				}
@@ -181,9 +181,10 @@ func (p2p *P2PManager) handleConnection(addressBook *common.AddressBook, conn *c
 }
 
 func (p2p *P2PManager) onSessionClosed(session sesscommon.ISession) {
-	glog.Infof("sid %v closed with error: %v", session.Id(), session.Error())
+	glog.Infof("sid %v closed with error: %v", session.ID(), session.Error())
 }
 
+// StartGetGroupKeySession start a new session for retrieving a group's current key
 func (p2p *P2PManager) StartGetGroupKeySession(
 	group ethcommon.Address,
 	receiver *common.Contact,
@@ -207,6 +208,8 @@ func (p2p *P2PManager) StartGetGroupKeySession(
 	return nil
 }
 
+// StartGetProposedGroupKeySession starts a new session to get
+// a specific proposed key of the group
 func (p2p *P2PManager) StartGetProposedGroupKeySession(
 	group ethcommon.Address,
 	proposer ethcommon.Address,

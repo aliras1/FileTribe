@@ -1,13 +1,24 @@
-# FileTribe
+<p align="center">
+<strong><em>WARNING:</em></strong>
+FileTribe is still in pre-alpha state. Do <strong>NOT</strong> use it for storing or sharing sensitive data. All branches are highly unstable.
+</p>
+<hr/>
 
-FileTribe is a blockchain-based decentralized file-sharing and editing system built on [Ethereum](https://www.ethereum.org/) and [IPFS](https://ipfs.io/).
+<p align="center">
+  <img src="doc/logo.png" width="350">
+</p>
+<p align="center">
+  <a href="https://travis-ci.org/aliras1/FileTribe"><img src="https://travis-ci.org/aliras1/FileTribe.svg?branch=master" alt="Build Status"></img></a>
+  <a href="https://goreportcard.com/report/github.com/aliras1/FileTribe"><img src="https://goreportcard.com/badge/github.com/aliras1/FileTribe" /></a>
+</p>
 
-##### :warning: WARNING :warning:
-FileTribe is still in pre-alpha state. Do **NOT** use it for storing or sharing sensitive data. All branches are highly unstable.  
+## FileTribe
 
-Contract address of the development version on Ropsten: [0xec189ACCfbCAb44ED7b7665F293D45287120419b](https://ropsten.etherscan.io/address/0xec189ACCfbCAb44ED7b7665F293D45287120419b)
+FileTribe is a blockchain-based decentralized file-sharing and editing system built on [Ethereum](https://www.ethereum.org/) and [IPFS](https://ipfs.io/).  
 
-## Dependency
+> Contract address of the development version on Ropsten: [0xec189ACCfbCAb44ED7b7665F293D45287120419b](https://ropsten.etherscan.io/address/0xec189ACCfbCAb44ED7b7665F293D45287120419b)
+
+### Dependency
 
 In order to use FileTribe, you will need a running [IPFS](https://ipfs.io/) daemon. To install [IPFS](https://ipfs.io/), [download](https://dist.ipfs.io/#go-ipfs) it and then run
 ```
@@ -17,7 +28,7 @@ $ ./install.sh
 ```
 For more information see [here](https://docs.ipfs.io/introduction/install/).
 
-## Building the sources
+### Building the sources
 
 To successfully build the FileTribe client application, you need [Go](https://golang.org/) (v1.10 <=) and [Truffle](https://truffleframework.com/). To install [Truffle](https://truffleframework.com/), run
 `$ npm install -g truffle`. For more information on installing [Truffle](https://truffleframework.com/), see [here](https://truffleframework.com/docs/truffle/getting-started/installation). If both dependencies are installed, run
@@ -27,7 +38,7 @@ $ make all
 ```
 This will download the [Go](https://golang.org/) dependencies, compile the solidity sources and create [Go](https://golang.org/) bindings to them. Note that you may have to use make in `sudo` mode since go-ethereum's abigen might fail when trying to resolve the dependencies of the generated [Go](https://golang.org/) files. 
 
-## How to use
+### How to use
 
 An unsafe developer version of FileTribe is deployed on the **Ropsten** test network. The default `config.json` 
 contains the necessary information to reach that application. 
@@ -35,7 +46,7 @@ contains the necessary information to reach that application.
 1. To use FileTribe you need to edit `$HOME/.filetribe/config.json`
 to include your mnemonic that generates your ethereum account. If you do not have any, you can generate one
 using an [online mnemonic generator](https://iancoleman.io/bip39/) or by using [MetaMask](https://metamask.io/).
-    ```
+    ```json
     "EthAccountMnemonic": "your own long nice menmonic...",
     ```
 
@@ -55,7 +66,7 @@ specific [Ethereum](https://www.ethereum.org/) node or you deployed your own ver
 that contract, you can set these in the `config.json` file.
  
 
-#### Start IPFS daemon
+##### Start IPFS daemon
 
 FileTribe uses [IPFS](https://ipfs.io/) as its data storage layer so the client needs an [IPFS](https://ipfs.io/) daemon which it can talk to. The clients communicate with each other through the [IPFS](https://ipfs.io/) daemon's built in [_libp2p_](https://libp2p.io/) service which has to be enabled explicitly.   
 
@@ -65,7 +76,7 @@ ipfs daemon --enable-pubsub-experiment </dev/null &>/dev/null &
 ipfs config --json Experimental.Libp2pStreamMounting true
 ```
 
-#### Start the client application
+##### Start the client application
 
 You can configure the FileTribe daemon with `$HOME/.filetribe/config.json`. If you have a running [Ethereum](https://www.ethereum.org/) network, on which the FileTribe contracts were deployed and an [IPFS](https://ipfs.io/) daemon you can start the client:
  
@@ -73,7 +84,7 @@ You can configure the FileTribe daemon with `$HOME/.filetribe/config.json`. If y
 $filetribe daemon
 ```
 
-#### Execute commands on the client
+##### Execute commands on the client
 
 Now that you have a running filetribe daemon you can start interacting with it. Since most of the operations you perform 
 will result in a contract method call on the blockchain, these operations will not come into force in an instant.
@@ -119,7 +130,7 @@ OPTIONS:
   -h --help                                     Show this screen
 ```
 
-## License
+### License
 
 FileTribe is licensed under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html), also found in the `COPYING` file in the root of the repository.
 

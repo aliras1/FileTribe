@@ -27,14 +27,16 @@ import (
 
 const (
 	cacheFileName = "cache.dat"
-	maxEntries = 100
+	maxEntries    = 100
 )
 
+// Cache currently not used
 type Cache struct {
-	data map[string]string
+	data    map[string]string
 	storage *Storage
 }
 
+// NewCache creates a new cache storage
 func NewCache(storage *Storage) (*Cache, error) {
 	c := &Cache{
 		storage: storage,
@@ -58,6 +60,7 @@ func NewCache(storage *Storage) (*Cache, error) {
 	return c, nil
 }
 
+// Put adds the data to the cache
 func (c *Cache) Put(key string, value string) error {
 	c.data[key] = value
 
@@ -68,6 +71,7 @@ func (c *Cache) Put(key string, value string) error {
 	return nil
 }
 
+// Get retrieves the given data from the cache
 func (c *Cache) Get(key string) (value string, ok bool) {
 	value, ok = c.data[key]
 	return
@@ -79,7 +83,7 @@ func (c *Cache) save() error {
 		return errors.Wrap(err, "could not encode cache")
 	}
 
-	if err := utils.WriteFile(c.path(), encoded); err != nil {
+	if err := utils.CreateAndWriteFile(c.path(), encoded); err != nil {
 		return errors.Wrap(err, "could not write cache file")
 	}
 

@@ -25,15 +25,18 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// GroupMeta stores the information that is necessary to be able to
+// participate in a group's life and to read its shared files
 type GroupMeta struct {
 	Address ethCommon.Address
 	Boxer   tribecrypto.SymmetricKey
 }
 
+// Encode encodes the group meta
 func (meta *GroupMeta) Encode() ([]byte, error) {
 	data, err := json.Marshal(meta)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not json marshal group access capability")
+		return nil, errors.Wrap(err, "could not json marshal group meta")
 	}
 
 	return data, nil

@@ -22,6 +22,7 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// IGroup is a mirror to the group data on the blockchain
 type IGroup interface {
 	Address() ethcommon.Address
 	Name() string

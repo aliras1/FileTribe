@@ -30,22 +30,25 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
+// GetGroupDataSessionClient is a client in a session that is started
+// for getting a specific group data from another group member
 type GetGroupDataSessionClient struct {
-	sessionId          	uint32
-	state              	uint8
-	receiver           	*comcommon.Contact
-	groupDataMsg 		comcommon.GroupDataMessage
+	sessionID    uint32
+	state        uint8
+	receiver     *comcommon.Contact
+	groupDataMsg comcommon.GroupDataMessage
 
-	sender          	ethcommon.Address
-	onSessionClosed 	common.SessionClosedCallback
-	signer          	comcommon.Signer
+	sender          ethcommon.Address
+	onSessionClosed common.SessionClosedCallback
+	signer          comcommon.Signer
 
-	lock 				sync.RWMutex
-	stop			    chan bool
-	error				error
-	onSuccessCallback   common.OnGetGroupKeySuccessCallback
+	lock              sync.RWMutex
+	stop              chan bool
+	error             error
+	onSuccessCallback common.OnGetGroupKeySuccessCallback
 }
 
+// Error returns any errors that may occurred during the session
 func (session *GetGroupDataSessionClient) Error() error {
 	return session.error
 }
@@ -55,6 +58,7 @@ func (session *GetGroupDataSessionClient) close() {
 	session.onSessionClosed(session)
 }
 
+// Abort aborts the session
 func (session *GetGroupDataSessionClient) Abort() {
 	if !session.IsAlive() {
 		return
@@ -63,6 +67,7 @@ func (session *GetGroupDataSessionClient) Abort() {
 	session.close()
 }
 
+// State returns the state of the session
 func (session *GetGroupDataSessionClient) State() uint8 {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
@@ -70,10 +75,12 @@ func (session *GetGroupDataSessionClient) State() uint8 {
 	return session.state
 }
 
-func (session *GetGroupDataSessionClient) Id() uint32 {
-	return session.sessionId
+// ID returns the session id
+func (session *GetGroupDataSessionClient) ID() uint32 {
+	return session.sessionID
 }
 
+// IsAlive returns whether the session is active or not
 func (session *GetGroupDataSessionClient) IsAlive() bool {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
@@ -81,10 +88,13 @@ func (session *GetGroupDataSessionClient) IsAlive() bool {
 	return session.state == common.EndOfSession
 }
 
+// Run starts the session
 func (session *GetGroupDataSessionClient) Run() {
 	session.NextState(nil, nil)
 }
 
+// NextState : Sessions are implemented as Finite State Machines. NextState
+// moves the session's FSM's state
 func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, data []byte) {
 	session.lock.Lock()
 	defer session.lock.Unlock()
@@ -92,7 +102,7 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 	switch session.state {
 	case 0:
 		{
-			glog.Infof("client [%d] {%s} [0] --> %s", session.sessionId, session.sender.String(), session.receiver.AccAddr.String())
+			glog.Infof("client [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.receiver.AccAddr.String())
 			payload, err := session.groupDataMsg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encoder message payload")
@@ -100,12 +110,12 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 				return
 			}
 
-			glog.Infof("client %d [0][0]", session.sessionId)
+			glog.Infof("client %d [0][0]", session.sessionID)
 
 			msg, err := comcommon.NewMessage(
 				session.sender,
 				comcommon.GetGroupData,
-				session.sessionId,
+				session.sessionID,
 				payload,
 				session.signer,
 			)
@@ -114,20 +124,20 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 				session.close()
 				return
 			}
-			glog.Infof("client %d [0][1]", session.sessionId)
+			glog.Infof("client %d [0][1]", session.sessionID)
 			encMsg, err := msg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encode message")
 				session.close()
 				return
 			}
-			glog.Infof("client %d [0][2]", session.sessionId)
+			glog.Infof("client %d [0][2]", session.sessionID)
 			if err := session.receiver.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
 				session.close()
 				return
 			}
-			glog.Infof("client %d [0][3]", session.sessionId)
+			glog.Infof("client %d [0][3]", session.sessionID)
 
 			session.state = 1
 
@@ -146,7 +156,7 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 			msg, err := comcommon.NewMessage(
 				session.sender,
 				comcommon.GetGroupData,
-				session.sessionId,
+				session.sessionID,
 				sig,
 				session.signer,
 			)
@@ -202,6 +212,8 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 	}
 }
 
+// NewGetGroupDataSessionClient creates a new session client to retrieve a group's
+// specific data
 func NewGetGroupDataSessionClient(
 	requestedGroupData comcommon.GroupData,
 	groupAddr ethcommon.Address,
@@ -214,21 +226,21 @@ func NewGetGroupDataSessionClient(
 ) *GetGroupDataSessionClient {
 
 	groupDataMsg := comcommon.GroupDataMessage{
-		Group: groupAddr,
-		Data: requestedGroupData,
+		Group:   groupAddr,
+		Data:    requestedGroupData,
 		Payload: groupMsgPayload,
 	}
 
 	rand.Seed(time.Now().UTC().UnixNano())
 	return &GetGroupDataSessionClient{
-		sessionId:         	rand.Uint32(),
-		groupDataMsg:		groupDataMsg,
-		receiver:          	contact,
-		state:             	0,
-		sender:            	sender,
-		signer:            	signer,
-		onSessionClosed:   	onSessionClosed,
-		stop:              	make(chan bool),
-		onSuccessCallback: 	onSuccess,
+		sessionID:         rand.Uint32(),
+		groupDataMsg:      groupDataMsg,
+		receiver:          contact,
+		state:             0,
+		sender:            sender,
+		signer:            signer,
+		onSessionClosed:   onSessionClosed,
+		stop:              make(chan bool),
+		onSuccessCallback: onSuccess,
 	}
 }

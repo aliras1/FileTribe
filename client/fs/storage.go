@@ -17,13 +17,13 @@
 package fs
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
-	"bytes"
 
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	CAP_EXT string = ".cap"
+	metaExt string = ".met"
 )
 
 // Storage is a struct of the directory paths and has
@@ -47,9 +47,9 @@ type Storage struct {
 	publicFilesPath string
 	publicForPath   string
 	userDataPath    string
-	capsPath        string
+	metasPath       string
 	origPath        string
-	capsGAPath      string // group access caps
+	metasGAPath     string // group metas
 	fileRootPath    string
 	sharedPath      string
 	tmpPath         string
@@ -68,9 +68,9 @@ func NewStorage(dataPath string) *Storage {
 	storage.publicFilesPath = storage.dataPath + "public/files/"
 	storage.publicForPath = storage.dataPath + "public/for/"
 	storage.userDataPath = storage.dataPath + "userdata/"
-	storage.capsPath = storage.dataPath + "userdata/caps/"
+	storage.metasPath = storage.dataPath + "userdata/metas/"
 	storage.origPath = storage.dataPath + "userdata/orig/"
-	storage.capsGAPath = storage.dataPath + "userdata/caps/GA/"
+	storage.metasGAPath = storage.dataPath + "userdata/metas/GA/"
 	storage.fileRootPath = storage.dataPath + "userdata/root/"
 	storage.myFilesPath = storage.dataPath + "userdata/root/MyFiles/"
 	storage.sharedPath = storage.dataPath + "userdata/shared/"
@@ -80,9 +80,9 @@ func NewStorage(dataPath string) *Storage {
 	os.MkdirAll(storage.dataPath, 0770)
 	os.MkdirAll(storage.publicFilesPath, 0770)
 	os.MkdirAll(storage.publicForPath, 0770)
-	os.MkdirAll(storage.capsPath, 0770)
+	os.MkdirAll(storage.metasPath, 0770)
 	os.MkdirAll(storage.origPath, 0770)
-	os.MkdirAll(storage.capsGAPath, 0770)
+	os.MkdirAll(storage.metasGAPath, 0770)
 	os.MkdirAll(storage.fileRootPath, 0770)
 	os.MkdirAll(storage.myFilesPath, 0770)
 	os.MkdirAll(storage.sharedPath, 0770)
@@ -93,20 +93,24 @@ func NewStorage(dataPath string) *Storage {
 	return &storage
 }
 
+// UserFilesPath returns the path to the user's files
 func (storage *Storage) UserFilesPath() string {
 	return storage.fileRootPath
 }
 
+// CopyFileIntoPublicDir copies a file to the user's public directory
 func (storage *Storage) CopyFileIntoPublicDir(filePath string) error {
 	publicFilePath := storage.publicFilesPath + "/" + path.Base(filePath)
 	return utils.CopyFile(filePath, publicFilePath)
 }
 
+// CopyFileIntoMyFiles copies a file to the user's private directory
 func (storage *Storage) CopyFileIntoMyFiles(filePath string) (string, error) {
 	newFilePath := storage.myFilesPath + "/" + path.Base(filePath)
 	return newFilePath, utils.CopyFile(filePath, newFilePath)
 }
 
+// CopyFileIntoGroupFiles copies a file to the group's directory
 func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) error {
 	groupFilesPath := storage.fileRootPath + "/" + groupName
 	os.Mkdir(groupFilesPath, 0770)
@@ -114,16 +118,18 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) error
 	return utils.CopyFile(filePath, newFilePath)
 }
 
+// SaveAccountData saves account data to disk
 func (storage *Storage) SaveAccountData(data []byte) error {
 	path := storage.userDataPath + "account.dat"
 
-	if err := utils.WriteFile(path, data); err != nil {
+	if err := utils.CreateAndWriteFile(path, data); err != nil {
 		return errors.Wrapf(err, "could not write to file: %s", path)
 	}
 
 	return nil
 }
 
+// LoadAccountData loads account data from the disk
 func (storage *Storage) LoadAccountData() ([]byte, error) {
 	path := storage.userDataPath + "account.dat"
 
@@ -135,34 +141,30 @@ func (storage *Storage) LoadAccountData() ([]byte, error) {
 	return data, nil
 }
 
-// +------------------------------+
-// |   Group specific functions   |
-// +------------------------------+
-
-// Gets all the locally stored group access capabilities from
-// directory data/userdata/caps/GA/
+// GetGroupMetas loads all the locally stored group meta data from
+// directory data/userdata/metas/GA/
 func (storage *Storage) GetGroupMetas() ([]*meta.GroupMeta, error) {
 	var groupMetas []*meta.GroupMeta
-	// read groupMetas from caps and try to refresh them
-	groupCapFiles, err := ioutil.ReadDir(storage.capsGAPath)
+	// read groupMetas from metas and try to refresh them
+	groupMetaFiles, err := ioutil.ReadDir(storage.metasGAPath)
 	if err != nil {
 		return groupMetas, err
 	}
 
-	for _, groupCapFile := range groupCapFiles {
-		if groupCapFile.IsDir() {
+	for _, groupMetaFile := range groupMetaFiles {
+		if groupMetaFile.IsDir() {
 			continue // do not care about directories
 		}
 
-		filePath := storage.capsGAPath + "/" + groupCapFile.Name()
-		capBytes, err := ioutil.ReadFile(filePath)
+		filePath := storage.metasGAPath + "/" + groupMetaFile.Name()
+		metaBytes, err := ioutil.ReadFile(filePath)
 		if err != nil {
 			glog.Warning("could not read file '%s': Storage.GetGroupMetas: %s", filePath, err)
 			continue
 		}
 
 		var groupMeta meta.GroupMeta
-		if err := json.Unmarshal(capBytes, &groupMeta); err != nil {
+		if err := json.Unmarshal(metaBytes, &groupMeta); err != nil {
 			glog.Warning("could not unmarshal group groupMeta: Storage.GetGroupMetas: %s", err)
 			continue
 		}
@@ -174,10 +176,11 @@ func (storage *Storage) GetGroupMetas() ([]*meta.GroupMeta, error) {
 	return groupMetas, nil
 }
 
+// GetGroupFileMetas loads all file metas belonging to the group
 func (storage *Storage) GetGroupFileMetas(groupAddress string) ([]*meta.FileMeta, error) {
 	var fileMetas []*meta.FileMeta
 
-	baseDir := storage.GroupFileCapDir(groupAddress)
+	baseDir := storage.GroupFileMetaDir(groupAddress)
 	metaFiles, err := ioutil.ReadDir(baseDir)
 	if err != nil {
 		return fileMetas, err
@@ -207,43 +210,49 @@ func (storage *Storage) GetGroupFileMetas(groupAddress string) ([]*meta.FileMeta
 	return fileMetas, nil
 }
 
-func (storage *Storage) SaveGroupAccessCap(cap *meta.GroupMeta) error {
-	capJson, err := json.Marshal(cap)
+// SaveGroupMeta saves a group meta to disk
+func (storage *Storage) SaveGroupMeta(groupMeta *meta.GroupMeta) error {
+	metaJSON, err := json.Marshal(groupMeta)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal group access capability")
+		return errors.Wrap(err, "could not marshal group meta")
 	}
 
-	path := storage.GroupAccessCapDir() + cap.Address.String() + CAP_EXT
-	if err := utils.WriteFile(path, capJson); err != nil {
-		return errors.Wrap(err, "could not write group cap file")
+	path := storage.GroupMetaDir() + groupMeta.Address.String() + metaExt
+	if err := utils.CreateAndWriteFile(path, metaJSON); err != nil {
+		return errors.Wrap(err, "could not write group groupMeta file")
 	}
 
 	return nil
 }
 
-func (storage *Storage) GroupAccessCapDir() string {
-	return storage.capsGAPath
+// GroupMetaDir returns the directory in which group metas are stored
+func (storage *Storage) GroupMetaDir() string {
+	return storage.metasGAPath
 }
 
-func (storage *Storage) GroupFileCapDir(id string) string {
-	return storage.capsPath + id + "/"
+// GroupFileMetaDir returns the directory in which group file metas are stored
+func (storage *Storage) GroupFileMetaDir(id string) string {
+	return storage.metasPath + id + "/"
 }
 
+// GroupFileOrigDir ...
 func (storage *Storage) GroupFileOrigDir(id string) string {
 	return storage.origPath + id + "/"
 }
 
+// GroupFileDataDir returns the directory in which the physical group files are stored
 func (storage *Storage) GroupFileDataDir(id string) string {
 	return storage.fileRootPath + id + "/"
 }
 
-// Creates the directory structure needed by a group
+// MakeGroupDir creates the directory structure needed by a group
 func (storage *Storage) MakeGroupDir(id string) {
-	os.MkdirAll(storage.capsPath + id, 0770)
-	os.MkdirAll(storage.fileRootPath + id, 0770)
-	os.MkdirAll(storage.origPath+ id, 0770)
+	os.MkdirAll(storage.metasPath+id, 0770)
+	os.MkdirAll(storage.fileRootPath+id, 0770)
+	os.MkdirAll(storage.origPath+id, 0770)
 }
 
+// DownloadTmpFile downloads a file from IPFS to a temporary directory
 func (storage *Storage) DownloadTmpFile(ipfsHash string, ipfs ipfsapi.IIpfs) (string, error) {
 	filePath := storage.tmpPath + "/" + ipfsHash
 	if err := ipfs.Get(ipfsHash, filePath); err != nil {
@@ -252,6 +261,7 @@ func (storage *Storage) DownloadTmpFile(ipfsHash string, ipfs ipfsapi.IIpfs) (st
 	return filePath, nil
 }
 
+// DownloadAndDecryptWithSymmetricKey downloads a file from IPFS and decrypts its contents with a symmetric key
 func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer tribecrypto.SymmetricKey, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
 	path := storage.tmpPath + ipfsHash
 	if err := ipfs.Get(ipfsHash, path); err != nil {
@@ -276,6 +286,7 @@ func (storage *Storage) DownloadAndDecryptWithSymmetricKey(boxer tribecrypto.Sym
 	return data, nil
 }
 
+// DownloadAndDecryptWithFileBoxer downloads a file from IPFS and decrypts its contents with a FileBoxer
 func (storage *Storage) DownloadAndDecryptWithFileBoxer(boxer tribecrypto.FileBoxer, ipfsHash string, ipfs ipfsapi.IIpfs) ([]byte, error) {
 	tmpFilePath, err := storage.DownloadTmpFile(ipfsHash, ipfs)
 	if err != nil {

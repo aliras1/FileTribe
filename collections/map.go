@@ -129,7 +129,7 @@ func (c *Map) Get(key interface{}) interface{} {
 //	}
 //
 //	for _, elem := range c.list {
-//		if elem.Id().Equal(id) {
+//		if elem.ID().Equal(id) {
 //			return elem
 //		}
 //	}

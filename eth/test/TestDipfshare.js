@@ -15,10 +15,10 @@ var util = require('util');
 var log_file = fs.createWriteStream(__dirname + '/debug.log', {flags : 'w'});
 var log_stdout = process.stdout;
 
-console.log = function(d) { //
-    log_file.write(util.format(d) + '\n');
-    log_stdout.write(util.format(d) + '\n');
-};
+// console.log = function(d) { //
+//     log_file.write(util.format(d) + '\n');
+//     log_stdout.write(util.format(d) + '\n');
+// };
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -226,27 +226,6 @@ contract('FileTribeDApp', accounts => {
     const charlesAddress = accounts[2];
 
     beforeEach(async function () {
-        // dipfshare = await FileTribeDApp.new({ from: creator });
-        // let receipt = await web3.eth.getTransactionReceipt(dipfshare.transactionHash);
-        // console.log("app: " + receipt.gasUsed);
-        // accountFactory = await AccountFactory.new({ from: creator });
-        // receipt = await web3.eth.getTransactionReceipt(accountFactory.transactionHash);
-        // console.log("acc factory: " + receipt.gasUsed);
-        // groupFactory = await GroupFactory.new({ from: creator });
-        // receipt = await web3.eth.getTransactionReceipt(groupFactory.transactionHash);
-        // console.log("group factory: " + receipt.gasUsed);
-        // consensusFactory = await ConsensusFactory.new({ from: creator });
-        // receipt = await web3.eth.getTransactionReceipt(consensusFactory.transactionHash);
-        // console.log("cons factory: " + receipt.gasUsed);
-        //
-        // await dipfshare.setAccountFactory(accountFactory.address);
-        // await dipfshare.setGroupFactory(groupFactory.address);
-        // await dipfshare.setConsensusFactory(consensusFactory.address);
-        //
-        // await accountFactory.setParent(dipfshare.address);
-        // await groupFactory.setParent(dipfshare.address);
-        // await consensusFactory.setParent(dipfshare.address);
-
         dipfshare = await FileTribeDApp.deployed();
     });
 
@@ -380,12 +359,12 @@ contract('FileTribeDApp', accounts => {
         // console.log("kick: " + result.receipt.gasUsed);
 
         // charles leaves the group
-        result = await group.leave({from: ethAccounts[4]});
+        result = await group.leave({from: bobAddress});
         console.log("leave: " + result.receipt.gasUsed);
 
-        truffleAssert.eventEmitted(result, 'KeyDirty', (ev) => {
+        truffleAssert.eventEmitted(result, 'MemberLeft', (ev) => {
             return group.address === ev.group;
-        }, 'Contract should emit a valid KeyDirty event');
+        }, 'Contract should emit a valid MemberLeft event');
 
         await sleep(1000);
         // let numMembers = await group.members();

@@ -22,11 +22,13 @@ import (
 	"github.com/aliras1/FileTribe/client/communication/common"
 )
 
-
+// EndOfSession is the final state of all sessions
 const EndOfSession = math.MaxUint8
 
+// ISession is a session interface. Sessions are implemented as
+// Finite State Machines.
 type ISession interface {
-	Id() uint32
+	ID() uint32
 	IsAlive() bool
 	Abort()
 	NextState(contact *common.Contact, data []byte)

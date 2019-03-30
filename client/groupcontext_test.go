@@ -32,7 +32,6 @@ import (
 	"github.com/aliras1/FileTribe/utils"
 )
 
-
 func TestGroupContext_Invite(t *testing.T) {
 	flag.Set("alsologtostderr", fmt.Sprintf("%t", true))
 	var logLevel string
@@ -148,7 +147,6 @@ func TestGroupContext_Invite(t *testing.T) {
 	sim.Commit()
 	time.Sleep(5 * time.Second)
 
-
 	fmt.Println("----------- Bob tries to change the file ------------")
 	bobGroups := bob.Groups()
 	groupAtBob := bobGroups[0].(*GroupContext)
@@ -176,7 +174,6 @@ func TestGroupContext_Invite(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	sim.Commit()
 	time.Sleep(3 * time.Second)
-
 
 	fmt.Println("----------- Bob modif  ------------")
 	if err := AppendToFile(fileBob, "Bob's modification\n"); err != nil {
@@ -212,7 +209,6 @@ func TestGroupContext_Invite(t *testing.T) {
 	glog.Info(rec.Status)
 	glog.Info(rec.Logs)
 	glog.Info(rec.Bloom)
-
 
 	//fmt.Println("----------- Alice modif  ------------")
 	//fakeNetwork.SetAuth(ALICE)

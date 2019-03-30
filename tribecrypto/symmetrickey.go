@@ -25,32 +25,26 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
+// SymmetricKey is a helper struct for handling nacl.secretbox
 type SymmetricKey struct {
 	Key [32]byte  `json:"key"`
 	RNG io.Reader `json:"-"`
 }
 
-func NewSymmetricKey() (*SymmetricKey, error) {
-	var k [32]byte
-	if _, err := rand.Read(k[:]); err != nil {
-		return &SymmetricKey{}, errors.Wrap(err, "could not read from crypto.rand")
-	}
-
-	return &SymmetricKey{Key: k, RNG: rand.Reader}, nil
-}
-
-func (k *SymmetricKey) GetNonce() [24]byte {
+func (k *SymmetricKey) getNonce() [24]byte {
 	var nonce [24]byte
 	k.RNG.Read(nonce[:])
 	return nonce
 }
 
+// BoxSeal encrypts the provided message
 func (k *SymmetricKey) BoxSeal(message []byte) []byte {
-	nonce := k.GetNonce()
+	nonce := k.getNonce()
 	enc := secretbox.Seal(nonce[:], message, &nonce, &k.Key)
 	return enc
 }
 
+// BoxOpen decrypts the provided cipher text
 func (k *SymmetricKey) BoxOpen(bytesBox []byte) ([]byte, bool) {
 	if len(bytesBox) < 24 {
 		return []byte{}, false
@@ -61,6 +55,7 @@ func (k *SymmetricKey) BoxOpen(bytesBox []byte) ([]byte, bool) {
 	return secretbox.Open(nil, bytesBox[24:], &nonce, &k.Key)
 }
 
+// Encode encodes the secret key
 func (k *SymmetricKey) Encode() ([]byte, error) {
 	enc, err := json.Marshal(k)
 	if err != nil {
@@ -70,6 +65,7 @@ func (k *SymmetricKey) Encode() ([]byte, error) {
 	return enc, nil
 }
 
+// DecodeSymmetricKey decodes and returns an encoded SymmetricKey
 func DecodeSymmetricKey(data []byte) (*SymmetricKey, error) {
 	var k SymmetricKey
 	if err := json.Unmarshal(data, &k); err != nil {

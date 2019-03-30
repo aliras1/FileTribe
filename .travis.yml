@@ -5,28 +5,39 @@ language: node_js
 node_js:
   - "9"
 
-services:
-- docker
-
 cache:
   directories:
   - node_modules
 
 before_install:
-  - docker build -f ./misc/eth/Dockerfile -t eth .
-  - docker run --rm -dit -p 30304:30304 -p 8000:8000 --name ethdevnet eth:latest
-  - sleep 180
+  - sudo add-apt-repository ppa:ethereum/ethereum -y
+  - sudo apt-get update
+  - sudo apt-get install -y software-properties-common wget
+  - wget https://dl.google.com/go/go1.10.linux-amd64.tar.gz
+  - sudo tar -xvf go1.10.linux-amd64.tar.gz
+  - sudo mv go /usr/local
+  - mkdir $HOME/go
+  - export GOROOT=/usr/local/go
+  - export GOPATH=$HOME/go
+  - export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+  - mkdir -p $HOME/.local/bin
 
 install:
   - npm install -g truffle
   - npm install
   - npm install --save-dev solidity-coverage
+  - npm install -g ganache-cli
+  - npm install truffle-hdwallet-provider
+  - npm install truffle-assertions
 
 script:
+  - ganache-cli &
   - cd eth
-  - truffle test
-  - ../node_modules/.bin/solidity-coverage 
+  - truffle test --network development
+#  - ../node_modules/.bin/solidity-coverage
+  - cd ..
+  - make all
 
-after_script:
-  - docker kill ethdevnet
+#after_script:
+#  - docker kill ethdevnet
 #- npm run coverage && cat coverage/lcov.info | coveralls
