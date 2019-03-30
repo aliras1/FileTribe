@@ -18,7 +18,6 @@ package client
 
 import (
 	"crypto/rand"
-	"fmt"
 	"path"
 	"sync"
 
@@ -72,6 +71,7 @@ type GroupContext struct {
 	lock             sync.Mutex
 }
 
+// GroupContextConfig is a configuration struct for creating GroupContext
 type GroupContextConfig struct {
 	Group 			interfaces.IGroup
 	Account 		interfaces.IAccount
@@ -83,10 +83,13 @@ type GroupContextConfig struct {
 	Transactions 	*List
 }
 
+// Address returns the smart contract address of the group
 func (groupCtx *GroupContext) Address() ethcommon.Address {
 	return groupCtx.Group.Address()
 }
 
+// NewGroupContext creates a GroupContext with data described in the
+// provided configuration object
 func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 
 	groupContext := &GroupContext{
@@ -131,6 +134,8 @@ func onSessionClosed(session sesscommon.ISession) {
 	glog.Infof("session %d closed with error: %s", session.Id(), session.Error())
 }
 
+// Update fetches all the current group information from the blockchain
+// and refreshes the GroupContext with its contents
 func (groupCtx *GroupContext) Update() error {
 	contract := groupCtx.eth.Group
 
@@ -164,6 +169,7 @@ func (groupCtx *GroupContext) Update() error {
 	return nil
 }
 
+// Leave invokes the 'Leave' operation of the group on the blockchain
 func (groupCtx *GroupContext) Leave() error {
 	tx, err := groupCtx.eth.Group.Leave(groupCtx.eth.Auth.TxOpts)
 	if err != nil {
@@ -175,10 +181,13 @@ func (groupCtx *GroupContext) Leave() error {
 	return nil
 }
 
+// Stop kills all IPFS pubsub group connection - NOT USED
 func (groupCtx *GroupContext) Stop() {
 	groupCtx.GroupConnection.Kill()
 }
 
+// CommitChanges collects all changes in the group's root directory,
+// creates a path from it and commits the changes on the blockchain
 func (groupCtx *GroupContext) CommitChanges() error {
 	var secretKeyBytes [32]byte
 	if _, err := rand.Read(secretKeyBytes[:]); err != nil {
@@ -211,7 +220,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 	return nil
 }
 
-
+// Invite invokes the 'Invite' method of the group on the blockchain
 func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight bool) error {
 	glog.Infof("[*] Inviting account '%s' into group '%s'...\n", newMember.String(), groupCtx.Group.Name())
 
@@ -225,7 +234,7 @@ func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight
 	return nil
 }
 
-
+// Save stores group data on disk
 func (groupCtx *GroupContext) Save() error {
 	if err := groupCtx.Group.Save(); err != nil {
 		return errors.Wrap(err, "could not save group")
@@ -234,12 +243,7 @@ func (groupCtx *GroupContext) Save() error {
 	return nil
 }
 
-
-// Loads the locally available group meta data
-func (groupCtx *GroupContext) LoadGroupData(data string) error {
-	return fmt.Errorf("not implemented GroupContext.LoadGroupData")
-}
-
+// GrantWriteAccess adds the defined user to the write ACL in the file meta
 func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.Address) error {
 	if !groupCtx.Group.IsMember(user) {
 		return errors.New("can not grant write access to non group members")
@@ -265,6 +269,7 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 	return nil
 }
 
+// RevokeWriteAccess removes the defined user from the write ACL in the file meta
 func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.Address) error {
 	if !groupCtx.Group.IsMember(user) {
 		return errors.New("can not revoke write access from non group members")
@@ -291,7 +296,7 @@ func (groupCtx *GroupContext) RevokeWriteAccess(filePath string, user ethcommon.
 }
 
 
-func (groupCtx *GroupContext) GetKey(encNewIpfsHash []byte) error {
+func (groupCtx *GroupContext) startGetKey(encNewIpfsHash []byte) error {
 	//newBoxer, ok := groupCtx.proposedKeys[encNewIpfsHashBase64]
 	//
 	//if ok {
@@ -337,6 +342,7 @@ func (groupCtx *GroupContext) onGetKeySuccess(boxer tribecrypto.SymmetricKey) {
 	}
 }
 
+// ListFiles returns a list of type string with the group files
 func (groupCtx *GroupContext) ListFiles() []string {
 	var fileNames []string
 	files := groupCtx.Repo.Files()
@@ -348,24 +354,9 @@ func (groupCtx *GroupContext) ListFiles() []string {
 	return fileNames
 }
 
+// ListMembers returns a list of the members addresses
 func (groupCtx *GroupContext) ListMembers() []ethcommon.Address {
 	return groupCtx.Group.Members()
-}
-
-func (groupCtx *GroupContext) OnCommitClientSuccess(args []interface{}) {
-	if len(args) < 1 {
-		glog.Error("args should be of length 1")
-	}
-
-	encNewIpfsHash := args[0].([]byte)
-
-	tx, err := groupCtx.eth.Group.ChangeIpfsHash(groupCtx.eth.Auth.TxOpts, encNewIpfsHash)
-	if err != nil {
-		glog.Errorf("could not send update group ipfs hash transaction: %s", err)
-		return
-	}
-
-	groupCtx.Transactions.Add(tx)
 }
 
 func (groupCtx *GroupContext) broadcast(msg []byte) error {

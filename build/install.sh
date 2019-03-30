@@ -3,6 +3,7 @@
 type truffle >/dev/null 2>&1 || { echo >&2 "I require Truffle but it's not installed. Aborting."; exit 1; }
 
 echo [*] Creating environment...
+go version
 
 ws=./build/go_workspace
 mkdir -p ${ws}
@@ -28,13 +29,6 @@ go get -u github.com/gorilla/mux
 go get -u github.com/ipfs/go-ipfs-api
 go get -u github.com/ugorji/go/codec
 go get -u github.com/miguelmota/go-ethereum-hdwallet
-#go get -u -v github.com/tools/godep
-
-export CURRENT_DIR=$PWD
-cd ${GOPATH}/src/github.com/ethereum/go-ethereum
-dep init ./cmd/abigen
-dep insure ./cmd/abigen
-cd ${CURRENT_DIR}
 
 echo [*] Generating abi APIs...
 
