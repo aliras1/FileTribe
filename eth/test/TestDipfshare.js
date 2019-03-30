@@ -380,7 +380,7 @@ contract('FileTribeDApp', accounts => {
         // console.log("kick: " + result.receipt.gasUsed);
 
         // charles leaves the group
-        result = await group.leave({from: ethAccounts[4]});
+        result = await group.leave({from: bobAddress});
         console.log("leave: " + result.receipt.gasUsed);
 
         truffleAssert.eventEmitted(result, 'KeyDirty', (ev) => {

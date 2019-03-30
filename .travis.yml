@@ -21,6 +21,7 @@ before_install:
   - export GOPATH=$HOME/go
   - export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
   - sudo apt-get install -y ethereum
+  - mkdir -p $HOME/.local/bin
 
 install:
   - npm install -g truffle
