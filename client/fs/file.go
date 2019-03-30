@@ -225,10 +225,10 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 		currentStr, _ = dmp.PatchApply(patchInt.([]diffmatchpatch.Patch), currentStr)
 	}
 
-	if err := utils.WriteFile(f.OrigPath, []byte(currentStr)); err != nil {
+	if err := utils.CreateAndWriteFile(f.OrigPath, []byte(currentStr)); err != nil {
 		glog.Errorf("download err: could not write orig file: %s", err)
 	}
-	if err := utils.WriteFile(f.DataPath, []byte(currentStr)); err != nil {
+	if err := utils.CreateAndWriteFile(f.DataPath, []byte(currentStr)); err != nil {
 		glog.Errorf("download err: could not data orig file: %s", err)
 	}
 }
@@ -240,7 +240,7 @@ func (f *File) SaveMetadata() error {
 		return errors.Wrapf(err, "could not marshal file '%s'", f.Cap.FileName)
 	}
 	glog.Infof("%v", f)
-	if err := utils.WriteFile(f.CapPath, jsonBytes); err != nil {
+	if err := utils.CreateAndWriteFile(f.CapPath, jsonBytes); err != nil {
 		return errors.Wrapf(err, "could not write file '%s'", f.Cap.FileName)
 	}
 

@@ -18,6 +18,7 @@ package utils
 
 import "github.com/pkg/errors"
 
+// SigToRSV decomposes an ethereum signature to its r, s, v values
 func SigToRSV(sig []byte) (r [32]byte, s [32]byte, v uint8, err error) {
 	if len(sig) != 65 {
 		err = errors.New("signature must be of length 65")

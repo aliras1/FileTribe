@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// CopyFile copies a file from the source to the given destination
 func CopyFile(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
@@ -43,7 +44,8 @@ func CopyFile(src, dst string) error {
 	return err
 }
 
-func WriteFile(filePath string, data []byte) error {
+// CreateAndWriteFile creates and writes a file
+func CreateAndWriteFile(filePath string, data []byte) error {
 	f, err := os.Create(filePath)
 	if err != nil {
 		return errors.Wrapf(err, "could not create file '%s'", filePath)
@@ -57,6 +59,7 @@ func WriteFile(filePath string, data []byte) error {
 	return nil
 }
 
+// FileExists checks if a file exists
 func FileExists(filePath string) bool {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return false

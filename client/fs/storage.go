@@ -117,7 +117,7 @@ func (storage *Storage) CopyFileIntoGroupFiles(filePath, groupName string) error
 func (storage *Storage) SaveAccountData(data []byte) error {
 	path := storage.userDataPath + "account.dat"
 
-	if err := utils.WriteFile(path, data); err != nil {
+	if err := utils.CreateAndWriteFile(path, data); err != nil {
 		return errors.Wrapf(err, "could not write to file: %s", path)
 	}
 
@@ -214,7 +214,7 @@ func (storage *Storage) SaveGroupAccessCap(cap *meta.GroupMeta) error {
 	}
 
 	path := storage.GroupAccessCapDir() + cap.Address.String() + CAP_EXT
-	if err := utils.WriteFile(path, capJson); err != nil {
+	if err := utils.CreateAndWriteFile(path, capJson); err != nil {
 		return errors.Wrap(err, "could not write group cap file")
 	}
 

@@ -79,7 +79,7 @@ func (c *Cache) save() error {
 		return errors.Wrap(err, "could not encode cache")
 	}
 
-	if err := utils.WriteFile(c.path(), encoded); err != nil {
+	if err := utils.CreateAndWriteFile(c.path(), encoded); err != nil {
 		return errors.Wrap(err, "could not write cache file")
 	}
 
