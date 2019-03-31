@@ -214,14 +214,7 @@ func groupListMembers(w http.ResponseWriter, r *http.Request) {
 
 	for _, group := range client.Groups() {
 		if bytes.Equal(group.Address().Bytes(), groupAddress.Bytes()) {
-			var list []string
-			for _, address := range group.ListMembers() {
-				list = append(list, address.String())
-			}
-
-			glog.Error(list)
-
-			if err := json.NewEncoder(w).Encode(list); err != nil {
+			if err := json.NewEncoder(w).Encode(group.ListMembers()); err != nil {
 				glog.Error(err)
 			}
 
@@ -286,9 +279,14 @@ func lsGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var list []string
+	type GroupView struct {
+		GroupName string
+		Address   string
+	}
+
+	var list []GroupView
 	for _, group := range client.Groups() {
-		list = append(list, group.Address().String())
+		list = append(list, GroupView{Address: group.Address().String(), GroupName: group.Name()})
 	}
 
 	if err := json.NewEncoder(w).Encode(list); err != nil {
@@ -412,12 +410,12 @@ COMMANDS:
     revoke <group address> <file> <member>      Revoke write access for the given file to the given user
 
   CONFIG.JSON OPTIONS:
-    APIAddress                                  Address on which the daemon will be listening    
+    APIAddress                                  EthAccountAddress on which the daemon will be listening    
     IpfsAPIAddress                              http address of a running IPFS daemon's API
     EthFullNodeAddress                          websocket address of an Ethereum full node
     EthAccountMnemonic                          Mnemonic that generates your Ethereum account
     EthAccountPasswordFilePath                  Path to the password file of the corresponding Ethereum account
-    FileTribeDAppAddress                        Address of the FileTribeDApp contract
+    FileTribeDAppAddress                        EthAccountAddress of the FileTribeDApp contract
     LogLevel {INFO|WARNING|ERROR}               Level of logs that will be printed to stdout                                   
 
 OPTIONS:
@@ -555,7 +553,7 @@ func main() {
 
 			switch subSubCommand {
 			case "ls":
-				url += "/" + subSubCommand + "/" + args[0]
+				url += "/" + args[0]
 				request, err = http.NewRequest("GET", url, bytes.NewBuffer(nil))
 				if err != nil {
 					panic(fmt.Sprintf("Could not create http request: %s", err))
@@ -563,7 +561,7 @@ func main() {
 				request.Header.Set("Content-Type", "application/json")
 
 			case "commit":
-				url += "/" + subSubCommand + "/" + args[0]
+				url += "/" + args[0]
 				request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
 				if err != nil {
 					panic(fmt.Sprintf("Could not create http request: %s", err))
@@ -578,7 +576,7 @@ func main() {
 					printHelpAndExit("Not enough arguments")
 				}
 
-				url += "/" + subSubCommand + "/" + args[0] + "/" + args[1] + "/" + args[2]
+				url += "/" + args[0] + "/" + args[1] + "/" + args[2]
 				request, err = http.NewRequest("POST", url, bytes.NewBuffer(nil))
 				if err != nil {
 					panic(fmt.Sprintf("Could not create http request: %s", err))

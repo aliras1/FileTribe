@@ -39,13 +39,13 @@ const (
 
 // Contact stores necessary information for P2P communication with a user
 type Contact struct {
-	AccAddr    ethcommon.Address
-	Address    ethcommon.Address
-	Name       string
-	IpfsPeerID string
-	Boxer      tribecrypto.AnonymPublicKey
-	conn       *P2PConn
-	ipfs       ipfs.IIpfs
+	AccountAddress    ethcommon.Address
+	EthAccountAddress ethcommon.Address
+	Name              string
+	IpfsPeerID        string
+	Boxer             tribecrypto.AnonymPublicKey
+	conn              *P2PConn
+	ipfs              ipfs.IIpfs
 }
 
 // NewContact creates a new contact
@@ -58,12 +58,12 @@ func NewContact(
 	ipfs ipfs.IIpfs) *Contact {
 
 	return &Contact{
-		AccAddr:    accAddr,
-		Address:    address,
-		Name:       name,
-		IpfsPeerID: ipfsPeerID,
-		Boxer:      boxer,
-		ipfs:       ipfs,
+		AccountAddress:    accAddr,
+		EthAccountAddress: address,
+		Name:              name,
+		IpfsPeerID:        ipfsPeerID,
+		Boxer:             boxer,
+		ipfs:              ipfs,
 	}
 }
 
@@ -96,7 +96,7 @@ func (contact *Contact) VerifySignature(digest, signature []byte) bool {
 	}
 
 	otherAddress := ethcrypto.PubkeyToAddress(*pk)
-	return bytes.Equal(contact.Address.Bytes(), otherAddress.Bytes())
+	return bytes.Equal(contact.EthAccountAddress.Bytes(), otherAddress.Bytes())
 }
 
 func (contact *Contact) dialP2PConn(ipfs ipfs.IIpfs) (*P2PConn, error) {

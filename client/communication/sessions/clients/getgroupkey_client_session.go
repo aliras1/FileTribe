@@ -102,7 +102,7 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 	switch session.state {
 	case 0:
 		{
-			glog.Infof("client [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.receiver.AccAddr.String())
+			glog.Infof("client [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.receiver.AccountAddress.String())
 			payload, err := session.groupDataMsg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encoder message payload")
@@ -146,7 +146,7 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 		// Got the challenge
 	case 1:
 		{
-			glog.Infof("client %s [1] --> %s", session.sender.String(), session.receiver.AccAddr.String())
+			glog.Infof("client %s [1] --> %s", session.sender.String(), session.receiver.AccountAddress.String())
 			sig, err := session.signer(data)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not sign challenge")
@@ -185,7 +185,7 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 		}
 	case 2:
 		{
-			glog.Infof("client [2] --> %s", session.receiver.AccAddr.String())
+			glog.Infof("client [2] --> %s", session.receiver.AccountAddress.String())
 			key, err := tribecrypto.DecodeSymmetricKey(data)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not decode group key")

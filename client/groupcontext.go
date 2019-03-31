@@ -42,13 +42,28 @@ import (
 // with a GroupContext
 type IGroupFacade interface {
 	Address() ethcommon.Address
+	Name() string
 	GrantWriteAccess(filePath string, user ethcommon.Address) error
 	RevokeWriteAccess(filePath string, user ethcommon.Address) error
 	CommitChanges() error
 	Invite(user ethcommon.Address, hasInviteRigth bool) error
 	Leave() error
-	ListFiles() []string
-	ListMembers() []ethcommon.Address
+	ListFiles() []FileView
+	ListMembers() []MemberView
+}
+
+// MemberView is a view of a group member. These objects are sent back
+// to main.go when it lists group members
+type MemberView struct {
+	Name    string
+	Address string
+}
+
+// FileView is a view of a file objects. These objects are sent back
+// to main.go when it lists the group repository
+type FileView struct {
+	Name        string
+	WriteAccess []MemberView
 }
 
 // GroupContext represents a groups current state and is responsible for
@@ -81,11 +96,6 @@ type GroupContextConfig struct {
 	Ipfs         ipfsapi.IIpfs
 	Storage      *fs.Storage
 	Transactions *List
-}
-
-// Address returns the smart contract address of the group
-func (groupCtx *GroupContext) Address() ethcommon.Address {
-	return groupCtx.Group.Address()
 }
 
 // NewGroupContext creates a GroupContext with data described in the
@@ -313,7 +323,7 @@ func (groupCtx *GroupContext) startGetKey(encNewIpfsHash []byte) error {
 	//		}
 	//
 	//		if err := groupCtx.P2P.StartGetGroupKeySession(
-	//			groupCtx.Group.Address(),
+	//			groupCtx.Group.EthAccountAddress(),
 	//			c,
 	//			groupCtx.account.ContractAddress(),
 	//			func(cap *caps.GroupAccessCap) {
@@ -341,21 +351,62 @@ func (groupCtx *GroupContext) onGetKeySuccess(boxer tribecrypto.SymmetricKey) {
 	}
 }
 
-// ListFiles returns a list of type string with the group files
-func (groupCtx *GroupContext) ListFiles() []string {
-	var fileNames []string
-	files := groupCtx.Repo.Files()
+// Address returns the smart contract address of the group
+func (groupCtx *GroupContext) Address() ethcommon.Address {
+	return groupCtx.Group.Address()
+}
 
-	for _, file := range files {
-		fileNames = append(fileNames, file.Meta.FileName)
+// Name returns the group name
+func (groupCtx *GroupContext) Name() string {
+	return groupCtx.Group.Name()
+}
+
+// ListFiles returns a list of type string with the group files
+func (groupCtx *GroupContext) ListFiles() []FileView {
+	var list []FileView
+
+	for _, file := range groupCtx.Repo.Files() {
+		var acl []MemberView
+		for _, address := range file.Meta.WriteAccessList {
+			member := MemberView{Address: address.String()}
+
+			contact, err := groupCtx.AddressBook.Get(address)
+			if err != nil {
+				glog.Errorf("could not get contact for address: '%s': %s", address, err)
+				member.Name = "<error>"
+			} else {
+				member.Name = contact.Name
+			}
+
+			acl = append(acl, member)
+		}
+
+		list = append(list, FileView{Name: file.Meta.FileName, WriteAccess: acl})
 	}
 
-	return fileNames
+	return list
 }
 
 // ListMembers returns a list of the members addresses
-func (groupCtx *GroupContext) ListMembers() []ethcommon.Address {
-	return groupCtx.Group.Members()
+func (groupCtx *GroupContext) ListMembers() []MemberView {
+	var list []MemberView
+	addresses := groupCtx.Group.Members()
+
+	for _, address := range addresses {
+		member := MemberView{Address: address.String()}
+
+		contact, err := groupCtx.AddressBook.Get(address)
+		if err != nil {
+			glog.Errorf("could not get contact for address '%s': %s", address.String(), err)
+			member.Name = "<error>"
+		} else {
+			member.Name = contact.Name
+		}
+
+		list = append(list, member)
+	}
+
+	return list
 }
 
 func (groupCtx *GroupContext) broadcast(msg []byte) error {

@@ -59,6 +59,14 @@ contract Group is Ownable {
     function changeIpfsHash(bytes memory newIpfsHash) public onlyMembers {
         bytes32 digest = keccak256(abi.encodePacked(_ipfsHash, newIpfsHash));
 
+        if (_members.length == 1) {
+            emit IpfsHashChanged(address(this), newIpfsHash, IFileTribeDApp(_fileTribe).getAccount(msg.sender));
+
+            _ipfsHash = newIpfsHash;
+
+            return;
+        }
+
         uint256 idx = _memberToIdx[msg.sender];
         IConsensus(_consensuses[idx]).propose(digest, newIpfsHash);
 

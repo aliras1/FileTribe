@@ -242,15 +242,15 @@ func (storage *Storage) GroupFileOrigDir(id string) string {
 }
 
 // GroupFileDataDir returns the directory in which the physical group files are stored
-func (storage *Storage) GroupFileDataDir(id string) string {
-	return storage.fileRootPath + id + "/"
+func (storage *Storage) GroupFileDataDir(groupName string) string {
+	return storage.fileRootPath + groupName + "/"
 }
 
 // MakeGroupDir creates the directory structure needed by a group
-func (storage *Storage) MakeGroupDir(id string) {
-	os.MkdirAll(storage.metasPath+id, 0770)
-	os.MkdirAll(storage.fileRootPath+id, 0770)
-	os.MkdirAll(storage.origPath+id, 0770)
+func (storage *Storage) MakeGroupDir(name string, address string) {
+	os.MkdirAll(storage.metasPath+address, 0770)
+	os.MkdirAll(storage.fileRootPath+name, 0770)
+	os.MkdirAll(storage.origPath+address, 0770)
 }
 
 // DownloadTmpFile downloads a file from IPFS to a temporary directory

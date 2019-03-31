@@ -49,7 +49,7 @@ type GroupRepo struct {
 
 // NewGroupRepo creates a new GroupRepo
 func NewGroupRepo(group interfaces.IGroup, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
-	storage.MakeGroupDir(group.Name())
+	storage.MakeGroupDir(group.Name(), group.Address().String())
 
 	metas, err := storage.GetGroupFileMetas(group.Address().String())
 	if err != nil {
@@ -114,7 +114,7 @@ func (repo *GroupRepo) Files() []*File {
 }
 
 func (repo *GroupRepo) getPendingChanges() ([]*meta.FileMeta, error) {
-	dir := repo.storage.GroupFileDataDir(repo.group.Address().String())
+	dir := repo.storage.GroupFileDataDir(repo.group.Name())
 	filesInLocalDir, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open group file data dir")
@@ -296,7 +296,7 @@ func (repo *GroupRepo) Update(newIpfsHash string) error {
 		var err error
 		fileInterface := repo.files.Get(fileMeta.FileName)
 		if fileInterface == nil {
-			file, err = NewGroupFileFromMeta(fileMeta, repo.group.Address().String(), repo.storage)
+			file, err = NewGroupFileFromMeta(fileMeta, repo.group.Address().String(), repo.group.Name(), repo.storage)
 			if err != nil {
 				return errors.Wrap(err, "could not create new group file from fileMeta")
 			}

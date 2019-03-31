@@ -92,10 +92,10 @@ func NewGroupFile(filePath string, writeAccessList []ethcommon.Address, groupAdd
 }
 
 // NewGroupFileFromMeta creates a new File from the given group file meta data
-func NewGroupFileFromMeta(fileMeta *meta.FileMeta, groupAddress string, storage *Storage) (*File, error) {
+func NewGroupFileFromMeta(fileMeta *meta.FileMeta, groupAddress string, groupName string, storage *Storage) (*File, error) {
+	dataPath := storage.GroupFileDataDir(groupName) + fileMeta.FileName
 	metaPath := storage.GroupFileMetaDir(groupAddress) + fileMeta.FileName
-	dataPath := storage.GroupFileDataDir(groupAddress) + fileMeta.FileName
-	pendingPath := storage.GroupFileOrigDir(groupAddress) + fileMeta.FileName
+	origPath := storage.GroupFileOrigDir(groupAddress) + fileMeta.FileName
 
 	var pendingChanges *meta.FileMeta
 	if err := deepcopy(&pendingChanges, fileMeta); err != nil {
@@ -107,7 +107,7 @@ func NewGroupFileFromMeta(fileMeta *meta.FileMeta, groupAddress string, storage 
 		PendingChanges: pendingChanges,
 		DataPath:       dataPath,
 		MetaPath:       metaPath,
-		OrigPath:       pendingPath,
+		OrigPath:       origPath,
 	}
 
 	return file, nil
@@ -192,7 +192,7 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 	for {
 		data, err := storage.DownloadAndDecryptWithFileBoxer(currentDiffBoxer, currentDiffIpfsHash, ipfs)
 		if err != nil {
-			glog.Error("could not download and decrypt diff node")
+			glog.Error("could not download and decrypt diff node: %s", err)
 			return
 		}
 
@@ -231,7 +231,7 @@ func (f *File) Download(storage *Storage, ipfs ipfsapi.IIpfs) {
 		glog.Errorf("download err: could not write orig file: %s", err)
 	}
 	if err := utils.CreateAndWriteFile(f.DataPath, []byte(currentStr)); err != nil {
-		glog.Errorf("download err: could not data orig file: %s", err)
+		glog.Errorf("download err: could not write data file: %s", err)
 	}
 }
 
