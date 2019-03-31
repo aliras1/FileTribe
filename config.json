@@ -2,7 +2,7 @@
   "APIAddress": "127.0.0.1:3333",
   "IpfsAPIAddress": "http://127.0.0.1:5001",
   "EthFullNodeAddress": "wss://ropsten.infura.io/ws/v3/ab40f8d7630e424b8a9e816ca1148f16",
-  "EthAccountMnemonic": "inform wheat broccoli mind sheriff cram salute peace swap hint funny few",
+  "EthAccountMnemonic": "apple, orange, banana...",
   "EthAccountPasswordFilePath": "/tmp/password",
   "FileTribeDAppAddress": "0xec189ACCfbCAb44ED7b7665F293D45287120419b",
   "LogLevel": "INFO"
