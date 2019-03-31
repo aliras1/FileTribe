@@ -35,6 +35,7 @@ import (
 	"github.com/aliras1/FileTribe/client/fs"
 	"github.com/aliras1/FileTribe/client/interfaces"
 	. "github.com/aliras1/FileTribe/collections"
+	ethaccount "github.com/aliras1/FileTribe/eth/gen/Account"
 	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
 	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
@@ -105,11 +106,23 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 
 	fmt.Print(accountAddress.Hex())
 
-	if strings.EqualFold(accountAddress.String(), "0x" + strings.Repeat("0", 40)) {
+	if strings.EqualFold(accountAddress.String(), "0x"+strings.Repeat("0", 40)) {
 		fmt.Println("No FileTribe account found associated with current ethereum account. Use 'filetribe signup <username>' to sign up")
 
 		go ctx.HandleAccountCreatedEvents(ctx.eth.App)
 	} else {
+		accountContract, err := ethaccount.NewAccount(accountAddress, ctx.eth.Backend)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not create account contract object from address")
+		}
+
+		accountName, err := accountContract.Name(&bind.CallOpts{})
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get account name from contract")
+		}
+
+		ctx.storage.Init(accountName)
+
 		account, err := NewAccountFromStorage(ctx.storage, ctx.eth.Backend)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create account object")

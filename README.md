@@ -17,7 +17,7 @@ FileTribe is still in pre-alpha state. Do <strong>NOT</strong> use it for storin
 
 FileTribe is a blockchain-based decentralized file-sharing and editing system built on [Ethereum](https://www.ethereum.org/) and [IPFS](https://ipfs.io/).  
 
-> Contract address of the development version on Ropsten: [0xec189ACCfbCAb44ED7b7665F293D45287120419b](https://ropsten.etherscan.io/address/0xec189ACCfbCAb44ED7b7665F293D45287120419b)
+> Contract address of the development version on Ropsten: [0xa53336064E1c14a6a9c0a612Fe445d201a1982DE](https://ropsten.etherscan.io/address/0xa53336064E1c14a6a9c0a612Fe445d201a1982DE)
 
 ### Dependency
 

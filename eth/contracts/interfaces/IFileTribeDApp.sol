@@ -11,4 +11,6 @@ interface IFileTribeDApp {
     function onInvitationDeclined() external;
 
     function owner() external returns(address);
+
+    function getAccount(address addr) external returns (address);
 }
