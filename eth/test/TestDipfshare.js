@@ -89,7 +89,7 @@ async function invite(group, inviter, inviterAddress, invitee, inviteeAddress) {
 
 async function commit(fromAddress, ipfsHash, approverAddresses, group) {
     let consensusAddress;
-    result = await group.changeIpfsHash(ipfsHash, {from: fromAddress});
+    var result = await group.commit(ipfsHash, {from: fromAddress});
     console.log("change ipfs hash: " + result.receipt.gasUsed);
     truffleAssert.eventEmitted(result, 'NewConsensus', (ev) => {
         consensusAddress = ev.consensus;
@@ -115,7 +115,7 @@ async function commit(fromAddress, ipfsHash, approverAddresses, group) {
 
         console.log("approving cons " + consensus.address + " from addr: " + addr);
         try {
-            result = await consensus.approve("0x00", "0x00", 1, {from: addr});
+            result = await consensus.approve({from: addr});
         } catch (e) {
             console.log(e + ": " + addr);
         }
@@ -126,7 +126,7 @@ async function commit(fromAddress, ipfsHash, approverAddresses, group) {
     await sleep(10000);
     assert(keyDirty);
 
-    assert.equal(await group.ipfsHash(), ipfsHash);
+    assert.equal(await group._ipfsHash(), ipfsHash);
 }
 
 async function changeKeyDecline(fromAddress, ipfsHash, approverAddresses, group) {
@@ -328,7 +328,7 @@ contract('FileTribeDApp', accounts => {
         // }
 
         // check members
-        let members = await group.members();
+        let members = await group.memberOwners();
         // console.log(members);
         // console.log(bob.address);
         // console.log(await bob.owner());
@@ -339,7 +339,7 @@ contract('FileTribeDApp', accounts => {
         await sleep(1000);
 
         let consensusAddress;
-        result = await group.changeIpfsHash("0x02", {from: bobAddress});
+        result = await group.commit("0x02", {from: bobAddress});
         console.log("change ipfs hash: " + result.receipt.gasUsed);
         truffleAssert.eventEmitted(result, 'NewConsensus', (ev) => {
             consensusAddress = ev.consensus;

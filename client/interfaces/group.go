@@ -17,13 +17,14 @@
 package interfaces
 
 import (
+	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
-// IGroup is a mirror to the group data on the blockchain
-type IGroup interface {
+// Group is a mirror to the group data on the blockchain
+type Group interface {
 	Address() ethcommon.Address
 	Name() string
 	IpfsHash() string
@@ -33,10 +34,20 @@ type IGroup interface {
 	RemoveMember(user ethcommon.Address)
 	IsMember(user ethcommon.Address) bool
 	CountMembers() int
-	Members() []ethcommon.Address
+	MemberOwners() []ethcommon.Address
 	Boxer() tribecrypto.SymmetricKey
 	SetBoxer(boxer tribecrypto.SymmetricKey)
-	Update(name string, members []ethcommon.Address, encIpfsHash []byte) error
-	Encode() ([]byte, error)
+	Update(groupContract *ethgroup.Group) error
 	Save() error
+}
+
+// GroupData is the collection of group information
+// that can be exported to disk
+type GroupData struct {
+	Address           ethcommon.Address
+	Name              string
+	IpfsHash          string
+	EncryptedIpfsHash []byte
+	MemberOwners      []ethcommon.Address
+	Boxer             tribecrypto.SymmetricKey
 }

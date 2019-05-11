@@ -24,8 +24,8 @@ import (
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
-// IAccount is a mirror to the account data on the blockchain
-type IAccount interface {
+// Account is a mirror to the account data on the blockchain
+type Account interface {
 	ContractAddress() ethcommon.Address
 	Contract() *ethacc.Account
 	Name() string

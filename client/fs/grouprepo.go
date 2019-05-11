@@ -37,7 +37,7 @@ import (
 // GroupRepo is responsible for managing and maintaining a group's file repository
 type GroupRepo struct {
 	files   *Map
-	group   interfaces.IGroup
+	group   interfaces.Group
 	ipfs    ipfs.IIpfs
 	storage *Storage
 	user    ethcommon.Address
@@ -48,7 +48,7 @@ type GroupRepo struct {
 }
 
 // NewGroupRepo creates a new GroupRepo
-func NewGroupRepo(group interfaces.IGroup, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
+func NewGroupRepo(group interfaces.Group, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
 	storage.MakeGroupDir(group.Name(), group.Address().String())
 
 	metas, err := storage.GetGroupFileMetas(group.Address().String())

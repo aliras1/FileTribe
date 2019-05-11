@@ -18,54 +18,57 @@ package client
 
 import (
 	"bytes"
-	"crypto/rand"
+	"encoding/json"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
 	"github.com/aliras1/FileTribe/client/fs"
 	"github.com/aliras1/FileTribe/client/fs/meta"
 	"github.com/aliras1/FileTribe/client/interfaces"
+	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
-// Group is the mirror object of a Group smart contract
-type Group struct {
-	address           ethcommon.Address
-	name              string
-	ipfsHash          string
-	encryptedIpfsHash []byte
-	members           []ethcommon.Address
-	boxer             tribecrypto.SymmetricKey
+type group struct {
+	data *interfaces.GroupData
 	lock              sync.RWMutex
 	storage           *fs.Storage
 }
 
-// NewGroup creates a new Group with the given parameters
-func NewGroup(address ethcommon.Address, groupName string, storage *fs.Storage) interfaces.IGroup {
-	var secretKeyBytes [32]byte
-	rand.Read(secretKeyBytes[:])
-	boxer := tribecrypto.SymmetricKey{
-		Key: secretKeyBytes,
-		RNG: rand.Reader,
+// NewGroupFromMeta creates a new Group from an existing GroupMeta file stored on disk
+func NewGroupFromMeta(meta *meta.GroupMeta, groupContract *ethgroup.Group, storage *fs.Storage) interfaces.Group {
+	group := &group{
+		storage: storage,
+		data: &interfaces.GroupData{
+			Address:meta.Address,
+			Boxer:meta.Boxer,
+		},
 	}
 
-	return &Group{
-		address: address,
-		name:    groupName,
-		boxer:   boxer,
-		storage: storage,
+	if err := group.Update(groupContract); err != nil {
+		glog.Warningf("could not update group: %s", err)
 	}
+
+	return group
 }
 
-// NewGroupFromMeta creates a new Group from an existing GroupMeta file stored on disk
-func NewGroupFromMeta(meta *meta.GroupMeta, storage *fs.Storage) interfaces.IGroup {
-	return &Group{
-		address: meta.Address,
-		boxer:   meta.Boxer,
-		storage: storage,
+// NewGroupFromGroupData creates a new group from GroupData and tries to refresh its
+// data with up to date information from the blockchain
+func NewGroupFromGroupData(data *interfaces.GroupData, groupContract *ethgroup.Group, storage *fs.Storage) interfaces.Group {
+	group := &group{
+		storage:storage,
+		data:data,
 	}
+
+	if err := group.Update(groupContract); err != nil {
+		glog.Warningf("could not update group: %s", err)
+	}
+
+	return group
 }
 
 // GetGroupKeyFromAddress tries to get the group key of a group with the given address
@@ -76,7 +79,7 @@ func GetGroupKeyFromAddress(address ethcommon.Address, ctx *UserContext) error {
 	//}
 	//
 	//for _, member := range members {
-	//	if bytes.Equal(member.Bytes(), ctx.account.Address().Bytes()) {
+	//	if bytes.Equal(member.Bytes(), ctx.account.EthAccountAddress().Bytes()) {
 	//		continue
 	//	}
 	//	c, err := ctx.network.GetUser(member)
@@ -88,7 +91,7 @@ func GetGroupKeyFromAddress(address ethcommon.Address, ctx *UserContext) error {
 	//	if err := ctx.addressBook.Append(comcommon.NewContact(c, ctx.ipfs)); err != nil {
 	//		glog.Warningf("could not append elem: %s", err)
 	//	}
-	//	contact := ctx.addressBook.Get(NewAddressId(&c.Address)).(*comcommon.Contact)
+	//	contact := ctx.addressBook.Get(NewAddressId(&c.EthAccountAddress)).(*comcommon.Contact)
 	//
 	//	err = ctx.p2p.StartGetGroupKeySession(groupId, contact, ctx.account, ctx.storage, func(cap *caps.GroupMeta) {
 	//		groupCtx, err := NewGroupContextFromCAP(
@@ -123,38 +126,15 @@ func GetGroupKeyFromAddress(address ethcommon.Address, ctx *UserContext) error {
 	return errors.New("not implemented")
 }
 
-// Encode encodes the Group
-func (g *Group) Encode() ([]byte, error) {
-	g.lock.RLock()
-	defer g.lock.RUnlock()
-
-	cap := meta.GroupMeta{
-		Address: g.address,
-		Boxer:   g.boxer,
-	}
-
-	data, err := cap.Encode()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not encode group data")
-	}
-
-	return data, nil
-}
-
 // Save saves the Group to disk
-func (g *Group) Save() error {
-	//data, err := g.Encode()
-	//if err != nil {
-	//	return errors.Wrap(err, "could not encode group")
-	//}
-
-	cap := meta.GroupMeta{
-		Address: g.address,
-		Boxer:   g.boxer,
+func (g *group) Save() error {
+	dataEnc, err := json.Marshal(g.data)
+	if err != nil {
+		return errors.Wrap(err, "could not encode group data")
 	}
 
-	if err := g.storage.SaveGroupMeta(&cap); err != nil {
-		return errors.Wrap(err, "could not save group cap")
+	if err := g.storage.SaveGroupData(dataEnc, g.data.Address.String()); err != nil {
+		return errors.Wrap(err, "could not save group groupMeta")
 	}
 
 	return nil
@@ -166,53 +146,68 @@ func (g *Group) Save() error {
 // encrypt it and use that as encryptedIpfsHash because
 // the encryption uses a random element when producing the
 // cipher text, therefore on each instance of the ipfs-share
-// daemon, the ecnryptedIpfsHash's will be different
-func (g *Group) SetIpfsHash(encIpfsHash []byte) error {
+// daemon, the ecnryptedIpfsHashes will be different
+func (g *group) SetIpfsHash(encIpfsHash []byte) error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	ipfsHash, ok := g.boxer.BoxOpen(encIpfsHash)
+	ipfsHash, ok := g.data.Boxer.BoxOpen(encIpfsHash)
 	if !ok {
 		return errors.New("could not decrypt encrypted ipfs hash")
 	}
 
-	g.ipfsHash = string(ipfsHash)
-	g.encryptedIpfsHash = encIpfsHash
+	g.data.IpfsHash = string(ipfsHash)
+	g.data.EncryptedIpfsHash = encIpfsHash
 
 	return nil
 }
 
 // Update updates the Group data with the provided parameters
-func (g *Group) Update(name string, members []ethcommon.Address, encIpfsHash []byte) error {
+func (g *group) Update(groupContract *ethgroup.Group) error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
+	name, err := groupContract.Name(&bind.CallOpts{Pending: true})
+	if err != nil {
+		return errors.Wrap(err, "could not get group name")
+	}
+
+	memberOwners, err := groupContract.MemberOwners(&bind.CallOpts{Pending: true})
+	if err != nil {
+		return errors.Wrap(err, "could not get group member owners")
+	}
+
+	encIpfsHash, err := groupContract.IpfsHash(&bind.CallOpts{Pending: true})
+	if err != nil {
+		return errors.Wrap(err, "could not get group ipfs hash")
+	}
+
 	if len(encIpfsHash) > 0 {
-		ipfsHash, ok := g.boxer.BoxOpen(encIpfsHash)
+		ipfsHash, ok := g.data.Boxer.BoxOpen(encIpfsHash)
 		if !ok {
 			return errors.New("could not decrypt ipfs hash")
 		}
-		g.ipfsHash = string(ipfsHash)
+		g.data.IpfsHash = string(ipfsHash)
 	}
 
-	g.name = name
-	g.members = members
-	g.encryptedIpfsHash = encIpfsHash
+	g.data.Name = name
+	g.data.MemberOwners = memberOwners
+	g.data.EncryptedIpfsHash = encIpfsHash
 
 	return nil
 }
 
 // IsMember checks if an account is a group member or not
-func (g *Group) IsMember(account ethcommon.Address) bool {
+func (g *group) IsMember(memberOwner ethcommon.Address) bool {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	return g.isMember(account)
+	return g.isMember(memberOwner)
 }
 
-func (g *Group) isMember(user ethcommon.Address) bool {
-	for _, m := range g.members {
-		if bytes.Equal(m.Bytes(), user.Bytes()) {
+func (g *group) isMember(memberOwner ethcommon.Address) bool {
+	for _, m := range g.data.MemberOwners {
+		if bytes.Equal(m.Bytes(), memberOwner.Bytes()) {
 			return true
 		}
 	}
@@ -220,35 +215,35 @@ func (g *Group) isMember(user ethcommon.Address) bool {
 }
 
 // AddMember adds an account to the member list
-func (g *Group) AddMember(account ethcommon.Address) {
+func (g *group) AddMember(accountOwner ethcommon.Address) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	if !g.isMember(account) {
-		g.members = append(g.members, account)
+	if !g.isMember(accountOwner) {
+		g.data.MemberOwners = append(g.data.MemberOwners, accountOwner)
 	}
 }
 
 // RemoveMember removes an account from the member list
-func (g *Group) RemoveMember(account ethcommon.Address) {
+func (g *group) RemoveMember(account ethcommon.Address) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	for i, m := range g.members {
+	for i, m := range g.data.MemberOwners {
 		if bytes.Equal(m.Bytes(), account.Bytes()) {
-			g.members = append(g.members[:i], g.members[i+1:]...)
+			g.data.MemberOwners = append(g.data.MemberOwners[:i], g.data.MemberOwners[i+1:]...)
 			return
 		}
 	}
 }
 
-// Members returns the list of members
-func (g *Group) Members() []ethcommon.Address {
+// MemberOwners returns the list of members
+func (g *group) MemberOwners() []ethcommon.Address {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
 	var list []ethcommon.Address
-	for _, member := range g.members {
+	for _, member := range g.data.MemberOwners {
 		list = append(list, member)
 	}
 
@@ -256,57 +251,57 @@ func (g *Group) Members() []ethcommon.Address {
 }
 
 // CountMembers returns the number of members
-func (g *Group) CountMembers() int {
+func (g *group) CountMembers() int {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	return len(g.members)
+	return len(g.data.MemberOwners)
 }
 
 // Address returns the group's smart contract address
-func (g *Group) Address() ethcommon.Address {
+func (g *group) Address() ethcommon.Address {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	return g.address
+	return g.data.Address
 }
 
 // Name returns the group name
-func (g *Group) Name() string {
+func (g *group) Name() string {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	return g.name
+	return g.data.Name
 }
 
 // IpfsHash returns the group's current IPFS hash
-func (g *Group) IpfsHash() string {
+func (g *group) IpfsHash() string {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	return g.ipfsHash
+	return g.data.IpfsHash
 }
 
 // EncryptedIpfsHash returns the group's current encrypted IPFS hash
-func (g *Group) EncryptedIpfsHash() []byte {
+func (g *group) EncryptedIpfsHash() []byte {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	return g.encryptedIpfsHash
+	return g.data.EncryptedIpfsHash
 }
 
 // Boxer returns the group key
-func (g *Group) Boxer() tribecrypto.SymmetricKey {
+func (g *group) Boxer() tribecrypto.SymmetricKey {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	return g.boxer
+	return g.data.Boxer
 }
 
 // SetBoxer is a setter for the group key
-func (g *Group) SetBoxer(boxer tribecrypto.SymmetricKey) {
+func (g *group) SetBoxer(boxer tribecrypto.SymmetricKey) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	g.boxer = boxer
+	g.data.Boxer = boxer
 }

@@ -32,9 +32,9 @@ import (
 
 // GroupConnection is responsible for handling the group's IPFS pubsub subscription
 type GroupConnection struct {
-	group         interfaces.IGroup
+	group         interfaces.Group
 	repo          *fs.GroupRepo
-	account       interfaces.IAccount
+	account       interfaces.Account
 	addressBook   *common.AddressBook
 	sessionClosed sesscommon.SessionClosedCallback
 	p2p           *P2PManager
@@ -49,9 +49,9 @@ type GroupConnection struct {
 
 // NewGroupConnection creates a new GroupConnection
 func NewGroupConnection(
-	group interfaces.IGroup,
+	group interfaces.Group,
 	repo *fs.GroupRepo,
-	user interfaces.IAccount,
+	user interfaces.Account,
 	addressBook *common.AddressBook,
 	sessionClosed sesscommon.SessionClosedCallback,
 	p2p *P2PManager,

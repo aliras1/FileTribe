@@ -48,7 +48,7 @@ type IUserFacade interface {
 	SignUp(username string) error
 	CreateGroup(groupname string) error
 	AcceptInvitation(groupAddress ethcommon.Address) error
-	User() interfaces.IAccount
+	User() interfaces.Account
 	Groups() []IGroupFacade
 	SignOut()
 	Transactions() ([]*types.Transaction, error)
@@ -57,7 +57,7 @@ type IUserFacade interface {
 // UserContext stores all the user data and it is responsible
 // for handling communication, events, encryption, etc.
 type UserContext struct {
-	account     interfaces.IAccount
+	account     interfaces.Account
 	eth         *Eth
 	groups      *Map
 	addressBook *common.AddressBook
@@ -75,7 +75,7 @@ type UserContext struct {
 }
 
 // NewUserContext creates a new UserContext with the data provided
-func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
+func NewUserContext(auth interfaces.Auth, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	var err error
 	var ctx UserContext
 
@@ -99,7 +99,7 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	ctx.channelStop = make(chan int)
 	ctx.storage = fs.NewStorage(os.Getenv("HOME"))
 
-	accountAddress, err := appContract.GetAccount(&bind.CallOpts{}, auth.Address)
+	accountAddress, err := appContract.GetAccount(&bind.CallOpts{}, auth.Address())
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get account address")
 	}
@@ -146,9 +146,9 @@ func NewUserContext(auth *Auth, backend chequebook.Backend, appContractAddress e
 	return &ctx, nil
 }
 
-// SignUp creates a new Account, saves it and registers it on the blockchain
+// SignUp creates a new account, saves it and registers it on the blockchain
 func (ctx *UserContext) SignUp(username string) error {
-	glog.Infof("[*] Account '%s' signing in...", username)
+	glog.Infof("[*] account '%s' signing in...", username)
 
 	acc, err := NewAccount(username, ctx.storage)
 	if err != nil {
@@ -166,7 +166,7 @@ func (ctx *UserContext) SignUp(username string) error {
 		return errors.Wrap(err, "could not get ipfs id")
 	}
 
-	tx, err := ctx.eth.App.CreateAccount(ctx.eth.Auth.TxOpts, username, ipfsID.ID, acc.Boxer().PublicKey.Value)
+	tx, err := ctx.eth.App.CreateAccount(ctx.eth.Auth.TxOpts(), username, ipfsID.ID, acc.Boxer().PublicKey.Value)
 	if err != nil {
 		return errors.Wrap(err, "could not send create account tx")
 	}
@@ -178,13 +178,38 @@ func (ctx *UserContext) SignUp(username string) error {
 
 // IsMember returns whether a given user is a member of a given group or not.
 // It is used by communication sessions that have no direct access to GroupContexts.
-func (ctx *UserContext) IsMember(group ethcommon.Address, account ethcommon.Address) error {
+func (ctx *UserContext) IsMember(group ethcommon.Address, accountOwner ethcommon.Address) error {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
 		return errors.New("no group found")
 	}
 
-	if !groupInt.(*GroupContext).Group.IsMember(account) {
+	glog.Infof("UserContext.IsMember(..., %s)", accountOwner.String())
+	glog.Infof("group members:")
+	for _, member := range groupInt.(*GroupContext).Group.MemberOwners() {
+		glog.Info(member.String())
+	}
+	glog.Infof("group members acc:")
+	for _, member := range groupInt.(*GroupContext).Group.MemberOwners() {
+		mem, _ := ctx.eth.App.GetAccount(&bind.CallOpts{Pending:true}, member)
+		glog.Info(mem.String())
+	}
+
+	glog.Infof("group members owner:")
+	for _, member := range groupInt.(*GroupContext).Group.MemberOwners() {
+		ac, err := ethaccount.NewAccount(member, ctx.eth.Backend)
+		if err != nil {
+			continue
+		}
+		ow, err := ac.Owner(&bind.CallOpts{Pending:true})
+		if err != nil {
+			continue
+		}
+		glog.Info(ow.String())
+	}
+
+
+	if !groupInt.(*GroupContext).Group.IsMember(accountOwner) {
 		return errors.New("account is not member of group")
 	}
 
@@ -219,7 +244,7 @@ func (ctx *UserContext) GetProposedBoxerOfGroup(group ethcommon.Address, propose
 }
 
 // Init initializes a UserContext: it starts the P2P manager and the event handlers
-func (ctx *UserContext) Init(acc interfaces.IAccount) error {
+func (ctx *UserContext) Init(acc interfaces.Account) error {
 	p2p, err := com.NewP2PManager(
 		ctx.p2pPort,
 		acc,
@@ -234,7 +259,7 @@ func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	ctx.account = acc
 	ctx.p2p = p2p
 
-	// Account events
+	// account events
 	//go ctx.HandleDebugEvents(network.GetDebugChannel())
 	go ctx.HandleGroupInvitationEvents(acc.Contract())
 	go ctx.HandleGroupCreatedEvents(acc.Contract())
@@ -247,8 +272,8 @@ func (ctx *UserContext) Init(acc interfaces.IAccount) error {
 	return nil
 }
 
-// User returns the Account interface
-func (ctx *UserContext) User() interfaces.IAccount {
+// User returns the account interface
+func (ctx *UserContext) User() interfaces.Account {
 	return ctx.account
 }
 
@@ -263,7 +288,7 @@ func (ctx *UserContext) Save() error {
 
 // SignOut tries to gracefully stop all started threads and processes
 func (ctx *UserContext) SignOut() {
-	glog.Infof("[*] Account '%s' signing out...\n", ctx.account.Name())
+	glog.Infof("[*] account '%s' signing out...\n", ctx.account.Name())
 	for groupCtx := range ctx.groups.VIterator() {
 		groupCtx.(*GroupContext).Stop()
 	}
@@ -277,19 +302,19 @@ func (ctx *UserContext) SignOut() {
 func (ctx *UserContext) BuildGroups() error {
 	glog.Infof("Building Groups for account '%s'...", ctx.account.Name())
 
-	caps, err := ctx.storage.GetGroupMetas()
+	groupDatas, err := ctx.storage.GetGroupDatas()
 	if err != nil {
-		return errors.Wrap(err, "could not get group caps")
+		return errors.Wrap(err, "could not get group groupDatas")
 	}
 
-	for _, cap := range caps {
-		contract, err := ethgroup.NewGroup(cap.Address, ctx.eth.Backend)
+	for _, groupData := range groupDatas {
+		groupContract, err := ethgroup.NewGroup(groupData.Address, ctx.eth.Backend)
 		if err != nil {
 			return errors.Wrap(err, "could not create new eth group instance")
 		}
 
 		config := &GroupContextConfig{
-			Group:        NewGroupFromMeta(cap, ctx.storage),
+			Group:        NewGroupFromGroupData(groupData, groupContract, ctx.storage),
 			Account:      ctx.account,
 			P2P:          ctx.p2p,
 			AddressBook:  ctx.addressBook,
@@ -297,7 +322,7 @@ func (ctx *UserContext) BuildGroups() error {
 			Storage:      ctx.storage,
 			Transactions: ctx.transactions,
 			Eth: &GroupEth{
-				Group: contract,
+				Group: groupContract,
 				Eth:   ctx.eth,
 			},
 		}
@@ -321,7 +346,7 @@ func (ctx *UserContext) BuildGroups() error {
 
 // CreateGroup creates a group through a blockchain method invoke
 func (ctx *UserContext) CreateGroup(groupname string) error {
-	tx, err := ctx.account.Contract().CreateGroup(ctx.eth.Auth.TxOpts, groupname)
+	tx, err := ctx.account.Contract().CreateGroup(ctx.eth.Auth.TxOpts(), groupname)
 	if err != nil {
 		return errors.Wrap(err, "could not send create group tx")
 	}
@@ -342,7 +367,7 @@ func (ctx *UserContext) AcceptInvitation(groupAddress ethcommon.Address) error {
 				return errors.Wrap(err, "could not get group contract instance")
 			}
 
-			tx, err := group.Join(ctx.eth.Auth.TxOpts)
+			tx, err := group.Join(ctx.eth.Auth.TxOpts())
 			if err != nil {
 				return errors.Wrap(err, "could not send accept invitation tx")
 			}

@@ -55,8 +55,8 @@ func NewServerSession(
 func NewGroupServerSession(
 	msg *comcommon.Message,
 	contact *comcommon.Contact,
-	user interfaces.IAccount,
-	group interfaces.IGroup,
+	user interfaces.Account,
+	group interfaces.Group,
 	repo *fs.GroupRepo,
 	sessionClosed common.SessionClosedCallback,
 ) (common.ISession, error) {

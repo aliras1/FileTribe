@@ -31,19 +31,19 @@ import (
 
 // AddressBook is a cache for fellow users' P2P contact data
 type AddressBook struct {
-	accToContactMap *collections.Map
-	backend         chequebook.Backend
-	app             *ethapp.FileTribeDApp
-	ipfs            ipfs.IIpfs
+	accountToContactMap *collections.Map
+	backend             chequebook.Backend
+	app                 *ethapp.FileTribeDApp
+	ipfs                ipfs.IIpfs
 }
 
 // NewAddressBook creates a new AddressBook
 func NewAddressBook(backend chequebook.Backend, app *ethapp.FileTribeDApp, ipfs ipfs.IIpfs) *AddressBook {
 	return &AddressBook{
-		backend:         backend,
-		app:             app,
-		ipfs:            ipfs,
-		accToContactMap: collections.NewConcurrentMap(),
+		backend:             backend,
+		app:                 app,
+		ipfs:                ipfs,
+		accountToContactMap: collections.NewConcurrentMap(),
 	}
 }
 
@@ -51,7 +51,7 @@ func NewAddressBook(backend chequebook.Backend, app *ethapp.FileTribeDApp, ipfs 
 func (a *AddressBook) Get(accAddr ethcommon.Address) (*Contact, error) {
 	var c *Contact
 
-	cInt := a.accToContactMap.Get(accAddr)
+	cInt := a.accountToContactMap.Get(accAddr)
 	if cInt == nil {
 		_c, err := a.getContactFromEth(accAddr)
 		if err != nil {

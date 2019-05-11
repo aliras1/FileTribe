@@ -18,6 +18,7 @@ package client
 
 import (
 	"bytes"
+	ethAccount "github.com/aliras1/FileTribe/eth/gen/Account"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -33,7 +34,7 @@ func (groupCtx *GroupContext) HandleGroupInvitationSentEvents(group *ethgroup.Gr
 	glog.Info("HandleGroupInvitationSentEvents...")
 	ch := make(chan *ethgroup.GroupInvitationSent)
 
-	sub, err := group.WatchInvitationSent(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := group.WatchInvitationSent(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts().Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to GroupInvitationSent events")
 		return
@@ -52,7 +53,7 @@ func (groupCtx *GroupContext) HandleGroupInvitationAcceptedEvents(group *ethgrou
 	glog.Info("HandleGroupInvitationAcceptedEvents...")
 	ch := make(chan *ethgroup.GroupInvitationAccepted)
 
-	sub, err := group.WatchInvitationAccepted(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := group.WatchInvitationAccepted(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts().Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to InvitationAccepted events")
 		return
@@ -62,7 +63,20 @@ func (groupCtx *GroupContext) HandleGroupInvitationAcceptedEvents(group *ethgrou
 
 	for e := range ch {
 		glog.Infof("Group Invitation accepted by: %s", e.Account.String())
-		groupCtx.Group.AddMember(e.Account)
+
+		account, err := ethAccount.NewAccount(e.Account, groupCtx.eth.Backend)
+		if err != nil {
+			glog.Errorf("could not get Account object from address: %s", e.Account.String())
+			return
+		}
+
+		accountOwner, err := account.Owner(&bind.CallOpts{Pending: true})
+		if err != nil {
+			glog.Errorf("could not get owner of account: %s", err)
+			return
+		}
+
+		groupCtx.Group.AddMember(accountOwner)
 	}
 }
 
@@ -72,7 +86,7 @@ func (groupCtx *GroupContext) HandleNewConsensusEvents(group *ethgroup.Group) {
 	glog.Info("HandleNewConsensusEvents...")
 	ch := make(chan *ethgroup.GroupNewConsensus)
 
-	sub, err := group.WatchNewConsensus(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := group.WatchNewConsensus(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts().Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to NewConsensus events: %s", err)
 		return
@@ -94,13 +108,7 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 		return
 	}
 
-	voters, err := cons.MembersThatApproved(&bind.CallOpts{Pending: true})
-	if err != nil {
-		glog.Errorf("could not get voters of the new proposal: %s", err)
-		return
-	}
-
-	glog.Infof("voters: %v", voters)
+	go groupCtx.HandleDebugConsEvents(cons)
 
 	proposer, err := cons.Proposer(&bind.CallOpts{Pending: true})
 	if err != nil {
@@ -128,11 +136,17 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 	// 1. get those that voted
 	// 2. foreach voter: start a get proposed group key session
 	glog.Infof("my account addr: %s", (groupCtx.account.ContractAddress()).String())
-	glog.Info(groupCtx.Group.Members())
+	glog.Info(groupCtx.Group.MemberOwners())
 
 	// Get proposed key
-	for _, member := range groupCtx.Group.Members() {
-		if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
+	for _, memberOwner := range groupCtx.Group.MemberOwners() {
+		if bytes.Equal(memberOwner.Bytes(), groupCtx.eth.Auth.Address().Bytes()) {
+			continue
+		}
+
+		member, err := groupCtx.eth.App.GetAccount(&bind.CallOpts{Pending: true}, memberOwner)
+		if err != nil {
+			glog.Errorf("could not get account of owner: %s", err)
 			continue
 		}
 
@@ -169,7 +183,19 @@ func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address
 		return
 	}
 
-	consensusAddress, err := groupCtx.eth.Group.GetConsensus(&bind.CallOpts{Pending: true}, proposer)
+	proposerAccount, err := ethAccount.NewAccount(proposer, groupCtx.eth.Backend)
+	if err != nil {
+		glog.Errorf("could not get the account of the proposer: %s", err)
+		return
+	}
+
+	proposerOwner, err := proposerAccount.Owner(&bind.CallOpts{Pending: true})
+	if err != nil {
+		glog.Errorf("could not get owner of account: %s", err)
+		return
+	}
+
+	consensusAddress, err := groupCtx.eth.Group.GetConsensus(&bind.CallOpts{Pending: true}, proposerOwner)
 	if err != nil {
 		glog.Errorf("could not get member's consensus: %s", err)
 		return
@@ -197,7 +223,7 @@ func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address
 		return
 	}
 
-	glog.Info("consensus approved")
+	glog.Infof("consensus %s approved", consensusAddress.String())
 
 	groupCtx.proposedPayloads.Put(proposer, nil)
 }
@@ -208,7 +234,7 @@ func (groupCtx *GroupContext) HandleIpfsHashChangedEvents(group *ethgroup.Group)
 	glog.Info("HandleIpfsHashChangedEvents...")
 	ch := make(chan *ethgroup.GroupIpfsHashChanged)
 
-	sub, err := group.WatchIpfsHashChanged(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := group.WatchIpfsHashChanged(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts().Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to IpfsHashChanged events: %s", err)
 		return
@@ -230,7 +256,7 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 
 	newBoxerInt := groupCtx.proposedKeys.Get(e.Proposer)
 	if newBoxerInt == nil {
-		for _, member := range groupCtx.Group.Members() {
+		for _, member := range groupCtx.Group.MemberOwners() {
 			if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
 				continue
 			}
@@ -267,5 +293,39 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 		if err := groupCtx.Update(); err != nil {
 			glog.Errorf("could not update group context: %s", err)
 		}
+	}
+}
+
+func (groupCtx *GroupContext) HandleDebugEvents(group *ethgroup.Group) {
+	glog.Info("HandleDebugEvents...")
+	ch := make(chan *ethgroup.GroupDebug)
+
+	sub, err := group.WatchDebug(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts().Context}, ch)
+	if err != nil {
+		glog.Errorf("could not subscribe to IpfsHashChanged events: %s", err)
+		return
+	}
+
+	groupCtx.subs.Add(sub)
+
+	for e := range ch {
+		glog.Infof("DEBUG: %s", e.Msg.String())
+	}
+}
+
+func (groupCtx *GroupContext) HandleDebugConsEvents(cons *ethcons.Consensus) {
+	glog.Info("HandleDebugConsEvents...")
+	ch := make(chan *ethcons.ConsensusDebugCons)
+
+	sub, err := cons.WatchDebugCons(&bind.WatchOpts{Context: groupCtx.eth.Auth.TxOpts().Context}, ch)
+	if err != nil {
+		glog.Errorf("could not subscribe to IpfsHashChanged events: %s", err)
+		return
+	}
+
+	groupCtx.subs.Add(sub)
+
+	for e := range ch {
+		glog.Infof("DEBUG CONS: %s", e.Msg.String())
 	}
 }

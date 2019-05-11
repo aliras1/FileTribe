@@ -29,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/aliras1/FileTribe/client/fs/meta"
+	"github.com/aliras1/FileTribe/client/interfaces"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 	"github.com/aliras1/FileTribe/tribecrypto"
 	"github.com/aliras1/FileTribe/utils"
@@ -142,39 +143,39 @@ func (storage *Storage) LoadAccountData() ([]byte, error) {
 	return data, nil
 }
 
-// GetGroupMetas loads all the locally stored group meta data from
+// GetGroupDatas loads all the locally stored group meta data from
 // directory data/userdata/metas/GA/
-func (storage *Storage) GetGroupMetas() ([]*meta.GroupMeta, error) {
-	var groupMetas []*meta.GroupMeta
-	// read groupMetas from metas and try to refresh them
-	groupMetaFiles, err := ioutil.ReadDir(storage.metasGAPath)
+func (storage *Storage) GetGroupDatas() ([]*interfaces.GroupData, error) {
+	var groupDatas []*interfaces.GroupData
+	// read groupDatas from metas and try to refresh them
+	groupDataFiles, err := ioutil.ReadDir(storage.metasGAPath)
 	if err != nil {
-		return groupMetas, err
+		return groupDatas, err
 	}
 
-	for _, groupMetaFile := range groupMetaFiles {
-		if groupMetaFile.IsDir() {
+	for _, groupDataFile := range groupDataFiles {
+		if groupDataFile.IsDir() {
 			continue // do not care about directories
 		}
 
-		filePath := storage.metasGAPath + "/" + groupMetaFile.Name()
-		metaBytes, err := ioutil.ReadFile(filePath)
+		filePath := storage.metasGAPath + "/" + groupDataFile.Name()
+		dataBytes, err := ioutil.ReadFile(filePath)
 		if err != nil {
-			glog.Warning("could not read file '%s': Storage.GetGroupMetas: %s", filePath, err)
+			glog.Warning("could not read file '%s': Storage.GetGroupDatas: %s", filePath, err)
 			continue
 		}
 
-		var groupMeta meta.GroupMeta
-		if err := json.Unmarshal(metaBytes, &groupMeta); err != nil {
-			glog.Warning("could not unmarshal group groupMeta: Storage.GetGroupMetas: %s", err)
+		var groupData interfaces.GroupData
+		if err := json.Unmarshal(dataBytes, &groupData); err != nil {
+			glog.Warning("could not unmarshal group groupData: Storage.GetGroupDatas: %s", err)
 			continue
 		}
 
-		groupMeta.Boxer.RNG = rand.Reader
-		groupMetas = append(groupMetas, &groupMeta)
+		groupData.Boxer.RNG = rand.Reader
+		groupDatas = append(groupDatas, &groupData)
 	}
 
-	return groupMetas, nil
+	return groupDatas, nil
 }
 
 // GetGroupFileMetas loads all file metas belonging to the group
@@ -211,16 +212,11 @@ func (storage *Storage) GetGroupFileMetas(groupAddress string) ([]*meta.FileMeta
 	return fileMetas, nil
 }
 
-// SaveGroupMeta saves a group meta to disk
-func (storage *Storage) SaveGroupMeta(groupMeta *meta.GroupMeta) error {
-	metaJSON, err := json.Marshal(groupMeta)
-	if err != nil {
-		return errors.Wrap(err, "could not marshal group meta")
-	}
-
-	path := storage.GroupMetaDir() + groupMeta.Address.String() + metaExt
-	if err := utils.CreateAndWriteFile(path, metaJSON); err != nil {
-		return errors.Wrap(err, "could not write group groupMeta file")
+// SaveGroupData saves a group meta to disk
+func (storage *Storage) SaveGroupData(data []byte, groupAddress string) error {
+	path := storage.GroupMetaDir() + groupAddress + metaExt
+	if err := utils.CreateAndWriteFile(path, data); err != nil {
+		return errors.Wrap(err, "could not write group group data file")
 	}
 
 	return nil

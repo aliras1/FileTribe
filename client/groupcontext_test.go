@@ -135,7 +135,7 @@ func TestGroupContext_Invite(t *testing.T) {
 
 	fmt.Println("----------- Alice init commit ------------")
 
-	fileAlice := os.Getenv("HOME") + "/.filetribe/0xab083E63Cfc7525634642075d49A0DE31374bc0f/data/userdata/root/" + groupAtAlice.Group.Address().String() + "/rrrepo.go"
+	fileAlice := os.Getenv("HOME") + "/filetribe/alice/" + groupAtAlice.Group.Name() + "/rrrepo.go"
 	if err := utils.CopyFile("./account.go", fileAlice); err != nil {
 		t.Fatal(err)
 	}
@@ -143,14 +143,15 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 	sim.Commit()
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 	sim.Commit()
 	time.Sleep(5 * time.Second)
+	sim.Commit()
 
 	fmt.Println("----------- Bob tries to change the file ------------")
 	bobGroups := bob.Groups()
 	groupAtBob := bobGroups[0].(*GroupContext)
-	fileBob := os.Getenv("HOME") + "/.filetribe/0xbE9678b9882dAc288093b9D38ea7382f21479c77/data/userdata/root/" + groupAtBob.Group.Address().String() + "/rrrepo.go"
+	fileBob := os.Getenv("HOME") + "/filetribe/bob/" + groupAtBob.Group.Name() + "/rrrepo.go"
 	if err := AppendToFile(fileBob, "Bob's modification (should fail)\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +160,7 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 	sim.Commit()
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 	sim.Commit()
 	time.Sleep(3 * time.Second)
 
@@ -171,7 +172,7 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 	sim.Commit()
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 	sim.Commit()
 	time.Sleep(3 * time.Second)
 
@@ -184,9 +185,7 @@ func TestGroupContext_Invite(t *testing.T) {
 		t.Fatal(err)
 	}
 	sim.Commit()
-	time.Sleep(2 * time.Second)
-	sim.Commit()
-	time.Sleep(3 * time.Second)
+	time.Sleep(6 * time.Second)
 	sim.Commit()
 	time.Sleep(5 * time.Second)
 
@@ -209,6 +208,11 @@ func TestGroupContext_Invite(t *testing.T) {
 	glog.Info(rec.Status)
 	glog.Info(rec.Logs)
 	glog.Info(rec.Bloom)
+	sim.Commit()
+	time.Sleep(3 * time.Second)
+
+	glog.Info(sim)
+	glog.Info(alice)
 
 	//fmt.Println("----------- Alice modif  ------------")
 	//fakeNetwork.SetAuth(ALICE)

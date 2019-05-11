@@ -18,6 +18,7 @@ package client
 
 import (
 	"bytes"
+	"crypto/rand"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -36,7 +37,7 @@ func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.FileTribeDApp) {
 	glog.Info("HandleAccountCreatedEvents...")
 	ch := make(chan *ethapp.FileTribeDAppAccountCreated)
 
-	sub, err := app.WatchAccountCreated(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := app.WatchAccountCreated(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts().Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to AccountCreated events: %s", err)
 		return
@@ -50,7 +51,7 @@ func (ctx *UserContext) HandleAccountCreatedEvents(app *ethapp.FileTribeDApp) {
 }
 
 func (ctx *UserContext) onAccountCreated(e *ethapp.FileTribeDAppAccountCreated) {
-	if !bytes.Equal(e.Owner.Bytes(), ctx.eth.Auth.Address.Bytes()) {
+	if !bytes.Equal(e.Owner.Bytes(), ctx.eth.Auth.Address().Bytes()) {
 		return
 	}
 
@@ -75,7 +76,7 @@ func (ctx *UserContext) onAccountCreated(e *ethapp.FileTribeDAppAccountCreated) 
 		return
 	}
 
-	glog.Infof("Account created: %s --> %s (%s)", ctx.account.Name(), e.Account.String(), e.Owner.String())
+	glog.Infof("account created: %s --> %s (%s)", ctx.account.Name(), e.Account.String(), e.Owner.String())
 }
 
 // HandleGroupInvitationEvents listens to GroupCreated blockchain events
@@ -84,7 +85,7 @@ func (ctx *UserContext) HandleGroupInvitationEvents(acc *ethacc.Account) {
 	glog.Info("groupInvitation handling...")
 	ch := make(chan *ethacc.AccountNewInvitation)
 
-	sub, err := acc.WatchNewInvitation(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := acc.WatchNewInvitation(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts().Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to AccountNewInvitation events: %s", err)
 		return
@@ -112,7 +113,7 @@ func (ctx *UserContext) HandleInvitationAcceptedEvents(acc *ethacc.Account) {
 	glog.Info("HandleInvitationAcceptedEvents...")
 	ch := make(chan *ethacc.AccountInvitationAccepted)
 
-	sub, err := acc.WatchInvitationAccepted(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := acc.WatchInvitationAccepted(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts().Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to InvitationAccepted events: %s", err)
 		return
@@ -138,15 +139,21 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 		return
 	}
 
-	members, err := group.Members(&bind.CallOpts{Pending: true})
+	memberOwners, err := group.MemberOwners(&bind.CallOpts{Pending: true})
 	if err != nil {
 		glog.Errorf("could not get group members from eth: %s", err)
 		return
 	}
 
 	// Get key
-	for _, member := range members {
-		if bytes.Equal(member.Bytes(), ctx.account.ContractAddress().Bytes()) {
+	for _, memberOwner := range memberOwners {
+		if bytes.Equal(memberOwner.Bytes(), ctx.eth.Auth.Address().Bytes()) {
+			continue
+		}
+
+		member, err := ctx.eth.App.GetAccount(&bind.CallOpts{Pending: true}, memberOwner)
+		if err != nil {
+			glog.Errorf("could not get owner's account: %s", err)
 			continue
 		}
 
@@ -174,20 +181,14 @@ func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tr
 	}
 
 	groupMeta := &meta.GroupMeta{Address: groupAddress, Boxer: boxer}
-
-	if err := ctx.storage.SaveGroupMeta(groupMeta); err != nil {
-		glog.Errorf("could not save group access groupMeta: %s", err)
-		return
-	}
-
-	contract, err := ethgroup.NewGroup(groupMeta.Address, ctx.eth.Backend)
+	groupContract, err := ethgroup.NewGroup(groupMeta.Address, ctx.eth.Backend)
 	if err != nil {
 		glog.Errorf("could not create new eth group instance: %s", err)
 		return
 	}
 
 	config := &GroupContextConfig{
-		Group:        NewGroupFromMeta(groupMeta, ctx.storage),
+		Group:        NewGroupFromMeta(groupMeta, groupContract, ctx.storage),
 		Account:      ctx.account,
 		P2P:          ctx.p2p,
 		AddressBook:  ctx.addressBook,
@@ -195,7 +196,7 @@ func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tr
 		Storage:      ctx.storage,
 		Transactions: ctx.transactions,
 		Eth: &GroupEth{
-			Group: contract,
+			Group: groupContract,
 			Eth:   ctx.eth,
 		},
 	}
@@ -222,7 +223,7 @@ func (ctx *UserContext) HandleGroupCreatedEvents(acc *ethacc.Account) {
 	glog.Info("GroupCreatedEvents...")
 	ch := make(chan *ethacc.AccountGroupCreated)
 
-	sub, err := acc.WatchGroupCreated(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts.Context}, ch)
+	sub, err := acc.WatchGroupCreated(&bind.WatchOpts{Context: ctx.eth.Auth.TxOpts().Context}, ch)
 	if err != nil {
 		glog.Errorf("could not subscribe to GroupCreated events")
 		return
@@ -248,16 +249,24 @@ func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 		return
 	}
 
-	groupName, err := groupContract.Name(&bind.CallOpts{Pending: true})
-	if err != nil {
-		glog.Errorf("could not get group name: %s", err)
+	var secretKeyBytes [32]byte
+	if _, err := rand.Read(secretKeyBytes[:]); err != nil {
+		glog.Errorf("could not read rand: %s", err)
 		return
 	}
 
-	group := NewGroup(e.Group, groupName, ctx.storage)
+	boxer := tribecrypto.SymmetricKey{
+		Key: secretKeyBytes,
+		RNG: rand.Reader,
+	}
+
+	groupMeta := &meta.GroupMeta{
+		Address: e.Group,
+		Boxer:boxer,
+	}
 
 	config := &GroupContextConfig{
-		Group:        group,
+		Group:        NewGroupFromMeta(groupMeta, groupContract, ctx.storage),
 		Account:      ctx.account,
 		P2P:          ctx.p2p,
 		AddressBook:  ctx.addressBook,
@@ -276,15 +285,6 @@ func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 		return
 	}
 
-	boxer := groupCtx.Group.Boxer()
-	ipfsHash := groupCtx.Repo.IpfsHash()
-	encIpfsHash := boxer.BoxSeal([]byte(ipfsHash))
-
-	if err := group.SetIpfsHash(encIpfsHash); err != nil {
-		glog.Errorf("could not set ipfs hash of group: %s", err)
-		return
-	}
-
 	if err := groupCtx.Save(); err != nil {
 		glog.Errorf("could not save group: %s", err)
 		return
@@ -292,5 +292,5 @@ func (ctx *UserContext) onGroupCreated(e *ethacc.AccountGroupCreated) {
 
 	ctx.groups.Put(e.Group, groupCtx)
 
-	glog.Infof("Group created: %s", group.Address().String())
+	glog.Infof("Group created: %s", groupMeta.Address.String())
 }

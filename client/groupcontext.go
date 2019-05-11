@@ -18,10 +18,11 @@ package client
 
 import (
 	"crypto/rand"
+	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"path"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -35,7 +36,6 @@ import (
 	ethcons "github.com/aliras1/FileTribe/eth/gen/Consensus"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 	"github.com/aliras1/FileTribe/tribecrypto"
-	"github.com/aliras1/FileTribe/utils"
 )
 
 // IGroupFacade is an interface to main.go through which it can communicate
@@ -69,8 +69,8 @@ type FileView struct {
 // GroupContext represents a groups current state and is responsible for
 // all the communication, storage, encryption work
 type GroupContext struct {
-	account          interfaces.IAccount
-	Group            interfaces.IGroup
+	account          interfaces.Account
+	Group            interfaces.Group
 	P2P              *com.P2PManager
 	Repo             *fs.GroupRepo
 	GroupConnection  *com.GroupConnection
@@ -88,8 +88,8 @@ type GroupContext struct {
 
 // GroupContextConfig is a configuration struct for creating GroupContext
 type GroupContextConfig struct {
-	Group        interfaces.IGroup
-	Account      interfaces.IAccount
+	Group        interfaces.Group
+	Account      interfaces.Account
 	P2P          *com.P2PManager
 	AddressBook  *common.AddressBook
 	Eth          *GroupEth
@@ -126,7 +126,7 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 	//groupContext.GroupConnection = com.NewGroupConnection(
 	//	config.Group,
 	//	repo,
-	//	config.Account,
+	//	config.account,
 	//	config.AddressBook,
 	//	onSessionClosed,
 	//	config.P2P,
@@ -136,6 +136,7 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 	go groupContext.HandleGroupInvitationAcceptedEvents(config.Eth.Group)
 	go groupContext.HandleNewConsensusEvents(config.Eth.Group)
 	go groupContext.HandleIpfsHashChangedEvents(config.Eth.Group)
+	go groupContext.HandleDebugEvents(config.Eth.Group)
 
 	return groupContext, nil
 }
@@ -147,24 +148,7 @@ func onSessionClosed(session sesscommon.ISession) {
 // Update fetches all the current group information from the blockchain
 // and refreshes the GroupContext with its contents
 func (groupCtx *GroupContext) Update() error {
-	contract := groupCtx.eth.Group
-
-	name, err := contract.Name(&bind.CallOpts{Pending: true})
-	if err != nil {
-		return errors.Wrap(err, "could not get group name")
-	}
-
-	members, err := contract.Members(&bind.CallOpts{Pending: true})
-	if err != nil {
-		return errors.Wrap(err, "could not get group members")
-	}
-
-	encIpfsHash, err := contract.IpfsHash(&bind.CallOpts{Pending: true})
-	if err != nil {
-		return errors.Wrap(err, "could not get group ipfs hash")
-	}
-
-	if err := groupCtx.Group.Update(name, members, encIpfsHash); err != nil {
+	if err := groupCtx.Group.Update(groupCtx.eth.Group); err != nil {
 		return errors.Wrap(err, "could not update group")
 	}
 
@@ -181,7 +165,7 @@ func (groupCtx *GroupContext) Update() error {
 
 // Leave invokes the 'Leave' operation of the group on the blockchain
 func (groupCtx *GroupContext) Leave() error {
-	tx, err := groupCtx.eth.Group.Leave(groupCtx.eth.Auth.TxOpts)
+	tx, err := groupCtx.eth.Group.Leave(groupCtx.eth.Auth.TxOpts())
 	if err != nil {
 		return errors.Wrap(err, "could not send leave group tx")
 	}
@@ -220,7 +204,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 
 	encIpfsHash := newKey.BoxSeal([]byte(hash))
 
-	tx, err := groupCtx.eth.Group.ChangeIpfsHash(groupCtx.eth.Auth.TxOpts, encIpfsHash)
+	tx, err := groupCtx.eth.Group.Commit(groupCtx.eth.Auth.TxOpts(), encIpfsHash)
 	if err != nil {
 		return errors.Wrap(err, "could not send change ipfs hash tx")
 	}
@@ -234,7 +218,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 func (groupCtx *GroupContext) Invite(newMember ethcommon.Address, hasInviteRight bool) error {
 	glog.Infof("[*] Inviting account '%s' into group '%s'...\n", newMember.String(), groupCtx.Group.Name())
 
-	tx, err := groupCtx.eth.Group.Invite(groupCtx.eth.Auth.TxOpts, newMember)
+	tx, err := groupCtx.eth.Group.Invite(groupCtx.eth.Auth.TxOpts(), newMember)
 	if err != nil {
 		return errors.Wrap(err, "could not send invite account tx")
 	}
@@ -254,8 +238,18 @@ func (groupCtx *GroupContext) Save() error {
 }
 
 // GrantWriteAccess adds the defined user to the write ACL in the file meta
-func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.Address) error {
-	if !groupCtx.Group.IsMember(user) {
+func (groupCtx *GroupContext) GrantWriteAccess(filePath string, accountAddress ethcommon.Address) error {
+	account, err := ethacc.NewAccount(accountAddress, groupCtx.eth.Backend)
+	if err != nil {
+		return errors.Wrap(err, "could not get Account object from address")
+	}
+
+	accountOwner, err := account.Owner(&bind.CallOpts{Pending: true})
+	if err != nil {
+		return errors.Wrap(err, "could not get owner of account")
+	}
+
+	if !groupCtx.Group.IsMember(accountOwner) {
 		return errors.New("can not grant write access to non group members")
 	}
 
@@ -272,7 +266,7 @@ func (groupCtx *GroupContext) GrantWriteAccess(filePath string, user ethcommon.A
 		file = tmpFile
 	}
 
-	if err := file.GrantWriteAccess(groupCtx.account.ContractAddress(), user); err != nil {
+	if err := file.GrantWriteAccess(groupCtx.account.ContractAddress(), accountAddress); err != nil {
 		return errors.Wrap(err, "could not grant write access to account")
 	}
 
@@ -311,7 +305,7 @@ func (groupCtx *GroupContext) startGetKey(encNewIpfsHash []byte) error {
 	//if ok {
 	//	groupCtx.onGetKeySuccess(newBoxer)
 	//} else {
-	//	for _, member := range groupCtx.Group.Members() {
+	//	for _, member := range groupCtx.Group.MemberOwners() {
 	//		if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
 	//			continue
 	//		}
@@ -390,7 +384,7 @@ func (groupCtx *GroupContext) ListFiles() []FileView {
 // ListMembers returns a list of the members addresses
 func (groupCtx *GroupContext) ListMembers() []MemberView {
 	var list []MemberView
-	addresses := groupCtx.Group.Members()
+	addresses := groupCtx.Group.MemberOwners()
 
 	for _, address := range addresses {
 		member := MemberView{Address: address.String()}
@@ -414,7 +408,7 @@ func (groupCtx *GroupContext) broadcast(msg []byte) error {
 }
 
 func (groupCtx *GroupContext) p2pBroadcast(msg []byte) error {
-	for _, member := range groupCtx.Group.Members() {
+	for _, member := range groupCtx.Group.MemberOwners() {
 
 		c, err := groupCtx.AddressBook.Get(member)
 		if err != nil {
@@ -432,24 +426,9 @@ func (groupCtx *GroupContext) p2pBroadcast(msg []byte) error {
 }
 
 func (groupCtx *GroupContext) approveConsensus(cons *ethcons.Consensus) error {
-	digest, err := cons.Digest(&bind.CallOpts{Pending: true})
+	tx, err := cons.Approve(groupCtx.eth.Auth.TxOpts())
 	if err != nil {
-		return errors.Wrap(err, "could not get digest from consensus")
-	}
-
-	sig, err := groupCtx.eth.Auth.Sign(digest[:])
-	if err != nil {
-		return errors.WithMessage(err, "could not sign digest")
-	}
-
-	r, s, v, err := utils.SigToRSV(sig)
-	if err != nil {
-		return errors.Wrap(err, "could not convert sig to r,s,v")
-	}
-
-	tx, err := cons.Approve(groupCtx.eth.Auth.TxOpts, r, s, v)
-	if err != nil {
-		return errors.Wrapf(err, "could not send consensus approve tx with arguments: %v, %v, %v, %v", r, s, v, groupCtx.eth.Auth.TxOpts)
+		return errors.Wrapf(err, "could not send consensus approve tx with arguments: %v", groupCtx.eth.Auth.TxOpts)
 	}
 
 	groupCtx.Transactions.Add(tx)

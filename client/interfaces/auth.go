@@ -14,28 +14,17 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 
-package client
+package interfaces
 
 import (
-	"github.com/aliras1/FileTribe/client/interfaces"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
-
-	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
-	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 )
 
-// Eth is a collection of those objects that are necessary for
-// performing operations on the blockchain such as authentication
-// data, DApp contract and a full ethereum node
-type Eth struct {
-	Auth    interfaces.Auth
-	App     *ethapp.FileTribeDApp
-	Backend chequebook.Backend
-}
-
-// GroupEth stores a GroupContract and a pointer to all the
-// general Eth data
-type GroupEth struct {
-	*Eth
-	Group *ethgroup.Group
+// Auth contains the most important pieces of information
+// needed to perform operations on the blockchain.
+type Auth interface {
+	Address() common.Address
+	TxOpts() *bind.TransactOpts
+	Sign(hash []byte) ([]byte, error)
 }

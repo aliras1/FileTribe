@@ -6,14 +6,19 @@ import "./interfaces/IConsensus.sol";
 import "./common/Ownable.sol";
 
 contract Group is Ownable {
+    struct Member {
+        address account;
+        address consensus;
+        bool canInvite;
+        bool exists;
+    }
+
     address _fileTribe;
-    string private _name;
-    address[] private _members;
-    bytes private _ipfsHash; // encrypted with group key
-    mapping(address => bool) private _canInvite;
-    uint256 _leaderIdx;
-    address[] private _consensuses;
-    mapping(address => uint256) private _memberToIdx;
+    string public _name;
+    address[] private _memberOwners;
+    mapping(address => Member) _members;
+    bytes public _ipfsHash; // encrypted with group key
+    uint256 _currConsId;
     mapping(address => address) private _invitations; // owner -> account address
 
     event GroupRegistered(bytes32 id);
@@ -26,7 +31,7 @@ contract Group is Ownable {
     event NewConsensus(address group, address consensus);
     event IpfsHashChanged(address group, bytes ipfsHash, address proposer);
     event MemberLeft(address group, address account);
-    event Debug(int msg);
+    event Debug(uint256 msg);
 
     constructor (
         address fileTribe,
@@ -34,11 +39,17 @@ contract Group is Ownable {
         string memory name,
         bytes memory ipfsHash)
     public Ownable(account) {
+        address owner = IAccount(account).owner();
+
         _fileTribe = fileTribe;
         _name = name;
         _ipfsHash = ipfsHash;
-        _members.push(account);
-        _consensuses.push(IFileTribeDApp(_fileTribe).createConsensus(account));
+        _currConsId = 0;
+        _memberOwners.push(owner);
+
+        _members[owner].account = account;
+        _members[owner].consensus = IFileTribeDApp(_fileTribe).createConsensus(account);
+        _members[owner].exists = true;
     }
 
     modifier onlyMembers() {
@@ -46,20 +57,12 @@ contract Group is Ownable {
         _;
     }
 
-    function isMember(address addr) public returns(bool) {
-        for (uint256 i = 0; i < _members.length; i++) {
-            if (addr == IAccount(_members[i]).owner()) {
-                return true;
-            }
-        }
-
-        return false;
+    function isMember(address owner) public view returns(bool) {
+        return _members[owner].exists;
     }
 
-    function changeIpfsHash(bytes memory newIpfsHash) public onlyMembers {
-        bytes32 digest = keccak256(abi.encodePacked(_ipfsHash, newIpfsHash));
-
-        if (_members.length == 1) {
+    function commit(bytes memory newIpfsHash) public onlyMembers {
+        if (_memberOwners.length == 1) {
             emit IpfsHashChanged(address(this), newIpfsHash, IFileTribeDApp(_fileTribe).getAccount(msg.sender));
 
             _ipfsHash = newIpfsHash;
@@ -67,87 +70,66 @@ contract Group is Ownable {
             return;
         }
 
-        uint256 idx = _memberToIdx[msg.sender];
-        IConsensus(_consensuses[idx]).propose(digest, newIpfsHash);
+        address cons = _members[msg.sender].consensus;
+        IConsensus(cons).propose(newIpfsHash, _currConsId + 1);
 
-        emit NewConsensus(address(this), _consensuses[idx]);
+        emit NewConsensus(address(this), cons);
     }
 
     function onChangeIpfsHashConsensus(bytes calldata payload) external {
+        uint256 id = IConsensus(msg.sender).getId();
+        require(id > _currConsId, "Consensus expired!");
+
         address proposer = IConsensus(msg.sender).getProposer();
         address proposerOwner = IAccount(proposer).owner();
 
-        require(_consensuses[_memberToIdx[proposerOwner]] != address(0), "msg.sender is no group consensus");
-
-        for (uint256 i = 0; i < _consensuses.length; i++) {
-            IConsensus(_consensuses[i]).invalidate();
-        }
-
-        emit IpfsHashChanged(address(this), payload, proposer);
+        require(isMember(proposerOwner), "Consensus does not belong to the group!");
 
         _ipfsHash = payload;
+        _currConsId = id;
+
+        emit IpfsHashChanged(address(this), payload, proposer);
     }
 
-    // no need for onlyMembers modifier because we have to
-    // iterate over the array to get the user's index anyway
-    function leave() public {
-        uint256 i;
+    function leave() onlyMembers public {
+        address account = _members[msg.sender].account;
+        IAccount(account).onGroupLeft(address(this));
+        _members[msg.sender].exists = false;
 
-        for (i = 0; i < _members.length; i++){
-            if (IAccount(_members[i]).owner() == msg.sender) {
+        uint256 i;
+        for (i = 0; i < _memberOwners.length; i++) {
+            if (_memberOwners[i] == msg.sender) {
+                _memberOwners[i] = _memberOwners[_memberOwners.length - 1];
+                _memberOwners.length--;
+
                 break;
             }
         }
 
-        require(i < _members.length, "msg.sender is not group member");
-
-        IAccount(_members[i]).onGroupLeft(address(this));
-
-        address memberLeft = _members[i];
-
-        _members[i] = _members[_members.length - 1];
-        _consensuses[i] = _consensuses[_consensuses.length - 1];
-        _members.length--;
-
-        emit MemberLeft(address(this), memberLeft);
+        emit MemberLeft(address(this), account);
     }
 
-    function kick(address member) public onlyMembers {
-        uint256 i;
+    function kick(address memberOwner) public onlyMembers {
+        address account = _members[memberOwner].account;
+        IAccount(account).onGroupLeft(address(this));
+        _members[memberOwner].exists = false;
 
-        for (i = 0; i < _members.length; i++){
-            if (_members[i] == member) {
+        uint256 i;
+        for (i = 0; i < _memberOwners.length; i++){
+            if (_memberOwners[i] == memberOwner) {
+                _memberOwners[i] = _memberOwners[_memberOwners.length - 1];
+                _memberOwners.length--;
                 break;
             }
         }
-        require(i < _members.length, "msg.sender is not group member");
 
-        IAccount(member).onGroupLeft(address(this));
-
-        _members[i] = _members[_members.length - 1];
-        _consensuses[i] = _consensuses[_consensuses.length - 1];
-        _members.length--;
-
-        emit MemberLeft(address(this), member);
-    }
-
-    function name() public view returns(string memory) {
-        return _name;
-    }
-
-    function members() public view returns(address[] memory) {
-        return _members;
+        emit MemberLeft(address(this), account);
     }
 
     function invite(address account) public onlyMembers {
-        uint256 i;
-        for (i = 0; i < _members.length; i++) {
-            if (_members[i] == account) {
-                revert("account is already member of the group");
-            }
-        }
-
         address accountOwner = IAccount(account).owner();
+
+        require(!_members[accountOwner].exists, "The user to be invited is already a member");
         require(_invitations[accountOwner] == address(0), "account has already been invited");
 
         IAccount(account).invite();
@@ -161,11 +143,11 @@ contract Group is Ownable {
         address account = _invitations[msg.sender];
         require(account != address(0), "account was not invited");
 
-        _memberToIdx[IAccount(account).owner()] = _members.length;
-        _members.push(account);
+        _memberOwners.push(msg.sender);
 
-        address c = IFileTribeDApp(_fileTribe).createConsensus(account);
-        _consensuses.push(c);
+        _members[msg.sender].account = account;
+        _members[msg.sender].consensus = IFileTribeDApp(_fileTribe).createConsensus(account);
+        _members[msg.sender].exists = true;
 
         IAccount(account).onInvitationAccepted();
         _invitations[msg.sender] = address(0);
@@ -184,14 +166,14 @@ contract Group is Ownable {
     }
 
     function getConsensus(address owner) public view returns(address) {
-        return _consensuses[_memberToIdx[owner]];
+        return _members[owner].consensus;
+    }
+
+    function memberOwners() public view returns(address[] memory) {
+        return _memberOwners;
     }
 
     function threshold() public view returns(uint256) {
-        return _members.length / 2;
-    }
-
-    function ipfsHash() public view returns(bytes memory) {
-        return _ipfsHash;
+        return _memberOwners.length / 2;
     }
 }

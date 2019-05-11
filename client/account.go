@@ -38,36 +38,36 @@ type AccountData struct {
 	Boxer           tribecrypto.AnonymBoxer // might be deleted if libp2p is encrypted
 }
 
-// Account is a wrapper object around a smart contract of type Account
-type Account struct {
+// account is a wrapper object around a smart contract of type account
+type account struct {
 	data     *AccountData
 	contract *ethacc.Account
 	storage  *fs.Storage
 }
 
 // ContractAddress returns the address of its smart contract
-func (acc *Account) ContractAddress() ethcommon.Address {
+func (acc *account) ContractAddress() ethcommon.Address {
 	return acc.data.ContractAddress
 }
 
 // Name returns the name attribute of the account contract
-func (acc *Account) Name() string {
+func (acc *account) Name() string {
 	return acc.data.Name
 }
 
 // Boxer returns the private key of the account
-func (acc *Account) Boxer() tribecrypto.AnonymBoxer {
+func (acc *account) Boxer() tribecrypto.AnonymBoxer {
 	return acc.data.Boxer
 }
 
 // Contract returns the smart contract of the account
-func (acc *Account) Contract() *ethacc.Account {
+func (acc *account) Contract() *ethacc.Account {
 	return acc.contract
 }
 
 // SetContract stores the smart contract address of an
 // account and its smart contract object
-func (acc *Account) SetContract(address ethcommon.Address, backend chequebook.Backend) error {
+func (acc *account) SetContract(address ethcommon.Address, backend chequebook.Backend) error {
 	contract, err := ethacc.NewAccount(address, backend)
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (acc *Account) SetContract(address ethcommon.Address, backend chequebook.Ba
 }
 
 // Save saves acc.AccountData on disk
-func (acc *Account) Save() error {
+func (acc *account) Save() error {
 	dataEncoded, err := json.Marshal(acc.data)
 	if err != nil {
 		return errors.Wrap(err, "could not json encode account data")
@@ -94,7 +94,7 @@ func (acc *Account) Save() error {
 }
 
 // NewAccountFromStorage loads an existing account from disk
-func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (interfaces.IAccount, error) {
+func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (interfaces.Account, error) {
 	dataEncoded, err := storage.LoadAccountData()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not load account data")
@@ -110,7 +110,7 @@ func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (int
 		return nil, errors.Wrap(err, "could not create account contract instance")
 	}
 
-	acc := &Account{
+	acc := &account{
 		storage:  storage,
 		data:     &accData,
 		contract: contract,
@@ -120,7 +120,7 @@ func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (int
 }
 
 // NewAccount creates a new empty account without any smart contract data
-func NewAccount(username string, storage *fs.Storage) (interfaces.IAccount, error) {
+func NewAccount(username string, storage *fs.Storage) (interfaces.Account, error) {
 	var secretBoxerBytes [32]byte
 	var publicBoxerBytes [32]byte
 
@@ -130,7 +130,7 @@ func NewAccount(username string, storage *fs.Storage) (interfaces.IAccount, erro
 
 	curve25519.ScalarBaseMult(&publicBoxerBytes, &secretBoxerBytes)
 
-	return &Account{
+	return &account{
 		data: &AccountData{
 			Name: username,
 			Boxer: tribecrypto.AnonymBoxer{

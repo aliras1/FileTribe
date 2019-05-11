@@ -36,7 +36,7 @@ import (
 
 // P2PManager is responsible for managing all the incoming libp2p connections
 type P2PManager struct {
-	account        interfaces.IAccount
+	account        interfaces.Account
 	signer         common.Signer
 	sessions       *Map
 	addressBook    *common.AddressBook
@@ -50,7 +50,7 @@ type P2PManager struct {
 // NewP2PManager creates a new P2PManager
 func NewP2PManager(
 	port string,
-	account interfaces.IAccount,
+	account interfaces.Account,
 	signer common.Signer,
 	addressBook *common.AddressBook,
 	ctxCallback sesscommon.CtxCallback,

@@ -31,7 +31,7 @@ type OnGetGroupKeySuccessCallback func(address ethcommon.Address, boxer tribecry
 type SessionClosedCallback func(session ISession)
 
 // GetGroupDataCallback is used for retrieving group data
-type GetGroupDataCallback func(addr ethcommon.Address) (interfaces.IGroup, *fs.GroupRepo)
+type GetGroupDataCallback func(addr ethcommon.Address) (interfaces.Group, *fs.GroupRepo)
 
 // Broadcast ...
 type Broadcast func(msg []byte) error

@@ -104,8 +104,8 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 	switch session.state {
 	case 0:
 		{
-			glog.Infof("server [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.contact.AccountAddress.String())
-			if err := session.callback.IsMember(session.groupDataMsg.Group, session.contact.AccountAddress); err != nil {
+			glog.Infof("server [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.contact.EthAccountAddress.String())
+			if err := session.callback.IsMember(session.groupDataMsg.Group, session.contact.EthAccountAddress); err != nil {
 				session.error = errors.Wrap(err, "could not verify group membership")
 				session.close()
 				return
