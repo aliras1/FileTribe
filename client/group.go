@@ -34,22 +34,24 @@ import (
 )
 
 type group struct {
-	data *interfaces.GroupData
+	data 			  *interfaces.GroupData
 	lock              sync.RWMutex
 	storage           *fs.Storage
+	contract          *ethgroup.Group
 }
 
 // NewGroupFromMeta creates a new Group from an existing GroupMeta file stored on disk
 func NewGroupFromMeta(meta *meta.GroupMeta, groupContract *ethgroup.Group, storage *fs.Storage) interfaces.Group {
 	group := &group{
 		storage: storage,
+		contract: groupContract,
 		data: &interfaces.GroupData{
 			Address:meta.Address,
 			Boxer:meta.Boxer,
 		},
 	}
 
-	if err := group.Update(groupContract); err != nil {
+	if err := group.Update(); err != nil {
 		glog.Warningf("could not update group: %s", err)
 	}
 
@@ -62,9 +64,10 @@ func NewGroupFromGroupData(data *interfaces.GroupData, groupContract *ethgroup.G
 	group := &group{
 		storage:storage,
 		data:data,
+		contract:groupContract,
 	}
 
-	if err := group.Update(groupContract); err != nil {
+	if err := group.Update(); err != nil {
 		glog.Warningf("could not update group: %s", err)
 	}
 
@@ -163,21 +166,21 @@ func (g *group) SetIpfsHash(encIpfsHash []byte) error {
 }
 
 // Update updates the Group data with the provided parameters
-func (g *group) Update(groupContract *ethgroup.Group) error {
+func (g *group) Update() error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	name, err := groupContract.Name(&bind.CallOpts{Pending: true})
+	name, err := g.contract.Name(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return errors.Wrap(err, "could not get group name")
 	}
 
-	memberOwners, err := groupContract.MemberOwners(&bind.CallOpts{Pending: true})
+	memberOwners, err := g.contract.MemberOwners(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return errors.Wrap(err, "could not get group member owners")
 	}
 
-	encIpfsHash, err := groupContract.IpfsHash(&bind.CallOpts{Pending: true})
+	encIpfsHash, err := g.contract.IpfsHash(&bind.CallOpts{Pending: true})
 	if err != nil {
 		return errors.Wrap(err, "could not get group ipfs hash")
 	}
@@ -299,9 +302,22 @@ func (g *group) Boxer() tribecrypto.SymmetricKey {
 }
 
 // SetBoxer is a setter for the group key
-func (g *group) SetBoxer(boxer tribecrypto.SymmetricKey) {
+func (g *group) SetBoxer(boxer tribecrypto.SymmetricKey) error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
+	encIpfsHash, err := g.contract.IpfsHash(&bind.CallOpts{Pending:true})
+	if err != nil {
+		return errors.Wrap(err, "could not get the most recent ipfs hash of the group")
+	}
+
+	_, ok := boxer.BoxOpen(encIpfsHash)
+	if !ok {
+		return errors.New("could not decrypt encIpfsHash")
+	}
+
+	g.data.EncryptedIpfsHash = encIpfsHash
 	g.data.Boxer = boxer
+
+	return nil
 }

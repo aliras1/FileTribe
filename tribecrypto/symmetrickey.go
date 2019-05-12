@@ -77,7 +77,7 @@ func DecodeSymmetricKey(data []byte) (*SymmetricKey, error) {
 	return &k, nil
 }
 
-func IsBoxerNotNull(boxer SymmetricKey) bool {
+func BoxerIsNull(boxer SymmetricKey) bool {
 	nullKey := [32]byte{0}
 	return bytes.Equal(boxer.Key[:], nullKey[:])
 }

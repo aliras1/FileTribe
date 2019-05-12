@@ -158,7 +158,7 @@ func onSessionClosed(session sesscommon.ISession) {
 // Update fetches all the current group information from the blockchain
 // and refreshes the GroupContext with its contents
 func (groupCtx *GroupContext) Update() error {
-	if err := groupCtx.Group.Update(groupCtx.eth.Group); err != nil {
+	if err := groupCtx.Group.Update(); err != nil {
 		return errors.Wrap(err, "could not update group")
 	}
 

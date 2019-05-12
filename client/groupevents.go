@@ -258,7 +258,7 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 	glog.Infof("{{{ proposal key: }}}  %s", proposalKey)
 
 	proposal := groupCtx.proposals.Get(proposalKey).(*Proposal)
-	if proposal == nil || tribecrypto.IsBoxerNotNull(proposal.Boxer) {
+	if proposal == nil || tribecrypto.BoxerIsNull(proposal.Boxer) {
 		for _, memberOwner := range groupCtx.Group.MemberOwners() {
 			if bytes.Equal(memberOwner.Bytes(), groupCtx.eth.Auth.Address().Bytes()) {
 				continue
@@ -273,11 +273,12 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 			onGetKeySuccess := func(_ []byte, newBoxer tribecrypto.SymmetricKey) {
 				// if already got k' --> return
 				glog.Infof("------> Got new KEY: %v", newBoxer.Key)
-				currentBoxer := groupCtx.Group.Boxer()
-				if bytes.Equal(currentBoxer.Key[:], newBoxer.Key[:]) {
+
+				if err := groupCtx.Group.SetBoxer(newBoxer); err != nil {
+					glog.Errorf("could not set new boxer: %s", err)
 					return
 				}
-				groupCtx.Group.SetBoxer(newBoxer)
+
 				if err := groupCtx.Update(); err != nil {
 					glog.Errorf("could not update group context: %s", err)
 				}
@@ -293,7 +294,11 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 			}
 		}
 	} else {
-		groupCtx.Group.SetBoxer(proposal.Boxer)
+		if err := groupCtx.Group.SetBoxer(proposal.Boxer); err != nil {
+			glog.Errorf("could not set new boxer: %s", err)
+			return
+		}
+
 		if err := groupCtx.Update(); err != nil {
 			glog.Errorf("could not update group context: %s", err)
 		}

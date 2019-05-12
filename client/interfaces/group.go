@@ -17,7 +17,6 @@
 package interfaces
 
 import (
-	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	"github.com/aliras1/FileTribe/tribecrypto"
@@ -36,8 +35,8 @@ type Group interface {
 	CountMembers() int
 	MemberOwners() []ethcommon.Address
 	Boxer() tribecrypto.SymmetricKey
-	SetBoxer(boxer tribecrypto.SymmetricKey)
-	Update(groupContract *ethgroup.Group) error
+	SetBoxer(boxer tribecrypto.SymmetricKey) error
+	Update() error
 	Save() error
 }
 
