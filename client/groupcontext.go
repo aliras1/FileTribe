@@ -18,11 +18,11 @@ package client
 
 import (
 	"crypto/rand"
-	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"encoding/base64"
 	"path"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -33,6 +33,7 @@ import (
 	"github.com/aliras1/FileTribe/client/fs"
 	"github.com/aliras1/FileTribe/client/interfaces"
 	. "github.com/aliras1/FileTribe/collections"
+	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
 	ethcons "github.com/aliras1/FileTribe/eth/gen/Consensus"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
 	"github.com/aliras1/FileTribe/tribecrypto"
@@ -66,6 +67,13 @@ type FileView struct {
 	WriteAccess []MemberView
 }
 
+type Proposal struct {
+	Proposer    ethcommon.Address
+	Version     uint64
+	EncIpfsHash []byte
+	Boxer       tribecrypto.SymmetricKey
+}
+
 // GroupContext represents a groups current state and is responsible for
 // all the communication, storage, encryption work
 type GroupContext struct {
@@ -80,6 +88,7 @@ type GroupContext struct {
 	Storage          *fs.Storage
 	Transactions     *List
 	broadcastChannel *ipfsapi.PubSubSubscription
+	proposals		 *Map
 	proposedKeys     *Map
 	proposedPayloads *Map
 	subs             *List
@@ -113,6 +122,7 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 		Storage:          config.Storage,
 		Transactions:     config.Transactions,
 		subs:             NewConcurrentList(),
+		proposals:        NewConcurrentMap(),
 		proposedKeys:     NewConcurrentMap(),
 		proposedPayloads: NewConcurrentMap(),
 	}
@@ -195,14 +205,16 @@ func (groupCtx *GroupContext) CommitChanges() error {
 
 	glog.Infof("NEW KEY: %v", newKey.Key)
 
-	groupCtx.proposedKeys.Put(groupCtx.account.ContractAddress(), newKey)
-
 	hash, err := groupCtx.Repo.CommitChanges(newKey)
 	if err != nil {
 		return errors.Wrap(err, "could not commit group repo's changes")
 	}
 
 	encIpfsHash := newKey.BoxSeal([]byte(hash))
+	proposalKey := base64.StdEncoding.EncodeToString(encIpfsHash)
+
+	proposer := groupCtx.account.ContractAddress()
+	groupCtx.proposals.Put(proposalKey, &Proposal{Proposer:proposer, Boxer:newKey, EncIpfsHash:encIpfsHash})
 
 	tx, err := groupCtx.eth.Group.Commit(groupCtx.eth.Auth.TxOpts(), encIpfsHash)
 	if err != nil {
@@ -332,19 +344,6 @@ func (groupCtx *GroupContext) startGetKey(encNewIpfsHash []byte) error {
 	return nil
 }
 
-func (groupCtx *GroupContext) onGetKeySuccess(boxer tribecrypto.SymmetricKey) {
-	groupCtx.Group.SetBoxer(boxer)
-
-	if err := groupCtx.Save(); err != nil {
-		glog.Errorf("could not save new key: %s", err)
-		return
-	}
-
-	if err := groupCtx.Update(); err != nil {
-		glog.Errorf("could not update group: %s", err)
-	}
-}
-
 // Address returns the smart contract address of the group
 func (groupCtx *GroupContext) Address() ethcommon.Address {
 	return groupCtx.Group.Address()
@@ -364,7 +363,7 @@ func (groupCtx *GroupContext) ListFiles() []FileView {
 		for _, address := range file.Meta.WriteAccessList {
 			member := MemberView{Address: address.String()}
 
-			contact, err := groupCtx.AddressBook.Get(address)
+			contact, err := groupCtx.AddressBook.GetFromOwnerAddress(address)
 			if err != nil {
 				glog.Errorf("could not get contact for address: '%s': %s", address, err)
 				member.Name = "<error>"
@@ -389,7 +388,7 @@ func (groupCtx *GroupContext) ListMembers() []MemberView {
 	for _, address := range addresses {
 		member := MemberView{Address: address.String()}
 
-		contact, err := groupCtx.AddressBook.Get(address)
+		contact, err := groupCtx.AddressBook.GetFromOwnerAddress(address)
 		if err != nil {
 			glog.Errorf("could not get contact for address '%s': %s", address.String(), err)
 			member.Name = "<error>"
@@ -410,7 +409,7 @@ func (groupCtx *GroupContext) broadcast(msg []byte) error {
 func (groupCtx *GroupContext) p2pBroadcast(msg []byte) error {
 	for _, member := range groupCtx.Group.MemberOwners() {
 
-		c, err := groupCtx.AddressBook.Get(member)
+		c, err := groupCtx.AddressBook.GetFromOwnerAddress(member)
 		if err != nil {
 			glog.Warningf("could not get contact for member: %s", member)
 		}

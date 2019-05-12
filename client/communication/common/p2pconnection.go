@@ -18,7 +18,9 @@ package common
 
 import (
 	"net"
+	"strings"
 
+	"github.com/golang/glog"
 	"github.com/pkg/errors"
 )
 
@@ -26,7 +28,7 @@ import (
 type P2PConn net.TCPConn
 
 // ReadMessage reads a message from the connection socket
-func (conn *P2PConn) ReadMessage(addressBook *AddressBook) (*Message, error) {
+func (conn *P2PConn) ReadMessage(addressBook *AddressBook) ([]*Message, error) {
 	data := make([]byte, 4096)
 
 	length, err := conn.Read(data)
@@ -35,20 +37,58 @@ func (conn *P2PConn) ReadMessage(addressBook *AddressBook) (*Message, error) {
 	}
 
 	data = data[:length]
-
-	msg, err := DecodeMessage(data)
+	messagesBytes, err := splitBulkMessages(data)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not unmarshal Message")
+		return nil, errors.Wrap(err, "could not split up incoming data stream to messages")
 	}
 
-	contact, err := addressBook.Get(msg.From)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get contact from address book")
+	var messages []*Message
+	for _, messageBytes := range messagesBytes {
+		msg, err := DecodeMessage(messageBytes)
+		if err != nil {
+			glog.Infof("Error in msg: %s", string(data))
+			glog.Errorf("could not unmarshal Message: %s", err)
+			continue
+		}
+
+		contact, err := addressBook.GetFromAccountAddress(msg.From)
+		if err != nil {
+			glog.Errorf("could not get contact from address book: %s", err)
+			continue
+		}
+
+		if err := msg.Verify(contact); err != nil {
+			glog.Errorf("invalid message: %s", err)
+			continue
+		}
+
+		messages = append(messages, msg)
 	}
 
-	if err := msg.Verify(contact); err != nil {
-		return nil, errors.Wrapf(err, "invalid message")
+	return messages, nil
+}
+
+func splitBulkMessages(data []byte) ([][]byte, error) {
+	var messages [][]byte
+
+	counter := 0
+	var currMsg []byte
+	for _, bit := range data {
+		currMsg = append(currMsg, bit)
+
+		if strings.EqualFold(string(bit), "{") {
+			counter++
+		} else if strings.EqualFold(string(bit), "}") {
+			counter--
+		}
+
+		if counter == 0 {
+			messages = append(messages, currMsg)
+			currMsg = nil
+		} else if counter < 0 {
+			return nil, errors.New("invalid json message")
+		}
 	}
 
-	return msg, nil
+	return messages, nil
 }

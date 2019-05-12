@@ -17,6 +17,7 @@
 package tribecrypto
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"io"
@@ -74,4 +75,9 @@ func DecodeSymmetricKey(data []byte) (*SymmetricKey, error) {
 	k.RNG = rand.Reader
 
 	return &k, nil
+}
+
+func IsBoxerNotNull(boxer SymmetricKey) bool {
+	nullKey := [32]byte{0}
+	return bytes.Equal(boxer.Key[:], nullKey[:])
 }

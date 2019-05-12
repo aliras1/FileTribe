@@ -18,12 +18,12 @@ package client
 
 import (
 	"bytes"
-	ethAccount "github.com/aliras1/FileTribe/eth/gen/Account"
+	"encoding/base64"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/golang/glog"
 
+	ethAccount "github.com/aliras1/FileTribe/eth/gen/Account"
 	ethcons "github.com/aliras1/FileTribe/eth/gen/Consensus"
 	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 	"github.com/aliras1/FileTribe/tribecrypto"
@@ -108,8 +108,6 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 		return
 	}
 
-	go groupCtx.HandleDebugConsEvents(cons)
-
 	proposer, err := cons.Proposer(&bind.CallOpts{Pending: true})
 	if err != nil {
 		glog.Errorf("could not get the proposer of consensus: %s", err)
@@ -130,7 +128,8 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 	}
 
 	glog.Infof("stored payload '%v' from: %s", payload, proposer.String())
-	groupCtx.proposedPayloads.Put(proposer, payload)
+	proposalKey := base64.StdEncoding.EncodeToString(payload)
+	groupCtx.proposals.Put(proposalKey, &Proposal{EncIpfsHash:payload, Proposer:proposer})
 
 	// TODO: only ask k' from those that have approved
 	// 1. get those that voted
@@ -152,7 +151,7 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 
 		glog.Infof("speaking to: %s", member.String())
 
-		contact, err := groupCtx.AddressBook.Get(member)
+		contact, err := groupCtx.AddressBook.GetFromAccountAddress(member)
 		if err != nil {
 			glog.Warningf("could not get contact for member: %s", member.String())
 			continue
@@ -160,7 +159,7 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 
 		if err := groupCtx.P2P.StartGetProposedGroupKeySession(
 			e.Group,
-			member,
+			[]byte(proposalKey),
 			contact,
 			groupCtx.account.ContractAddress(),
 			groupCtx.onGetProposedKeySuccess,
@@ -170,20 +169,24 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 	}
 }
 
-func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address, boxer tribecrypto.SymmetricKey) {
+func (groupCtx *GroupContext) onGetProposedKeySuccess(proposalKey []byte, boxer tribecrypto.SymmetricKey) {
 	// TODO: check if the received key is correct, i.e. the payload can be decrypted
 
-	glog.Infof("GOT proposed key: %v with proposer: %s", boxer.Key, proposer.String())
+	glog.Infof("GOT proposed key: %v with proposer: %v", boxer.Key, proposalKey)
 
-	groupCtx.proposedKeys.Put(proposer, boxer)
+	proposal := groupCtx.proposals.Get(string(proposalKey)).(*Proposal)
+	if proposal == nil {
+		glog.Errorf("no proposal found to: %v", proposalKey)
+		return
+	}
 
-	payloadInt := groupCtx.proposedPayloads.Get(proposer)
-	if payloadInt == nil {
+	encIpfsHash := groupCtx.proposals.Get(string(proposalKey)).(*Proposal).EncIpfsHash
+	if encIpfsHash == nil {
 		glog.Error("payload is nil")
 		return
 	}
 
-	proposerAccount, err := ethAccount.NewAccount(proposer, groupCtx.eth.Backend)
+	proposerAccount, err := ethAccount.NewAccount(proposal.Proposer, groupCtx.eth.Backend)
 	if err != nil {
 		glog.Errorf("could not get the account of the proposer: %s", err)
 		return
@@ -207,25 +210,25 @@ func (groupCtx *GroupContext) onGetProposedKeySuccess(proposer ethcommon.Address
 		return
 	}
 
-	ipfsHash, ok := boxer.BoxOpen(payloadInt.([]byte))
+	ipfsHash, ok := boxer.BoxOpen(encIpfsHash)
 	if !ok {
 		glog.Errorf("could not decrypt consensus payload")
 		return
 	}
 
-	if err := groupCtx.Repo.IsValidChangeSet(string(ipfsHash), boxer, proposer); err != nil {
+	if err := groupCtx.Repo.IsValidChangeSet(string(ipfsHash), boxer, proposal.Proposer); err != nil {
 		glog.Errorf("invalid changeset: %s", err)
 		return
 	}
+
+	proposal.Boxer = boxer
 
 	if err := groupCtx.approveConsensus(consensus); err != nil {
 		glog.Errorf("could not approve consensus: %s", err)
 		return
 	}
 
-	glog.Infof("consensus %s approved", consensusAddress.String())
-
-	groupCtx.proposedPayloads.Put(proposer, nil)
+	glog.Infof("%s: consensus %s approved", groupCtx.account.Name(), consensusAddress.String())
 }
 
 // HandleIpfsHashChangedEvents listens to IpfsHashChanged events on the blockchain
@@ -254,21 +257,30 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 		return
 	}
 
-	newBoxerInt := groupCtx.proposedKeys.Get(e.Proposer)
-	if newBoxerInt == nil {
-		for _, member := range groupCtx.Group.MemberOwners() {
-			if bytes.Equal(member.Bytes(), groupCtx.account.ContractAddress().Bytes()) {
+	for pk := range groupCtx.proposals.KIterator() {
+		glog.Infof("%s: [[ PK ]]: %s", groupCtx.account.Name(), pk)
+	}
+
+	proposalKey := base64.StdEncoding.EncodeToString(e.IpfsHash)
+
+	glog.Infof("{{{ proposal key: }}}  %s", proposalKey)
+
+	proposal := groupCtx.proposals.Get(proposalKey).(*Proposal)
+	if proposal == nil || tribecrypto.IsBoxerNotNull(proposal.Boxer) {
+		for _, memberOwner := range groupCtx.Group.MemberOwners() {
+			if bytes.Equal(memberOwner.Bytes(), groupCtx.eth.Auth.Address().Bytes()) {
 				continue
 			}
 
-			contact, err := groupCtx.AddressBook.Get(member)
+			contact, err := groupCtx.AddressBook.GetFromOwnerAddress(memberOwner)
 			if err != nil {
-				glog.Warningf("could not get contact for member: %s", member.String())
+				glog.Warningf("could not get contact for member: %s", memberOwner.String())
 				continue
 			}
 
-			onGetKeySuccess := func(_ ethcommon.Address, newBoxer tribecrypto.SymmetricKey) {
+			onGetKeySuccess := func(_ []byte, newBoxer tribecrypto.SymmetricKey) {
 				// if already got k' --> return
+				glog.Infof("------> Got new KEY: %v", newBoxer.Key)
 				currentBoxer := groupCtx.Group.Boxer()
 				if bytes.Equal(currentBoxer.Key[:], newBoxer.Key[:]) {
 					return
@@ -289,7 +301,7 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 			}
 		}
 	} else {
-		groupCtx.Group.SetBoxer(newBoxerInt.(tribecrypto.SymmetricKey))
+		groupCtx.Group.SetBoxer(proposal.Boxer)
 		if err := groupCtx.Update(); err != nil {
 			glog.Errorf("could not update group context: %s", err)
 		}

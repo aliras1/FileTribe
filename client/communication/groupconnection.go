@@ -149,7 +149,7 @@ func (conn *GroupConnection) connectionListener() {
 					continue
 				}
 
-				contact, err := conn.addressBook.Get(msg.From)
+				contact, err := conn.addressBook.GetFromAccountAddress(msg.From)
 				if err != nil {
 					glog.Errorf("could not get contact from address book: %s", err)
 					continue

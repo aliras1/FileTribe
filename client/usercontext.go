@@ -107,7 +107,7 @@ func NewUserContext(auth interfaces.Auth, backend chequebook.Backend, appContrac
 	fmt.Print(accountAddress.Hex())
 
 	if strings.EqualFold(accountAddress.String(), "0x"+strings.Repeat("0", 40)) {
-		fmt.Println("No FileTribe account found associated with current ethereum account. Use 'filetribe signup <username>' to sign up")
+		fmt.Println("No FileTribe account found associated to the current ethereum account. Use 'filetribe signup <username>' to sign up")
 
 		go ctx.HandleAccountCreatedEvents(ctx.eth.App)
 	} else {
@@ -184,31 +184,6 @@ func (ctx *UserContext) IsMember(group ethcommon.Address, accountOwner ethcommon
 		return errors.New("no group found")
 	}
 
-	glog.Infof("UserContext.IsMember(..., %s)", accountOwner.String())
-	glog.Infof("group members:")
-	for _, member := range groupInt.(*GroupContext).Group.MemberOwners() {
-		glog.Info(member.String())
-	}
-	glog.Infof("group members acc:")
-	for _, member := range groupInt.(*GroupContext).Group.MemberOwners() {
-		mem, _ := ctx.eth.App.GetAccount(&bind.CallOpts{Pending:true}, member)
-		glog.Info(mem.String())
-	}
-
-	glog.Infof("group members owner:")
-	for _, member := range groupInt.(*GroupContext).Group.MemberOwners() {
-		ac, err := ethaccount.NewAccount(member, ctx.eth.Backend)
-		if err != nil {
-			continue
-		}
-		ow, err := ac.Owner(&bind.CallOpts{Pending:true})
-		if err != nil {
-			continue
-		}
-		glog.Info(ow.String())
-	}
-
-
 	if !groupInt.(*GroupContext).Group.IsMember(accountOwner) {
 		return errors.New("account is not member of group")
 	}
@@ -229,18 +204,18 @@ func (ctx *UserContext) GetBoxerOfGroup(group ethcommon.Address) (tribecrypto.Sy
 
 // GetProposedBoxerOfGroup returns the secret key of the given group. It is
 // used by communication sessions that have no direct access to GroupContexts
-func (ctx *UserContext) GetProposedBoxerOfGroup(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error) {
+func (ctx *UserContext) GetProposedBoxerOfGroup(group ethcommon.Address, proposalKey []byte) (tribecrypto.SymmetricKey, error) {
 	groupInt := ctx.groups.Get(group)
 	if groupInt == nil {
 		return tribecrypto.SymmetricKey{}, errors.New("no group found")
 	}
 
-	boxerInt := groupInt.(*GroupContext).proposedKeys.Get(proposer)
-	if boxerInt == nil {
+	proposal := groupInt.(*GroupContext).proposals.Get(string(proposalKey)).(*Proposal)
+	if proposal == nil {
 		return tribecrypto.SymmetricKey{}, errors.New("no proposed key found")
 	}
 
-	return boxerInt.(tribecrypto.SymmetricKey), nil
+	return proposal.Boxer, nil
 }
 
 // Init initializes a UserContext: it starts the P2P manager and the event handlers

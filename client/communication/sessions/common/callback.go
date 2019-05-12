@@ -25,7 +25,7 @@ import (
 )
 
 // OnGetGroupKeySuccessCallback is called when a group key is retrieved successfully
-type OnGetGroupKeySuccessCallback func(address ethcommon.Address, boxer tribecrypto.SymmetricKey)
+type OnGetGroupKeySuccessCallback func(proposalKey []byte, boxer tribecrypto.SymmetricKey)
 
 // SessionClosedCallback is called when a session is closed
 type SessionClosedCallback func(session ISession)
@@ -47,5 +47,5 @@ type CtxCallback interface {
 
 	// GetProposedBoxerOfGroup returns the proposed group key of a group
 	// that was suggested the given member
-	GetProposedBoxerOfGroup(group ethcommon.Address, proposer ethcommon.Address) (tribecrypto.SymmetricKey, error)
+	GetProposedBoxerOfGroup(group ethcommon.Address, proposalKey []byte) (tribecrypto.SymmetricKey, error)
 }

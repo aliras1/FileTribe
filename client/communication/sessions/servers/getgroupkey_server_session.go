@@ -104,8 +104,8 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 	switch session.state {
 	case 0:
 		{
-			glog.Infof("server [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.contact.EthAccountAddress.String())
-			if err := session.callback.IsMember(session.groupDataMsg.Group, session.contact.EthAccountAddress); err != nil {
+			glog.Infof("server [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.contact.OwnerAddress.String())
+			if err := session.callback.IsMember(session.groupDataMsg.Group, session.contact.OwnerAddress); err != nil {
 				session.error = errors.Wrap(err, "could not verify group membership")
 				session.close()
 				return
@@ -173,7 +173,7 @@ func (session *GetGroupKeySessionServer) NextState(contact *comcommon.Contact, d
 				}
 				key = data
 			case comcommon.GetProposedGroupKey:
-				boxer, err := session.callback.GetProposedBoxerOfGroup(session.groupDataMsg.Group, ethcommon.BytesToAddress(session.groupDataMsg.Payload))
+				boxer, err := session.callback.GetProposedBoxerOfGroup(session.groupDataMsg.Group, session.groupDataMsg.Payload)
 				if err != nil {
 					session.error = errors.Wrapf(err, "%s could not get proposed group boxer", session.sender.String())
 					session.close()

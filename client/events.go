@@ -157,7 +157,7 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 			continue
 		}
 
-		contact, err := ctx.addressBook.Get(member)
+		contact, err := ctx.addressBook.GetFromAccountAddress(member)
 		if err != nil {
 			glog.Warningf("could not get contact for member: %s", member.String())
 			continue
@@ -174,7 +174,8 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 	}
 }
 
-func (ctx *UserContext) onGetKeySuccess(groupAddress ethcommon.Address, boxer tribecrypto.SymmetricKey) {
+func (ctx *UserContext) onGetKeySuccess(groupAddressBytes []byte, boxer tribecrypto.SymmetricKey) {
+	groupAddress := ethcommon.BytesToAddress(groupAddressBytes)
 	exists := ctx.groups.Get(groupAddress)
 	if exists != nil {
 		return

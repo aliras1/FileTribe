@@ -195,10 +195,10 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 
 			switch session.groupDataMsg.Data {
 			case comcommon.GetGroupKey:
-				session.onSuccessCallback(session.groupDataMsg.Group, *key)
+				session.onSuccessCallback(session.groupDataMsg.Group.Bytes(), *key)
 
 			case comcommon.GetProposedGroupKey:
-				session.onSuccessCallback(ethcommon.BytesToAddress(session.groupDataMsg.Payload), *key)
+				session.onSuccessCallback(session.groupDataMsg.Payload, *key)
 			}
 
 			session.close()

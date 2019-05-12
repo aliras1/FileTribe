@@ -28,8 +28,8 @@ contract Group is Ownable {
     event InvitationAccepted(address groupAddress, address account);
     event InvitationSent(address group, address account);
     event InvitationDeclined(address group, address account);
-    event NewConsensus(address group, address consensus);
-    event IpfsHashChanged(address group, bytes ipfsHash, address proposer);
+    event NewConsensus(address group, address consensus, uint256 id);
+    event IpfsHashChanged(address group, bytes ipfsHash, address proposer, uint256 id);
     event MemberLeft(address group, address account);
     event Debug(uint256 msg);
 
@@ -63,7 +63,7 @@ contract Group is Ownable {
 
     function commit(bytes memory newIpfsHash) public onlyMembers {
         if (_memberOwners.length == 1) {
-            emit IpfsHashChanged(address(this), newIpfsHash, IFileTribeDApp(_fileTribe).getAccount(msg.sender));
+            emit IpfsHashChanged(address(this), newIpfsHash, IFileTribeDApp(_fileTribe).getAccount(msg.sender), _currConsId);
 
             _ipfsHash = newIpfsHash;
 
@@ -73,7 +73,7 @@ contract Group is Ownable {
         address cons = _members[msg.sender].consensus;
         IConsensus(cons).propose(newIpfsHash, _currConsId + 1);
 
-        emit NewConsensus(address(this), cons);
+        emit NewConsensus(address(this), cons, _currConsId + 1);
     }
 
     function onChangeIpfsHashConsensus(bytes calldata payload) external {
@@ -88,7 +88,7 @@ contract Group is Ownable {
         _ipfsHash = payload;
         _currConsId = id;
 
-        emit IpfsHashChanged(address(this), payload, proposer);
+        emit IpfsHashChanged(address(this), payload, proposer, _currConsId);
     }
 
     function leave() onlyMembers public {
