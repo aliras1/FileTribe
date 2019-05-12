@@ -49,27 +49,48 @@ func NewAddressBook(backend chequebook.Backend, app *ethapp.FileTribeDApp, ipfs 
 	}
 }
 
-// Get tries to retrieve the P2P contact data of a user
-func (a *AddressBook) Get(accAddr ethcommon.Address) (*Contact, error) {
-	var c *Contact
+// GetFromAccountAddress tries to retrieve the P2P contact data of a user based on its FT account
+func (ab *AddressBook) GetFromAccountAddress(accountAddress ethcommon.Address) (*Contact, error) {
+	var contact *Contact
 
-	cInt := a.accountToContactMap.Get(accAddr)
+	cInt := ab.accountToContactMap.Get(accountAddress)
 	if cInt == nil {
-		_c, err := a.getContactFromEth(accAddr)
+		_c, err := ab.getContactFromEth(accountAddress)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get contact")
 		}
 
-		c = _c
+		contact = _c
 	} else {
-		c = cInt.(*Contact)
+		contact = cInt.(*Contact)
 	}
 
-	return c, nil
+	return contact, nil
 }
 
-func (a *AddressBook) getContactFromEth(accAddr ethcommon.Address) (*Contact, error) {
-	acc, err := Account.NewAccount(accAddr, a.backend)
+// GetFromOwnerAddress tries to retrieve the P2P contact data of a user based on its owner
+func (ab *AddressBook) GetFromOwnerAddress(ownerAddress ethcommon.Address) (*Contact, error) {
+	for kv := range ab.accountToContactMap.KVIterator() {
+		if bytes.Equal(kv.Value.(*Contact).OwnerAddress.Bytes(), ownerAddress.Bytes()) {
+			return kv.Value.(*Contact), nil
+		}
+	}
+
+	accountAddress, err := ab.app.GetAccount(&bind.CallOpts{Pending: true}, ownerAddress)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get account of owner")
+	}
+
+	contact, err := ab.getContactFromEth(accountAddress)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get contact from account address")
+	}
+
+	return contact, nil
+}
+
+func (ab *AddressBook) getContactFromEth(accountAddress ethcommon.Address) (*Contact, error) {
+	acc, err := Account.NewAccount(accountAddress, ab.backend)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create account instance")
 	}
@@ -89,7 +110,9 @@ func (a *AddressBook) getContactFromEth(accAddr ethcommon.Address) (*Contact, er
 		return nil, errors.Wrap(err, "could not get owner")
 	}
 
-	contact := NewContact(owner, accAddr, name, ipfsID, tribecrypto.AnonymPublicKey{}, a.ipfs)
+	contact := NewContact(owner, accountAddress, name, ipfsID, tribecrypto.AnonymPublicKey{}, ab.ipfs)
+
+	ab.accountToContactMap.Put(accountAddress, contact)
 
 	return contact, nil
 }
