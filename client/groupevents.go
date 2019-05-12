@@ -143,17 +143,9 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 			continue
 		}
 
-		member, err := groupCtx.eth.App.GetAccount(&bind.CallOpts{Pending: true}, memberOwner)
+		contact, err := groupCtx.AddressBook.GetFromOwnerAddress(memberOwner)
 		if err != nil {
-			glog.Errorf("could not get account of owner: %s", err)
-			continue
-		}
-
-		glog.Infof("speaking to: %s", member.String())
-
-		contact, err := groupCtx.AddressBook.GetFromAccountAddress(member)
-		if err != nil {
-			glog.Warningf("could not get contact for member: %s", member.String())
+			glog.Warningf("could not get contact for member: %s", memberOwner.String())
 			continue
 		}
 
