@@ -150,7 +150,7 @@ func NewUserContext(auth interfaces.Auth, backend chequebook.Backend, appContrac
 func (ctx *UserContext) SignUp(username string) error {
 	glog.Infof("[*] account '%s' signing in...", username)
 
-	acc, err := NewAccount(username, ctx.storage)
+	acc, err := NewAccount(username, ctx.eth.Auth.Address(), ctx.storage)
 	if err != nil {
 		return errors.Wrap(err, "could not create new account")
 	}
@@ -210,12 +210,12 @@ func (ctx *UserContext) GetProposedBoxerOfGroup(group ethcommon.Address, proposa
 		return tribecrypto.SymmetricKey{}, errors.New("no group found")
 	}
 
-	proposal := groupInt.(*GroupContext).proposals.Get(string(proposalKey)).(*Proposal)
-	if proposal == nil {
+	proposalInt := groupInt.(*GroupContext).proposals.Get(string(proposalKey))
+	if proposalInt == nil {
 		return tribecrypto.SymmetricKey{}, errors.New("no proposed key found")
 	}
 
-	return proposal.Boxer, nil
+	return proposalInt.(*interfaces.Proposal).Boxer, nil
 }
 
 // Init initializes a UserContext: it starts the P2P manager and the event handlers

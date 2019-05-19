@@ -19,8 +19,11 @@ package client
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"github.com/aliras1/FileTribe/asynctask"
+	"github.com/aliras1/FileTribe/client/tasks"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -67,32 +70,41 @@ type FileView struct {
 	WriteAccess []MemberView
 }
 
-type Proposal struct {
-	Proposer    ethcommon.Address
-	Version     uint64
-	EncIpfsHash []byte
-	Boxer       tribecrypto.SymmetricKey
+type GroupState int
+
+const (
+	KeyInvalid GroupState = 0
+)
+
+type StateTransition struct {
+	State GroupState
+	Value bool
 }
 
 // GroupContext represents a groups current state and is responsible for
 // all the communication, storage, encryption work
 type GroupContext struct {
-	account          interfaces.Account
-	Group            interfaces.Group
-	P2P              *com.P2PManager
-	Repo             *fs.GroupRepo
-	GroupConnection  *com.GroupConnection
-	AddressBook      *common.AddressBook
-	eth              *GroupEth
-	Ipfs             ipfsapi.IIpfs
-	Storage          *fs.Storage
-	Transactions     *List
-	broadcastChannel *ipfsapi.PubSubSubscription
-	proposals		 *Map
-	proposedKeys     *Map
-	proposedPayloads *Map
-	subs             *List
-	lock             sync.Mutex
+	account                  interfaces.Account
+	Group                    interfaces.Group
+	P2P                      *com.P2PManager
+	Repo                     *fs.GroupRepo
+	GroupConnection          *com.GroupConnection
+	AddressBook              *common.AddressBook
+	state                    map[GroupState]bool
+	eth                      *GroupEth
+	Ipfs                     ipfsapi.IIpfs
+	Storage                  *fs.Storage
+	Transactions             *List
+	broadcastChannel         *ipfsapi.PubSubSubscription
+	proposals                *Map
+	proposedKeys             *Map
+	proposedPayloads         *Map
+	subs                     *List
+	keyInvalidValueChangedCh chan bool
+	stopCh                   chan struct{}
+	keyEventCh               chan *asynctask.Event
+	proposedKeyEventCh       chan *asynctask.Event
+	lock                     sync.Mutex
 }
 
 // GroupContextConfig is a configuration struct for creating GroupContext
@@ -112,19 +124,24 @@ type GroupContextConfig struct {
 func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 
 	groupContext := &GroupContext{
-		account:          config.Account,
-		Group:            config.Group,
-		P2P:              config.P2P,
-		GroupConnection:  nil,
-		AddressBook:      config.AddressBook,
-		eth:              config.Eth,
-		Ipfs:             config.Ipfs,
-		Storage:          config.Storage,
-		Transactions:     config.Transactions,
-		subs:             NewConcurrentList(),
-		proposals:        NewConcurrentMap(),
-		proposedKeys:     NewConcurrentMap(),
-		proposedPayloads: NewConcurrentMap(),
+		account:                  config.Account,
+		Group:                    config.Group,
+		P2P:                      config.P2P,
+		GroupConnection:          nil,
+		AddressBook:              config.AddressBook,
+		eth:                      config.Eth,
+		Ipfs:                     config.Ipfs,
+		Storage:                  config.Storage,
+		Transactions:             config.Transactions,
+		state:                    make(map[GroupState]bool),
+		subs:                     NewConcurrentList(),
+		proposals:                NewConcurrentMap(),
+		proposedKeys:             NewConcurrentMap(),
+		proposedPayloads:         NewConcurrentMap(),
+		keyInvalidValueChangedCh: make(chan bool),
+		stopCh:                   make(chan struct{}),
+		keyEventCh:               make(chan *asynctask.Event, 1000),
+		proposedKeyEventCh:		  make(chan *asynctask.Event, 1000),
 	}
 
 	repo, err := fs.NewGroupRepo(config.Group, config.Account.ContractAddress(), config.Storage, config.Ipfs)
@@ -148,11 +165,61 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 	go groupContext.HandleIpfsHashChangedEvents(config.Eth.Group)
 	go groupContext.HandleDebugEvents(config.Eth.Group)
 
+	go groupContext.handleStateKeyInvalid()
+	go groupContext.HandleKeyEvents()
+	go groupContext.HandleProposedKeyEvents()
+
 	return groupContext, nil
 }
 
-func onSessionClosed(session sesscommon.ISession) {
+func onSessionClosed(session sesscommon.Session) {
 	glog.Infof("session %d closed with error: %s", session.ID(), session.Error())
+}
+
+func (groupCtx *GroupContext) SetStateKeyInvalid(value bool) {
+	groupCtx.keyInvalidValueChangedCh <- value
+}
+
+func (groupCtx *GroupContext) handleStateKeyInvalid() {
+	for {
+		select {
+		case value := <- groupCtx.keyInvalidValueChangedCh:
+			glog.Infof("/////// changed to: %v", value)
+			if groupCtx.state[KeyInvalid] != value {
+				groupCtx.state[KeyInvalid] = value
+			}
+			if groupCtx.state[KeyInvalid] {
+				groupCtx.getKey()
+			}
+
+		case <- time.After(5 * time.Second):
+			if groupCtx.state[KeyInvalid] {
+				groupCtx.getKey()
+			}
+
+		case <- groupCtx.stopCh:
+			// todo: handle stop
+		}
+	}
+}
+
+func (groupCtx *GroupContext) getKey() {
+	tasks.NewGetGroupKeyAsyncTask(
+		groupCtx.account,
+		groupCtx.Group,
+		groupCtx.P2P,
+		groupCtx.keyEventCh,
+	).Execute()
+}
+
+func (groupCtx *GroupContext) getProposedKey(proposalKey string) {
+	tasks.NewGetProposalKeyAsyncTask(
+		groupCtx.account,
+		groupCtx.Group,
+		proposalKey,
+		groupCtx.P2P,
+		groupCtx.proposedKeyEventCh,
+	).Execute()
 }
 
 // Update fetches all the current group information from the blockchain
@@ -173,6 +240,20 @@ func (groupCtx *GroupContext) Update() error {
 	return nil
 }
 
+func (groupCtx *GroupContext) UpdateGroupKey() {
+	if len(groupCtx.Group.EncryptedIpfsHash()) == 0 {
+		groupCtx.SetStateKeyInvalid(false)
+		return
+	}
+
+	boxer := groupCtx.Group.Boxer()
+	if _, ok := boxer.BoxOpen(groupCtx.Group.EncryptedIpfsHash()); ok {
+		return
+	}
+
+	groupCtx.SetStateKeyInvalid(true)
+}
+
 // Leave invokes the 'Leave' operation of the group on the blockchain
 func (groupCtx *GroupContext) Leave() error {
 	tx, err := groupCtx.eth.Group.Leave(groupCtx.eth.Auth.TxOpts())
@@ -185,7 +266,7 @@ func (groupCtx *GroupContext) Leave() error {
 	return nil
 }
 
-// Stop kills all IPFS pubsub group connection - NOT USED
+// Cancel kills all IPFS pubsub group connection - NOT USED
 func (groupCtx *GroupContext) Stop() {
 	groupCtx.GroupConnection.Kill()
 }
@@ -214,7 +295,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 	proposalKey := base64.StdEncoding.EncodeToString(encIpfsHash)
 
 	proposer := groupCtx.account.ContractAddress()
-	groupCtx.proposals.Put(proposalKey, &Proposal{Proposer:proposer, Boxer:newKey, EncIpfsHash:encIpfsHash})
+	groupCtx.proposals.Put(proposalKey, &interfaces.Proposal{Proposer:proposer, Boxer:newKey, EncIpfsHash:encIpfsHash})
 
 	tx, err := groupCtx.eth.Group.Commit(groupCtx.eth.Auth.TxOpts(), encIpfsHash)
 	if err != nil {

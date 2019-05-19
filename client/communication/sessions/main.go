@@ -35,7 +35,7 @@ func NewServerSession(
 	signer comcommon.Signer,
 	callback common.CtxCallback,
 	sessionClosed common.SessionClosedCallback,
-) (common.ISession, error) {
+) (common.Session, error) {
 
 	switch msg.Type {
 	case comcommon.GetGroupData:
@@ -59,7 +59,7 @@ func NewGroupServerSession(
 	group interfaces.Group,
 	repo *fs.GroupRepo,
 	sessionClosed common.SessionClosedCallback,
-) (common.ISession, error) {
+) (common.Session, error) {
 	//switch msg.Type {
 	//
 	//case comcommon.Commit:

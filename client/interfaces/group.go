@@ -35,6 +35,7 @@ type Group interface {
 	CountMembers() int
 	MemberOwners() []ethcommon.Address
 	Boxer() tribecrypto.SymmetricKey
+	CheckBoxer(newBoxer tribecrypto.SymmetricKey) error
 	SetBoxer(boxer tribecrypto.SymmetricKey) error
 	Update() error
 	Save() error

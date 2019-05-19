@@ -25,9 +25,9 @@ import (
 // EndOfSession is the final state of all sessions
 const EndOfSession = math.MaxUint8
 
-// ISession is a session interface. Sessions are implemented as
+// Session is a session interface. Sessions are implemented as
 // Finite State Machines.
-type ISession interface {
+type Session interface {
 	ID() uint32
 	IsAlive() bool
 	Abort()

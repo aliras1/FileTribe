@@ -51,27 +51,27 @@ type GroupRepo struct {
 func NewGroupRepo(group interfaces.Group, user ethcommon.Address, storage *Storage, ipfs ipfs.IIpfs) (*GroupRepo, error) {
 	storage.MakeGroupDir(group.Name(), group.Address().String())
 
-	metas, err := storage.GetGroupFileMetas(group.Address().String())
-	if err != nil {
-		glog.Warningf("could not load group file metas: %s", err)
-	}
-
-	data, err := meta.EncodeFileMetaList(metas)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not encode empty file meta list")
-	}
-
-	boxer := group.Boxer()
-	encData := boxer.BoxSeal(data)
-	ipfsHash, err := ipfs.Add(bytes.NewReader(encData))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not add empty list to ipfs")
-	}
+	//metas, err := storage.GetGroupFileMetas(group.Address().String())
+	//if err != nil {
+	//	glog.Warningf("could not load group file metas: %s", err)
+	//}
+	//
+	//data, err := meta.EncodeFileMetaList(metas)
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "could not encode empty file meta list")
+	//}
+	//
+	//boxer := group.Boxer()
+	//encData := boxer.BoxSeal(data)
+	//ipfsHash, err := ipfs.Add(bytes.NewReader(encData))
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "could not add empty list to ipfs")
+	//}
 
 	return &GroupRepo{
 		group:    group,
 		files:    NewConcurrentMap(),
-		ipfsHash: ipfsHash,
+		ipfsHash: "",
 		storage:  storage,
 		ipfs:     ipfs,
 		user:     user,

@@ -18,19 +18,13 @@ package interfaces
 
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
 
-	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
 
-// Account is a mirror to the account data on the blockchain
-type Account interface {
-	Owner() ethcommon.Address
-	ContractAddress() ethcommon.Address
-	Contract() *ethacc.Account
-	Name() string
-	Boxer() tribecrypto.AnonymBoxer
-	SetContract(addr ethcommon.Address, backend chequebook.Backend) error
-	Save() error
+type Proposal struct {
+	Proposer    ethcommon.Address
+	Version     uint64
+	EncIpfsHash []byte
+	Boxer       tribecrypto.SymmetricKey
 }

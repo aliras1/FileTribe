@@ -133,39 +133,43 @@ func (ctx *UserContext) onInvitationAccepted(e *ethacc.AccountInvitationAccepted
 
 	glog.Info("Invitation accepted")
 
-	group, err := ethgroup.NewGroup(e.Group, ctx.eth.Backend)
+	exists := ctx.groups.Get(e.Group)
+	if exists != nil {
+		return
+	}
+
+	groupMeta := &meta.GroupMeta{Address: e.Group}
+	groupContract, err := ethgroup.NewGroup(groupMeta.Address, ctx.eth.Backend)
 	if err != nil {
 		glog.Errorf("could not create new eth group instance: %s", err)
 		return
 	}
 
-	memberOwners, err := group.MemberOwners(&bind.CallOpts{Pending: true})
+	config := &GroupContextConfig{
+		Group:        NewGroupFromMeta(groupMeta, groupContract, ctx.storage),
+		Account:      ctx.account,
+		P2P:          ctx.p2p,
+		AddressBook:  ctx.addressBook,
+		Ipfs:         ctx.ipfs,
+		Storage:      ctx.storage,
+		Transactions: ctx.transactions,
+		Eth: &GroupEth{
+			Group: groupContract,
+			Eth:   ctx.eth,
+		},
+	}
+
+	groupCtx, err := NewGroupContext(config)
 	if err != nil {
-		glog.Errorf("could not get group members from eth: %s", err)
+		glog.Errorf("could not create new group ctx: %s", err)
 		return
 	}
 
-	// Get key
-	for _, memberOwner := range memberOwners {
-		if bytes.Equal(memberOwner.Bytes(), ctx.eth.Auth.Address().Bytes()) {
-			continue
-		}
+	ctx.groups.Put(groupCtx.Address(), groupCtx)
 
-		contact, err := ctx.addressBook.GetFromOwnerAddress(memberOwner)
-		if err != nil {
-			glog.Warningf("could not get contact for member: %s", memberOwner.String())
-			continue
-		}
+	groupCtx.UpdateGroupKey()
 
-		if err := ctx.p2p.StartGetGroupKeySession(
-			e.Group,
-			contact,
-			e.Account,
-			ctx.onGetKeySuccess,
-		); err != nil {
-			glog.Errorf("could not start get group key session: %s", err)
-		}
-	}
+	glog.Info("group ctx created")
 }
 
 func (ctx *UserContext) onGetKeySuccess(groupAddressBytes []byte, boxer tribecrypto.SymmetricKey) {

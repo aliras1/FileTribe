@@ -36,6 +36,7 @@ type AccountData struct {
 	Name            string
 	ContractAddress ethcommon.Address
 	Boxer           tribecrypto.AnonymBoxer // might be deleted if libp2p is encrypted
+	Owner           ethcommon.Address
 }
 
 // account is a wrapper object around a smart contract of type account
@@ -43,6 +44,10 @@ type account struct {
 	data     *AccountData
 	contract *ethacc.Account
 	storage  *fs.Storage
+}
+
+func (acc *account) Owner() ethcommon.Address {
+	return acc.data.Owner
 }
 
 // ContractAddress returns the address of its smart contract
@@ -120,7 +125,7 @@ func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (int
 }
 
 // NewAccount creates a new empty account without any smart contract data
-func NewAccount(username string, storage *fs.Storage) (interfaces.Account, error) {
+func NewAccount(username string, owner ethcommon.Address, storage *fs.Storage) (interfaces.Account, error) {
 	var secretBoxerBytes [32]byte
 	var publicBoxerBytes [32]byte
 
@@ -133,6 +138,7 @@ func NewAccount(username string, storage *fs.Storage) (interfaces.Account, error
 	return &account{
 		data: &AccountData{
 			Name: username,
+			Owner: owner,
 			Boxer: tribecrypto.AnonymBoxer{
 				PublicKey:  tribecrypto.AnonymPublicKey{Value: publicBoxerBytes},
 				PrivateKey: tribecrypto.AnonymPrivateKey{Value: secretBoxerBytes},

@@ -18,6 +18,7 @@ package communication
 
 import (
 	"context"
+	"github.com/aliras1/FileTribe/tribecrypto"
 	"net"
 	"time"
 
@@ -83,11 +84,11 @@ func NewP2PManager(
 }
 
 // AddSession adds a session to the managers session list
-func (p2p *P2PManager) AddSession(session sesscommon.ISession) {
+func (p2p *P2PManager) AddSession(session sesscommon.Session) {
 	p2p.sessions.Put(session.ID(), session)
 }
 
-// Stop gracefully kills all threads and processes
+// Cancel gracefully kills all threads and processes
 func (p2p *P2PManager) Stop() {
 	close(p2p.stop)
 }
@@ -165,12 +166,12 @@ func (p2p *P2PManager) handleMassages() {
 		contact, err := p2p.addressBook.GetFromAccountAddress(msg.From)
 		if err != nil {
 			glog.Errorf("could not get contact from address book: %s", err)
-			return
+			continue
 		}
 
 		glog.Infof("%s: msg from: %s, sessid: %d", p2p.account.Name(), msg.From.String(), msg.SessionID)
 
-		var session sesscommon.ISession
+		var session sesscommon.Session
 		sessionInterface := p2p.sessions.Get(msg.SessionID)
 
 		if sessionInterface == nil {
@@ -187,37 +188,42 @@ func (p2p *P2PManager) handleMassages() {
 
 		// TODO: fix bug: store original msg.from in the session and
 		// check if the current sender is equal to that
-		session = sessionInterface.(sesscommon.ISession)
+		session = sessionInterface.(sesscommon.Session)
 		go session.NextState(contact, msg.Payload)
 	}
 }
 
-func (p2p *P2PManager) onSessionClosed(session sesscommon.ISession) {
+func (p2p *P2PManager) onSessionClosed(session sesscommon.Session) {
 	glog.Infof("sid %v closed with error: %v", session.ID(), session.Error())
 }
 
 // StartGetGroupKeySession start a new session for retrieving a group's current key
 func (p2p *P2PManager) StartGetGroupKeySession(
 	group ethcommon.Address,
-	receiver *common.Contact,
+	receiverOwner ethcommon.Address,
 	sender ethcommon.Address,
-	onSuccess sesscommon.OnGetGroupKeySuccessCallback,
-) error {
+	resultCh chan tribecrypto.SymmetricKey,
+) (sesscommon.Session, error) {
+	contact, err := p2p.addressBook.GetFromOwnerAddress(receiverOwner)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get contact from owner")
+	}
+
 	session := clients.NewGetGroupDataSessionClient(
 		common.GetGroupKey,
 		group,
 		nil, // no additional information needed
-		receiver,
+		contact,
 		sender,
 		p2p.signer,
 		p2p.onSessionClosed,
-		onSuccess)
+		resultCh)
 
 	p2p.AddSession(session)
 
 	go session.Run()
 
-	return nil
+	return session, nil
 }
 
 // StartGetProposedGroupKeySession starts a new session to get
@@ -225,25 +231,30 @@ func (p2p *P2PManager) StartGetGroupKeySession(
 func (p2p *P2PManager) StartGetProposedGroupKeySession(
 	group ethcommon.Address,
 	proposalKey []byte,
-	receiver *common.Contact,
+	receiverOwner ethcommon.Address,
 	sender ethcommon.Address,
-	onSuccess sesscommon.OnGetGroupKeySuccessCallback,
-) error {
+	resultCh chan tribecrypto.SymmetricKey,
+) (sesscommon.Session, error) {
 	glog.Info("StartGetProposedGroupKeySession...")
+
+	contact, err := p2p.addressBook.GetFromOwnerAddress(receiverOwner)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get contact from owner")
+	}
 
 	session := clients.NewGetGroupDataSessionClient(
 		common.GetProposedGroupKey,
 		group,
-		proposalKey,
-		receiver,
+		[]byte(proposalKey),
+		contact,
 		sender,
 		p2p.signer,
 		p2p.onSessionClosed,
-		onSuccess)
+		resultCh)
 
 	p2p.AddSession(session)
 
 	go session.Run()
 
-	return nil
+	return session, nil
 }

@@ -42,10 +42,10 @@ type GetGroupDataSessionClient struct {
 	onSessionClosed common.SessionClosedCallback
 	signer          comcommon.Signer
 
-	lock              sync.RWMutex
-	stop              chan bool
-	error             error
-	onSuccessCallback common.OnGetGroupKeySuccessCallback
+	lock     sync.RWMutex
+	stop     chan bool
+	error    error
+	resultCh chan tribecrypto.SymmetricKey
 }
 
 // Error returns any errors that may occurred during the session
@@ -60,7 +60,10 @@ func (session *GetGroupDataSessionClient) close() {
 
 // Abort aborts the session
 func (session *GetGroupDataSessionClient) Abort() {
-	if !session.IsAlive() {
+	session.lock.Lock()
+	defer session.lock.Unlock()
+
+	if !session.isAlive() {
 		return
 	}
 
@@ -85,7 +88,11 @@ func (session *GetGroupDataSessionClient) IsAlive() bool {
 	session.lock.RLock()
 	defer session.lock.RUnlock()
 
-	return session.state == common.EndOfSession
+	return session.isAlive()
+}
+
+func (session *GetGroupDataSessionClient) isAlive() bool {
+	return session.state != common.EndOfSession
 }
 
 // Run starts the session
@@ -105,8 +112,8 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 			glog.Infof("client [%d] {%s} [0] --> %s", session.sessionID, session.sender.String(), session.receiver.AccountAddress.String())
 			payload, err := session.groupDataMsg.Encode()
 			if err != nil {
-				session.error = errors.Wrap(err, "could not encoder message payload")
-				session.close()
+				session.error = errors.Wrap(err, "could not encode message payload")
+				glog.Errorf(session.error.Error())
 				return
 			}
 
@@ -121,20 +128,20 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 			)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not create message")
-				session.close()
+				glog.Errorf(session.error.Error())
 				return
 			}
 			glog.Infof("client %d [0][1]", session.sessionID)
 			encMsg, err := msg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encode message")
-				session.close()
+				glog.Errorf(session.error.Error())
 				return
 			}
 			glog.Infof("client %d [0][2]", session.sessionID)
 			if err := session.receiver.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
-				session.close()
+				glog.Errorf(session.error.Error())
 				return
 			}
 			glog.Infof("client %d [0][3]", session.sessionID)
@@ -150,7 +157,7 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 			sig, err := session.signer(data)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not sign challenge")
-				session.close()
+				glog.Errorf(session.error.Error())
 			}
 
 			msg, err := comcommon.NewMessage(
@@ -162,20 +169,20 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 			)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not create message")
-				session.close()
+				glog.Errorf(session.error.Error())
 				return
 			}
 
 			encMsg, err := msg.Encode()
 			if err != nil {
 				session.error = errors.Wrap(err, "could not encode Message")
-				session.close()
+				glog.Errorf(session.error.Error())
 				return
 			}
 
 			if err := session.receiver.Send(encMsg); err != nil {
 				session.error = errors.Wrap(err, "could not send message")
-				session.close()
+				glog.Errorf(session.error.Error())
 				return
 			}
 
@@ -189,16 +196,20 @@ func (session *GetGroupDataSessionClient) NextState(contact *comcommon.Contact, 
 			key, err := tribecrypto.DecodeSymmetricKey(data)
 			if err != nil {
 				session.error = errors.Wrap(err, "could not decode group key")
-				session.close()
+				glog.Errorf(session.error.Error())
 				return
 			}
 
+			glog.Infof("===== 1 =====")
+
 			switch session.groupDataMsg.Data {
 			case comcommon.GetGroupKey:
-				session.onSuccessCallback(session.groupDataMsg.Group.Bytes(), *key)
+				glog.Infof("===== 2 =====")
+				session.resultCh <- *key
 
 			case comcommon.GetProposedGroupKey:
-				session.onSuccessCallback(session.groupDataMsg.Payload, *key)
+				glog.Infof("===== 3 =====, %v, from: %s : %v", session.resultCh, session.receiver.Name, (*key).Key)
+				session.resultCh <- *key
 			}
 
 			session.close()
@@ -222,7 +233,7 @@ func NewGetGroupDataSessionClient(
 	sender ethcommon.Address,
 	signer comcommon.Signer,
 	onSessionClosed common.SessionClosedCallback,
-	onSuccess common.OnGetGroupKeySuccessCallback,
+	resultCh chan tribecrypto.SymmetricKey,
 ) *GetGroupDataSessionClient {
 
 	groupDataMsg := comcommon.GroupDataMessage{
@@ -233,14 +244,14 @@ func NewGetGroupDataSessionClient(
 
 	rand.Seed(time.Now().UTC().UnixNano())
 	return &GetGroupDataSessionClient{
-		sessionID:         rand.Uint32(),
-		groupDataMsg:      groupDataMsg,
-		receiver:          contact,
-		state:             0,
-		sender:            sender,
-		signer:            signer,
-		onSessionClosed:   onSessionClosed,
-		stop:              make(chan bool),
-		onSuccessCallback: onSuccess,
+		sessionID:       rand.Uint32(),
+		groupDataMsg:    groupDataMsg,
+		receiver:        contact,
+		state:           0,
+		sender:          sender,
+		signer:          signer,
+		onSessionClosed: onSessionClosed,
+		stop:            make(chan bool),
+		resultCh:        resultCh,
 	}
 }

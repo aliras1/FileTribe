@@ -321,3 +321,20 @@ func (g *group) SetBoxer(boxer tribecrypto.SymmetricKey) error {
 
 	return nil
 }
+
+func (g* group) CheckBoxer(newBoxer tribecrypto.SymmetricKey) error {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
+	encIpfsHash, err := g.contract.IpfsHash(&bind.CallOpts{Pending:true})
+	if err != nil {
+		return errors.Wrap(err, "could not get the most recent ipfs hash of the group")
+	}
+
+	_, ok := newBoxer.BoxOpen(encIpfsHash)
+	if !ok {
+		return errors.New("could not decrypt encIpfsHash")
+	}
+
+	return nil
+}

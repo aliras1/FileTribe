@@ -19,6 +19,7 @@ package client
 import (
 	"bytes"
 	"encoding/base64"
+	"github.com/aliras1/FileTribe/client/interfaces"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/golang/glog"
@@ -129,99 +130,11 @@ func (groupCtx *GroupContext) onNewConsensus(e *ethgroup.GroupNewConsensus) {
 
 	glog.Infof("stored payload '%v' from: %s", payload, proposer.String())
 	proposalKey := base64.StdEncoding.EncodeToString(payload)
-	groupCtx.proposals.Put(proposalKey, &Proposal{EncIpfsHash:payload, Proposer:proposer})
+	groupCtx.proposals.Put(proposalKey, &interfaces.Proposal{EncIpfsHash:payload, Proposer:proposer})
 
-	// TODO: only ask k' from those that have approved
-	// 1. get those that voted
-	// 2. foreach voter: start a get proposed group key session
-	glog.Infof("my account addr: %s", (groupCtx.account.ContractAddress()).String())
-	glog.Info(groupCtx.Group.MemberOwners())
-
-	// Get proposed key
-	for _, memberOwner := range groupCtx.Group.MemberOwners() {
-		if bytes.Equal(memberOwner.Bytes(), groupCtx.eth.Auth.Address().Bytes()) {
-			continue
-		}
-
-		contact, err := groupCtx.AddressBook.GetFromOwnerAddress(memberOwner)
-		if err != nil {
-			glog.Warningf("could not get contact for member: %s", memberOwner.String())
-			continue
-		}
-
-		if err := groupCtx.P2P.StartGetProposedGroupKeySession(
-			e.Group,
-			[]byte(proposalKey),
-			contact,
-			groupCtx.account.ContractAddress(),
-			groupCtx.onGetProposedKeySuccess,
-		); err != nil {
-			glog.Errorf("could not start get group key session: %s", err)
-		}
-	}
+	groupCtx.getProposedKey(proposalKey)
 }
 
-func (groupCtx *GroupContext) onGetProposedKeySuccess(proposalKey []byte, boxer tribecrypto.SymmetricKey) {
-	// TODO: check if the received key is correct, i.e. the payload can be decrypted
-
-	glog.Infof("GOT proposed key: %v with proposer: %v", boxer.Key, proposalKey)
-
-	proposal := groupCtx.proposals.Get(string(proposalKey)).(*Proposal)
-	if proposal == nil {
-		glog.Errorf("no proposal found to: %v", proposalKey)
-		return
-	}
-
-	encIpfsHash := groupCtx.proposals.Get(string(proposalKey)).(*Proposal).EncIpfsHash
-	if encIpfsHash == nil {
-		glog.Error("payload is nil")
-		return
-	}
-
-	proposerAccount, err := ethAccount.NewAccount(proposal.Proposer, groupCtx.eth.Backend)
-	if err != nil {
-		glog.Errorf("could not get the account of the proposer: %s", err)
-		return
-	}
-
-	proposerOwner, err := proposerAccount.Owner(&bind.CallOpts{Pending: true})
-	if err != nil {
-		glog.Errorf("could not get owner of account: %s", err)
-		return
-	}
-
-	consensusAddress, err := groupCtx.eth.Group.GetConsensus(&bind.CallOpts{Pending: true}, proposerOwner)
-	if err != nil {
-		glog.Errorf("could not get member's consensus: %s", err)
-		return
-	}
-
-	consensus, err := ethcons.NewConsensus(consensusAddress, groupCtx.eth.Backend)
-	if err != nil {
-		glog.Errorf("could not create new consensus instance from eth: %s", err)
-		return
-	}
-
-	ipfsHash, ok := boxer.BoxOpen(encIpfsHash)
-	if !ok {
-		glog.Errorf("could not decrypt consensus payload")
-		return
-	}
-
-	if err := groupCtx.Repo.IsValidChangeSet(string(ipfsHash), boxer, proposal.Proposer); err != nil {
-		glog.Errorf("invalid changeset: %s", err)
-		return
-	}
-
-	proposal.Boxer = boxer
-
-	if err := groupCtx.approveConsensus(consensus); err != nil {
-		glog.Errorf("could not approve consensus: %s", err)
-		return
-	}
-
-	glog.Infof("%s: consensus %s approved", groupCtx.account.Name(), consensusAddress.String())
-}
 
 // HandleIpfsHashChangedEvents listens to IpfsHashChanged events on the blockchain
 // and if it receives one, it updates the group IPFS hash and fetches its contents
@@ -257,44 +170,11 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 
 	glog.Infof("{{{ proposal key: }}}  %s", proposalKey)
 
-	proposal := groupCtx.proposals.Get(proposalKey).(*Proposal)
-	if proposal == nil || tribecrypto.BoxerIsNull(proposal.Boxer) {
-		for _, memberOwner := range groupCtx.Group.MemberOwners() {
-			if bytes.Equal(memberOwner.Bytes(), groupCtx.eth.Auth.Address().Bytes()) {
-				continue
-			}
-
-			contact, err := groupCtx.AddressBook.GetFromOwnerAddress(memberOwner)
-			if err != nil {
-				glog.Warningf("could not get contact for member: %s", memberOwner.String())
-				continue
-			}
-
-			onGetKeySuccess := func(_ []byte, newBoxer tribecrypto.SymmetricKey) {
-				// if already got k' --> return
-				glog.Infof("------> Got new KEY: %v", newBoxer.Key)
-
-				if err := groupCtx.Group.SetBoxer(newBoxer); err != nil {
-					glog.Errorf("could not set new boxer: %s", err)
-					return
-				}
-
-				if err := groupCtx.Update(); err != nil {
-					glog.Errorf("could not update group context: %s", err)
-				}
-			}
-
-			if err := groupCtx.P2P.StartGetGroupKeySession(
-				e.Group,
-				contact,
-				groupCtx.account.ContractAddress(),
-				onGetKeySuccess,
-			); err != nil {
-				glog.Errorf("could not start get group key session: %s", err)
-			}
-		}
+	proposalInt := groupCtx.proposals.Get(proposalKey)
+	if proposalInt == nil || tribecrypto.BoxerIsNull(proposalInt.(*interfaces.Proposal).Boxer) {
+		groupCtx.getKey()
 	} else {
-		if err := groupCtx.Group.SetBoxer(proposal.Boxer); err != nil {
+		if err := groupCtx.Group.SetBoxer(proposalInt.(*interfaces.Proposal).Boxer); err != nil {
 			glog.Errorf("could not set new boxer: %s", err)
 			return
 		}
@@ -302,6 +182,98 @@ func (groupCtx *GroupContext) onIpfsHashChanged(e *ethgroup.GroupIpfsHashChanged
 		if err := groupCtx.Update(); err != nil {
 			glog.Errorf("could not update group context: %s", err)
 		}
+	}
+}
+
+func (groupCtx *GroupContext) HandleKeyEvents() {
+	for e := range groupCtx.keyEventCh {
+		glog.Infof("======= GOT KEY: %v =======", e.Args)
+		key := e.Args.(tribecrypto.SymmetricKey)
+		if tribecrypto.BoxerIsNull(key) {
+			continue
+		}
+
+		currentKey := groupCtx.Group.Boxer()
+		if bytes.Equal(key.Key[:], currentKey.Key[:]) {
+			continue
+		}
+
+		if err := groupCtx.Group.SetBoxer(key); err != nil {
+			glog.Errorf("could not set boxer: %s", err)
+			continue
+		}
+
+		if err := groupCtx.Update(); err != nil {
+			glog.Errorf("could not update group context: %s", err)
+			continue
+		}
+
+		groupCtx.SetStateKeyInvalid(false)
+		e.Sender.Cancel()
+	}
+}
+
+func (groupCtx *GroupContext) HandleProposedKeyEvents() {
+	for e := range groupCtx.proposedKeyEventCh {
+		glog.Infof("%s: ======= GOT PROPOSED KEY: %v =======", groupCtx.account.Name(), e.Args)
+		eventData := e.Args.(interfaces.Proposal)
+
+		// TODO: check if the received key is correct, i.e. the payload can be decrypted
+
+		proposal := groupCtx.proposals.Get(string(eventData.EncIpfsHash)).(*interfaces.Proposal)
+		if proposal == nil {
+			glog.Errorf("no proposal found to: %v", eventData.EncIpfsHash)
+			continue
+		}
+
+		if proposal.EncIpfsHash == nil {
+			glog.Error("payload is nil")
+			continue
+		}
+
+		proposerAccount, err := ethAccount.NewAccount(proposal.Proposer, groupCtx.eth.Backend)
+		if err != nil {
+			glog.Errorf("could not get the account of the proposer: %s", err)
+			continue
+		}
+
+		proposerOwner, err := proposerAccount.Owner(&bind.CallOpts{Pending: true})
+		if err != nil {
+			glog.Errorf("could not get owner of account: %s", err)
+			continue
+		}
+
+		consensusAddress, err := groupCtx.eth.Group.GetConsensus(&bind.CallOpts{Pending: true}, proposerOwner)
+		if err != nil {
+			glog.Errorf("could not get member's consensus: %s", err)
+			continue
+		}
+
+		consensus, err := ethcons.NewConsensus(consensusAddress, groupCtx.eth.Backend)
+		if err != nil {
+			glog.Errorf("could not create new consensus instance from eth: %s", err)
+			continue
+		}
+
+		ipfsHash, ok := eventData.Boxer.BoxOpen(proposal.EncIpfsHash)
+		if !ok {
+			glog.Errorf("could not decrypt consensus payload")
+			continue
+		}
+
+		if err := groupCtx.Repo.IsValidChangeSet(string(ipfsHash), eventData.Boxer, proposal.Proposer); err != nil {
+			glog.Errorf("invalid changeset: %s", err)
+			continue
+		}
+
+		proposal.Boxer = eventData.Boxer
+
+		if err := groupCtx.approveConsensus(consensus); err != nil {
+			glog.Errorf("could not approve consensus: %s", err)
+			continue
+		}
+
+		glog.Infof("%s: consensus %s approved", groupCtx.account.Name(), consensusAddress.String())
 	}
 }
 

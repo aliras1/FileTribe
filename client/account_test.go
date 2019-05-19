@@ -17,6 +17,7 @@
 package client
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	// "crypto/rand"
 	"github.com/ugorji/go/codec"
 	"strings"
@@ -47,7 +48,7 @@ func TestAsd(t *testing.T) {
 func TestBoxing(t *testing.T) {
 	username := "testuser"
 
-	user, _ := NewAccount(username, nil)
+	user, _ := NewAccount(username, common.Address{}, nil)
 
 	message := "Hello friend!"
 	boxer := user.Boxer()

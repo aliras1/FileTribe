@@ -28,7 +28,7 @@ import (
 type OnGetGroupKeySuccessCallback func(proposalKey []byte, boxer tribecrypto.SymmetricKey)
 
 // SessionClosedCallback is called when a session is closed
-type SessionClosedCallback func(session ISession)
+type SessionClosedCallback func(session Session)
 
 // GetGroupDataCallback is used for retrieving group data
 type GetGroupDataCallback func(addr ethcommon.Address) (interfaces.Group, *fs.GroupRepo)

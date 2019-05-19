@@ -14,23 +14,22 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 
-package interfaces
+package asynctask
 
-import (
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
+type Status uint8
 
-	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
-	"github.com/aliras1/FileTribe/tribecrypto"
+const (
+	Finished Status = 0
+	Pending Status = 1
+	Running Status = 2
 )
 
-// Account is a mirror to the account data on the blockchain
-type Account interface {
-	Owner() ethcommon.Address
-	ContractAddress() ethcommon.Address
-	Contract() *ethacc.Account
-	Name() string
-	Boxer() tribecrypto.AnonymBoxer
-	SetContract(addr ethcommon.Address, backend chequebook.Backend) error
-	Save() error
+type Event struct {
+	Sender AsyncTask
+	Args   interface{}
+}
+
+type AsyncTask interface {
+	Execute()
+	Cancel()
 }
