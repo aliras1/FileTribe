@@ -33,7 +33,9 @@ contract Consensus {
 
     function approve() public onlyMembers {
         bytes32 key = keccak256(abi.encodePacked(_id, msg.sender));
-        require(!_memberApproved[key], "member already voted");
+        if (_memberApproved[key]) {
+            return;
+        }
 
         _memberApproved[key] = true;
 

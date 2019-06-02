@@ -83,7 +83,7 @@ contract Group is Ownable {
         address proposer = IConsensus(msg.sender).getProposer();
         address proposerOwner = IAccount(proposer).owner();
 
-        require(isMember(proposerOwner), "Consensus does not belong to the group!");
+        require(_members[proposerOwner].consensus == msg.sender, "Consensus does not belong to the group!");
 
         _ipfsHash = payload;
         _currConsId = id;
