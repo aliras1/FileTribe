@@ -1,0 +1,672 @@
+@startuml
+namespace client {
+    class AccountData << (S,Aquamarine) >> {
+        + Name string
+        + ContractAddress common.Address
+        + Boxer tribecrypto.AnonymBoxer
+        + Owner common.Address
+
+    }
+    class Eth << (S,Aquamarine) >> {
+        + Auth interfaces.Auth
+        + App *FileTribeDApp.FileTribeDApp
+        + Backend bind.ContractBackend
+
+    }
+    class FileView << (S,Aquamarine) >> {
+        + Name string
+        + WriteAccess []MemberView
+
+    }
+    class GroupContext << (S,Aquamarine) >> {
+        - account interfaces.Account
+        - state <font color=blue>map</font>[GroupState]bool
+        - eth *GroupEth
+        - broadcastChannel *ipfs.PubSubSubscription
+        - proposals *Map
+        - proposedKeys *Map
+        - proposedPayloads *Map
+        - subs *List
+        - keyInvalidValueChangedCh <font color=blue>chan</font> bool
+        - stopCh <font color=blue>chan</font> <font color=blue>struct</font>{}
+        - keyEventCh <font color=blue>chan</font> *asynctask.Event
+        - proposedKeyEventCh <font color=blue>chan</font> *asynctask.Event
+        - lock sync.Mutex
+
+        + Group interfaces.Group
+        + P2P *communication.P2PManager
+        + Repo *fs.GroupRepo
+        + GroupConnection *communication.GroupConnection
+        + AddressBook *common.AddressBook
+        + Ipfs ipfs.IIpfs
+        + Storage *fs.Storage
+        + Transactions *List
+
+        - onNewConsensus(e *Group.GroupNewConsensus) 
+        - onIpfsHashChanged(e *Group.GroupIpfsHashChanged) 
+        - handleStateKeyInvalid() 
+        - getKey() 
+        - getProposedKey(proposalKey string) 
+        - startGetKey(encNewIpfsHash []byte) error
+        - broadcast(msg []byte) error
+        - p2pBroadcast(msg []byte) error
+        - approveConsensus(cons *Consensus.Consensus) error
+
+        + HandleGroupInvitationSentEvents(group *Group.Group) 
+        + HandleGroupInvitationAcceptedEvents(group *Group.Group) 
+        + HandleNewConsensusEvents(group *Group.Group) 
+        + HandleIpfsHashChangedEvents(group *Group.Group) 
+        + HandleKeyEvents() 
+        + HandleProposedKeyEvents() 
+        + HandleDebugEvents(group *Group.Group) 
+        + HandleDebugConsEvents(cons *Consensus.Consensus) 
+        + SetStateKeyInvalid(value bool) 
+        + Update() error
+        + UpdateGroupKey() 
+        + Leave() error
+        + Stop() 
+        + CommitChanges() error
+        + Invite(newMember common.Address, hasInviteRight bool) error
+        + Save() error
+        + GrantWriteAccess(filePath string, accountAddress common.Address) error
+        + RevokeWriteAccess(filePath string, user common.Address) error
+        + Address() common.Address
+        + Name() string
+        + ListFiles() []FileView
+        + ListMembers() []MemberView
+
+    }
+    class GroupContextConfig << (S,Aquamarine) >> {
+        + Group interfaces.Group
+        + Account interfaces.Account
+        + P2P *communication.P2PManager
+        + AddressBook *common.AddressBook
+        + Eth *GroupEth
+        + Ipfs ipfs.IIpfs
+        + Storage *fs.Storage
+        + Transactions *List
+
+    }
+    class GroupEth << (S,Aquamarine) >> {
+        + Group *Group.Group
+
+    }
+    interface IGroupFacade  {
+        + Address() common.Address
+        + Name() string
+        + GrantWriteAccess(filePath string, user common.Address) error
+        + RevokeWriteAccess(filePath string, user common.Address) error
+        + CommitChanges() error
+        + Invite(user common.Address, hasInviteRigth bool) error
+        + Leave() error
+        + ListFiles() []FileView
+        + ListMembers() []MemberView
+
+    }
+    interface IUserFacade  {
+        + SignUp(username string) error
+        + CreateGroup(groupname string) error
+        + AcceptInvitation(groupAddress common.Address) error
+        + User() interfaces.Account
+        + Groups() []IGroupFacade
+        + SignOut() 
+        + Transactions() ([]*types.Transaction, error)
+
+    }
+    class MemberView << (S,Aquamarine) >> {
+        + Name string
+        + Address string
+
+    }
+    class StateTransition << (S,Aquamarine) >> {
+        + State GroupState
+        + Value bool
+
+    }
+    class UserContext << (S,Aquamarine) >> {
+        - account interfaces.Account
+        - eth *Eth
+        - groups *Map
+        - addressBook *common.AddressBook
+        - ipfs ipfs.IIpfs
+        - storage *fs.Storage
+        - p2p *communication.P2PManager
+        - p2pPort string
+        - transactions *List
+        - invitations *List
+        - subs *List
+        - channelStop <font color=blue>chan</font> int
+        - lock sync.RWMutex
+
+        - disposeGroup(groupAddr common.Address) error
+        - onAccountCreated(e *FileTribeDApp.FileTribeDAppAccountCreated) 
+        - onGroupInvitation(e *Account.AccountNewInvitation) 
+        - onInvitationAccepted(e *Account.AccountInvitationAccepted) 
+        - onGetKeySuccess(groupAddressBytes []byte, boxer tribecrypto.SymmetricKey) 
+        - onGroupCreated(e *Account.AccountGroupCreated) 
+
+        + SignUp(username string) error
+        + IsMember(group common.Address, accountOwner common.Address) error
+        + GetBoxerOfGroup(group common.Address) (tribecrypto.SymmetricKey, error)
+        + GetProposedBoxerOfGroup(group common.Address, proposalKey []byte) (tribecrypto.SymmetricKey, error)
+        + Init(acc interfaces.Account) error
+        + User() interfaces.Account
+        + Save() error
+        + SignOut() 
+        + BuildGroups() error
+        + CreateGroup(groupname string) error
+        + AcceptInvitation(groupAddress common.Address) error
+        + Groups() []IGroupFacade
+        + ListFiles() <font color=blue>map</font>[string][]string
+        + Transactions() ([]*types.Transaction, error)
+        + HandleAccountCreatedEvents(app *FileTribeDApp.FileTribeDApp) 
+        + HandleGroupInvitationEvents(acc *Account.Account) 
+        + HandleInvitationAcceptedEvents(acc *Account.Account) 
+        + HandleGroupCreatedEvents(acc *Account.Account) 
+
+    }
+    class account << (S,Aquamarine) >> {
+        - data *AccountData
+        - contract *Account.Account
+        - storage *fs.Storage
+
+        + Owner() common.Address
+        + ContractAddress() common.Address
+        + Name() string
+        + Boxer() tribecrypto.AnonymBoxer
+        + Contract() *Account.Account
+        + SetContract(address common.Address, backend bind.ContractBackend) error
+        + Save() error
+
+    }
+    class auth << (S,Aquamarine) >> {
+        - wallet *go-ethereum-hdwallet.Wallet
+        - account accounts.Account
+        - txOpts *bind.TransactOpts
+
+        + Sign(hash []byte) ([]byte, error)
+        + Address() common.Address
+        + TxOpts() *bind.TransactOpts
+
+    }
+    class client.GroupState << (T, #FF7700) >>  {
+    }
+    class group << (S,Aquamarine) >> {
+        - data *interfaces.GroupData
+        - lock sync.RWMutex
+        - storage *fs.Storage
+        - contract *Group.Group
+
+        - isMember(memberOwner common.Address) bool
+
+        + Save() error
+        + SetIpfsHash(encIpfsHash []byte) error
+        + Update() error
+        + IsMember(memberOwner common.Address) bool
+        + AddMember(accountOwner common.Address) 
+        + RemoveMember(account common.Address) 
+        + MemberOwners() []common.Address
+        + CountMembers() int
+        + Address() common.Address
+        + Name() string
+        + IpfsHash() string
+        + EncryptedIpfsHash() []byte
+        + Boxer() tribecrypto.SymmetricKey
+        + SetBoxer(boxer tribecrypto.SymmetricKey) error
+        + CheckBoxer(newBoxer tribecrypto.SymmetricKey) error
+
+    }
+}
+"client.Eth" *-- "client.GroupEth"
+
+"client.IGroupFacade" <|-- "client.GroupContext"
+"client.IUserFacade" <|-- "client.UserContext"
+"common.CtxCallback" <|-- "client.UserContext"
+"interfaces.Account" <|-- "client.account"
+"interfaces.Auth" <|-- "client.auth"
+"interfaces.Group" <|-- "client.group"
+
+namespace clients {
+    class GetGroupDataSessionClient << (S,Aquamarine) >> {
+        - sessionID uint32
+        - state uint8
+        - receiver *common.Contact
+        - groupDataMsg common.GroupDataMessage
+        - sender common.Address
+        - onSessionClosed common.SessionClosedCallback
+        - signer common.Signer
+        - lock sync.RWMutex
+        - stop <font color=blue>chan</font> bool
+        - error error
+        - resultCh <font color=blue>chan</font> tribecrypto.SymmetricKey
+
+        - close() 
+        - isAlive() bool
+
+        + Error() error
+        + Abort() 
+        + State() uint8
+        + ID() uint32
+        + IsAlive() bool
+        + Run() 
+        + NextState(contact *common.Contact, data []byte) 
+
+    }
+}
+
+"common.Session" <|-- "clients.GetGroupDataSessionClient"
+
+namespace common {
+    class AddressBook << (S,Aquamarine) >> {
+        - accountToContactMap *collections.Map
+        - backend chequebook.Backend
+        - app *FileTribeDApp.FileTribeDApp
+        - ipfs ipfs.IIpfs
+
+        - getContactFromEth(accountAddress common.Address) (*Contact, error)
+
+        + GetFromAccountAddress(accountAddress common.Address) (*Contact, error)
+        + GetFromOwnerAddress(ownerAddress common.Address) (*Contact, error)
+
+    }
+    class Contact << (S,Aquamarine) >> {
+        - conn *P2PConn
+        - ipfs ipfs.IIpfs
+
+        + AccountAddress common.Address
+        + OwnerAddress common.Address
+        + Name string
+        + IpfsPeerID string
+        + Boxer tribecrypto.AnonymPublicKey
+
+        - dialP2PConn(ipfs ipfs.IIpfs) (*P2PConn, error)
+
+        + Send(data []byte) error
+        + VerifySignature(digest []byte, signature []byte) bool
+
+    }
+    interface CtxCallback  {
+        + IsMember(group common.Address, account common.Address) error
+        + GetBoxerOfGroup(group common.Address) (tribecrypto.SymmetricKey, error)
+        + GetProposedBoxerOfGroup(group common.Address, proposalKey []byte) (tribecrypto.SymmetricKey, error)
+
+    }
+    class GroupDataMessage << (S,Aquamarine) >> {
+        + Group common.Address
+        + Data GroupData
+        + Payload []byte
+
+        + Encode() ([]byte, error)
+
+    }
+    class HeartBeat << (S,Aquamarine) >> {
+        + From string
+        + Rand []byte
+
+    }
+    class Message << (S,Aquamarine) >> {
+        + From common.Address
+        + Type MessageType
+        + SessionID uint32
+        + Payload []byte
+        + Sig []byte
+
+        + Encode() ([]byte, error)
+        + Verify(contact *Contact) error
+        + Digest() []byte
+
+    }
+    class P2PConn << (S,Aquamarine) >> {
+        + ReadMessage(addressBook *AddressBook) ([]*Message, error)
+
+    }
+    interface Session  {
+        + ID() uint32
+        + IsAlive() bool
+        + Abort() 
+        + NextState(contact *common.Contact, data []byte) 
+        + State() uint8
+        + Run() 
+        + Error() error
+
+    }
+    class common.Broadcast << (T, #FF7700) >>  {
+    }
+    class common.GetGroupDataCallback << (T, #FF7700) >>  {
+    }
+    class common.GroupData << (T, #FF7700) >>  {
+    }
+    class common.MessageType << (T, #FF7700) >>  {
+    }
+    class common.OnGetGroupKeySuccessCallback << (T, #FF7700) >>  {
+    }
+    class common.P2PConn << (T, #FF7700) >>  {
+    }
+    class common.SessionClosedCallback << (T, #FF7700) >>  {
+    }
+    class common.Signer << (T, #FF7700) >>  {
+    }
+    class "net.TCPConn" as netTCPConn {
+        'This class was created so that we can correctly have an alias pointing to this name. Since it contains dots that can break namespaces
+    }
+    class "<font color=blue>func</font>([]byte, tribecrypto.SymmetricKey) " as fontcolorbluefuncfontbytetribecryptoSymmetricKey {
+        'This class was created so that we can correctly have an alias pointing to this name. Since it contains dots that can break namespaces
+    }
+    class "<font color=blue>func</font>(common.Address) (interfaces.Group, *fs.GroupRepo)" as fontcolorbluefuncfontcommonAddressinterfacesGroupfsGroupRepo {
+        'This class was created so that we can correctly have an alias pointing to this name. Since it contains dots that can break namespaces
+    }
+}
+
+
+namespace communication {
+    class GroupConnection << (S,Aquamarine) >> {
+        - group interfaces.Group
+        - repo *fs.GroupRepo
+        - account interfaces.Account
+        - addressBook *common.AddressBook
+        - sessionClosed common.SessionClosedCallback
+        - p2p *P2PManager
+        - ipfs ipfs.IIpfs
+        - channelState <font color=blue>chan</font> []byte
+        - channelStop <font color=blue>chan</font> bool
+        - groupSubscription ipfs.IPubSubSubscription
+
+        - connectionListener() 
+
+        + Broadcast(msg []byte) error
+        + Kill() 
+
+    }
+    class P2PManager << (S,Aquamarine) >> {
+        - account interfaces.Account
+        - signer common.Signer
+        - sessions *Map
+        - messagesCh <font color=blue>chan</font> *common.Message
+        - addressBook *common.AddressBook
+        - p2pListener *ipfs.P2PListener
+        - ctxCallback common.CtxCallback
+        - stop <font color=blue>chan</font> <font color=blue>struct</font>{}
+        - stopConnection <font color=blue>chan</font> <font color=blue>struct</font>{}
+        - ipfs ipfs.IIpfs
+
+        - connectionListener(port string) 
+        - handleConnection(conn *common.P2PConn) 
+        - handleMassages() 
+        - onSessionClosed(session common.Session) 
+
+        + AddSession(session common.Session) 
+        + Stop() 
+        + StartGetGroupKeySession(group common.Address, receiverOwner common.Address, sender common.Address, resultCh <font color=blue>chan</font> tribecrypto.SymmetricKey) (common.Session, error)
+        + StartGetProposedGroupKeySession(group common.Address, proposalKey []byte, receiverOwner common.Address, sender common.Address, resultCh <font color=blue>chan</font> tribecrypto.SymmetricKey) (common.Session, error)
+
+    }
+}
+
+
+namespace fs {
+    class Cache << (S,Aquamarine) >> {
+        - data <font color=blue>map</font>[string]string
+        - storage *Storage
+
+        - save() error
+        - encode() ([]byte, error)
+        - path() string
+
+        + Put(key string, value string) error
+        + Get(key string) (string, bool)
+
+    }
+    class DiffNode << (S,Aquamarine) >> {
+        + Hash []byte
+        + Diff []diffmatchpatch.Diff
+        + Next string
+        + NextBoxer tribecrypto.FileBoxer
+
+        + Encode() ([]byte, error)
+        + Encrypt(boxer tribecrypto.FileBoxer) (io.Reader, error)
+
+    }
+    class File << (S,Aquamarine) >> {
+        - lock sync.RWMutex
+
+        + Meta *meta.FileMeta
+        + PendingChanges *meta.FileMeta
+        + DataPath string
+        + MetaPath string
+        + OrigPath string
+
+        - diff(boxer tribecrypto.FileBoxer) (*DiffNode, error)
+
+        + Update(fileMeta *meta.FileMeta, storage *Storage, ipfs ipfs.IIpfs) error
+        + Download(storage *Storage, ipfs ipfs.IIpfs) 
+        + SaveMetadata() error
+        + GrantWriteAccess(user common.Address, target common.Address) error
+        + RevokeWriteAccess(user common.Address, target common.Address) error
+        + UploadDiff(ipfs ipfs.IIpfs) (string, error)
+
+    }
+    class GroupRepo << (S,Aquamarine) >> {
+        - files *Map
+        - group interfaces.Group
+        - ipfs ipfs.IIpfs
+        - storage *Storage
+        - user common.Address
+        - ipfsHash string
+        - lock sync.RWMutex
+
+        - getPendingChanges() ([]*meta.FileMeta, error)
+        - getFileMetas() []*meta.FileMeta
+        - isDiffNodeValid(file *File, newBoxer tribecrypto.FileBoxer, newIpfsHash string) error
+        - getGroupFileMetasFromIpfs(ipfsHash string, boxer tribecrypto.SymmetricKey) ([]*meta.FileMeta, error)
+
+        + IpfsHash() string
+        + Get(fileName string) *File
+        + Files() []*File
+        + CommitChanges(boxer tribecrypto.SymmetricKey) (string, error)
+        + IsValidChangeSet(newIpfsHash string, boxer tribecrypto.SymmetricKey, address common.Address) error
+        + Update(newIpfsHash string) error
+
+    }
+    interface IFile  {
+        + Share() 
+
+    }
+    class Storage << (S,Aquamarine) >> {
+        - basePath string
+        - dataPath string
+        - publicPath string
+        - publicFilesPath string
+        - publicForPath string
+        - userDataPath string
+        - metasPath string
+        - origPath string
+        - metasGAPath string
+        - fileRootPath string
+        - sharedPath string
+        - tmpPath string
+        - myFilesPath string
+        - ipfsFilesPath string
+        - contextDataPath string
+
+        + Init(username string) 
+        + UserFilesPath() string
+        + CopyFileIntoPublicDir(filePath string) error
+        + CopyFileIntoMyFiles(filePath string) (string, error)
+        + CopyFileIntoGroupFiles(filePath string, groupName string) error
+        + SaveAccountData(data []byte) error
+        + LoadAccountData() ([]byte, error)
+        + GetGroupDatas() ([]*interfaces.GroupData, error)
+        + GetGroupFileMetas(groupAddress string) ([]*meta.FileMeta, error)
+        + SaveGroupData(data []byte, groupAddress string) error
+        + GroupMetaDir() string
+        + GroupFileMetaDir(id string) string
+        + GroupFileOrigDir(id string) string
+        + GroupFileDataDir(groupName string) string
+        + MakeGroupDir(name string, address string) 
+        + DownloadTmpFile(ipfsHash string, ipfs ipfs.IIpfs) (string, error)
+        + DownloadAndDecryptWithSymmetricKey(boxer tribecrypto.SymmetricKey, ipfsHash string, ipfs ipfs.IIpfs) ([]byte, error)
+        + DownloadAndDecryptWithFileBoxer(boxer tribecrypto.FileBoxer, ipfsHash string, ipfs ipfs.IIpfs) ([]byte, error)
+
+    }
+}
+
+
+namespace interfaces {
+    interface Account  {
+        + Owner() common.Address
+        + ContractAddress() common.Address
+        + Contract() *Account.Account
+        + Name() string
+        + Boxer() tribecrypto.AnonymBoxer
+        + SetContract(addr common.Address, backend bind.ContractBackend) error
+        + Save() error
+
+    }
+    interface Auth  {
+        + Address() common.Address
+        + TxOpts() *bind.TransactOpts
+        + Sign(hash []byte) ([]byte, error)
+
+    }
+    interface Group  {
+        + Address() common.Address
+        + Name() string
+        + IpfsHash() string
+        + SetIpfsHash(encIpfsHash []byte) error
+        + EncryptedIpfsHash() []byte
+        + AddMember(user common.Address) 
+        + RemoveMember(user common.Address) 
+        + IsMember(user common.Address) bool
+        + CountMembers() int
+        + MemberOwners() []common.Address
+        + Boxer() tribecrypto.SymmetricKey
+        + CheckBoxer(newBoxer tribecrypto.SymmetricKey) error
+        + SetBoxer(boxer tribecrypto.SymmetricKey) error
+        + Update() error
+        + Save() error
+
+    }
+    class GroupData << (S,Aquamarine) >> {
+        + Address common.Address
+        + Name string
+        + IpfsHash string
+        + EncryptedIpfsHash []byte
+        + MemberOwners []common.Address
+        + Boxer tribecrypto.SymmetricKey
+
+    }
+    class Proposal << (S,Aquamarine) >> {
+        + Proposer common.Address
+        + Version uint64
+        + EncIpfsHash []byte
+        + Boxer tribecrypto.SymmetricKey
+
+    }
+}
+
+
+namespace meta {
+    class FileMeta << (S,Aquamarine) >> {
+        + FileName string
+        + IpfsHash string
+        + DataKey tribecrypto.FileBoxer
+        + WriteAccessList []common.Address
+
+        + Equal(other *FileMeta) bool
+        + Encode() ([]byte, error)
+
+    }
+    class GroupMeta << (S,Aquamarine) >> {
+        + Address common.Address
+        + Boxer tribecrypto.SymmetricKey
+
+        + Encode() ([]byte, error)
+
+    }
+}
+
+
+namespace servers {
+    class GetGroupDataSessionServer << (S,Aquamarine) >> {
+        - sessionID uint32
+        - state uint8
+        - contact *common.Contact
+        - sender common.Address
+        - groupDataMsg common.GroupDataMessage
+        - callback common.CtxCallback
+        - signer common.Signer
+        - challenge []byte
+        - onSessionClosed common.SessionClosedCallback
+        - lock sync.RWMutex
+        - stop <font color=blue>chan</font> bool
+        - error error
+        - keyType common.MessageType
+
+        - close() 
+        - isAlive() bool
+
+        + Error() error
+        + State() uint8
+        + ID() uint32
+        + Abort() 
+        + IsAlive() bool
+        + Run() 
+        + NextState(contact *common.Contact, data []byte) 
+
+    }
+}
+
+"common.Session" <|-- "servers.GetGroupDataSessionServer"
+
+namespace tasks {
+    class getKeyAsyncTask << (S,Aquamarine) >> {
+        - account interfaces.Account
+        - group interfaces.Group
+        - p2p *communication.P2PManager
+        - sessions []common.Session
+        - eventCh <font color=blue>chan</font> *asynctask.Event
+        - keyCh <font color=blue>chan</font> tribecrypto.SymmetricKey
+        - stopCh <font color=blue>chan</font> <font color=blue>struct</font>{}
+        - status asynctask.Status
+        - lock sync.Mutex
+
+        - execute() 
+        - cleanUp() 
+
+        + Execute() 
+        + Cancel() 
+
+    }
+    class getProposalKeyAsyncTask << (S,Aquamarine) >> {
+        - account interfaces.Account
+        - group interfaces.Group
+        - proposalKey []byte
+        - p2p *communication.P2PManager
+        - sessions []common.Session
+        - eventCh <font color=blue>chan</font> *asynctask.Event
+        - keyCh <font color=blue>chan</font> tribecrypto.SymmetricKey
+        - stopCh <font color=blue>chan</font> <font color=blue>struct</font>{}
+        - status asynctask.Status
+        - lock sync.Mutex
+
+        - execute() 
+        - isBoxerValid(proposedBoxer tribecrypto.SymmetricKey) error
+        - cleanUp() 
+
+        + Execute() 
+        + Cancel() 
+
+    }
+}
+
+
+"__builtin__.byte" #.. "common.GroupData"
+"__builtin__.byte" #.. "common.MessageType"
+"__builtin__.int" #.. "client.GroupState"
+"common.<font color=blue>func</font>(Session) " #.. "common.SessionClosedCallback"
+"common.<font color=blue>func</font>([]byte) ([]byte, error)" #.. "common.Signer"
+"common.<font color=blue>func</font>([]byte) error" #.. "common.Broadcast"
+"common.fontcolorbluefuncfontbytetribecryptoSymmetricKey" #.. "common.OnGetGroupKeySuccessCallback"
+"common.fontcolorbluefuncfontcommonAddressinterfacesGroupfsGroupRepo" #.. "common.GetGroupDataCallback"
+"common.netTCPConn" #.. "common.P2PConn"
+@enduml

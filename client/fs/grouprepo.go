@@ -23,7 +23,6 @@ import (
 	"sync"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
@@ -236,42 +235,10 @@ func (repo *GroupRepo) IsValidChangeSet(newIpfsHash string, boxer tribecrypto.Sy
 			return errors.New("member has no write access")
 		}
 
-		// check if new DiffNode is correct
-		if err := repo.isDiffNodeValid(file, newMeta.DataKey, newMeta.IpfsHash); err != nil {
-			return errors.Wrap(err, "invalid new DiffNode")
+		// check if new IPFS hash is correct
+		if err := file.IsNewIpfsHashValid(newMeta.DataKey, newMeta.IpfsHash, repo.storage, repo.ipfs); err != nil {
+			return errors.Wrap(err, "invalid new IPFS hash")
 		}
-	}
-
-	return nil
-}
-
-func (repo *GroupRepo) isDiffNodeValid(file *File, newBoxer tribecrypto.FileBoxer, newIpfsHash string) error {
-	repo.lock.RLock()
-	defer repo.lock.RUnlock()
-
-	data, err := repo.storage.DownloadAndDecryptWithFileBoxer(newBoxer, newIpfsHash, repo.ipfs)
-	if err != nil {
-		return errors.Wrap(err, "could not download and decrypt new diff node")
-	}
-
-	newDiff, err := DecodeDiffNode(data)
-	if err != nil {
-		return errors.Wrap(err, "could not decode new DiffNode")
-	}
-
-	if strings.Compare(newDiff.Next, file.Meta.IpfsHash) != 0 {
-		return errors.New("next ipfs hash is not the current ipfs hash")
-	}
-
-	fileData, err := ioutil.ReadFile(file.OrigPath)
-	if err != nil {
-		return errors.Wrap(err, "could not read orig file")
-	}
-
-	hash := ethcrypto.Keccak256(fileData)
-
-	if !bytes.Equal(newDiff.Hash, hash) {
-		return errors.New("new diff prev hash does not match with current hash")
 	}
 
 	return nil

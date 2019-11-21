@@ -19,11 +19,12 @@ package client
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"github.com/aliras1/FileTribe/asynctask"
-	"github.com/aliras1/FileTribe/client/tasks"
 	"path"
 	"sync"
 	"time"
+
+	"github.com/aliras1/FileTribe/asynctask"
+	"github.com/aliras1/FileTribe/client/tasks"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -141,7 +142,7 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 		keyInvalidValueChangedCh: make(chan bool),
 		stopCh:                   make(chan struct{}),
 		keyEventCh:               make(chan *asynctask.Event, 1000),
-		proposedKeyEventCh:		  make(chan *asynctask.Event, 1000),
+		proposedKeyEventCh:       make(chan *asynctask.Event, 1000),
 	}
 
 	repo, err := fs.NewGroupRepo(config.Group, config.Account.ContractAddress(), config.Storage, config.Ipfs)
@@ -169,6 +170,9 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 	go groupContext.HandleKeyEvents()
 	go groupContext.HandleProposedKeyEvents()
 
+	go groupContext.StartHeartbeat()
+	go groupContext.HandleHeartbeats()
+
 	return groupContext, nil
 }
 
@@ -183,7 +187,7 @@ func (groupCtx *GroupContext) SetStateKeyInvalid(value bool) {
 func (groupCtx *GroupContext) handleStateKeyInvalid() {
 	for {
 		select {
-		case value := <- groupCtx.keyInvalidValueChangedCh:
+		case value := <-groupCtx.keyInvalidValueChangedCh:
 			glog.Infof("/////// changed to: %v", value)
 			if groupCtx.state[KeyInvalid] != value {
 				groupCtx.state[KeyInvalid] = value
@@ -192,12 +196,12 @@ func (groupCtx *GroupContext) handleStateKeyInvalid() {
 				groupCtx.getKey()
 			}
 
-		case <- time.After(5 * time.Second):
+		case <-time.After(5 * time.Second):
 			if groupCtx.state[KeyInvalid] {
 				groupCtx.getKey()
 			}
 
-		case <- groupCtx.stopCh:
+		case <-groupCtx.stopCh:
 			// todo: handle stop
 		}
 	}
@@ -295,7 +299,7 @@ func (groupCtx *GroupContext) CommitChanges() error {
 	proposalKey := base64.StdEncoding.EncodeToString(encIpfsHash)
 
 	proposer := groupCtx.account.ContractAddress()
-	groupCtx.proposals.Put(proposalKey, &interfaces.Proposal{Proposer:proposer, Boxer:newKey, EncIpfsHash:encIpfsHash})
+	groupCtx.proposals.Put(proposalKey, &interfaces.Proposal{Proposer: proposer, Boxer: newKey, EncIpfsHash: encIpfsHash})
 
 	tx, err := groupCtx.eth.Group.Commit(groupCtx.eth.Auth.TxOpts(), encIpfsHash)
 	if err != nil {

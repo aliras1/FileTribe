@@ -20,7 +20,6 @@ import (
 	"crypto/ecdsa"
 	"flag"
 	"fmt"
-	"github.com/aliras1/FileTribe/test"
 	"io/ioutil"
 	"math/big"
 	"testing"
@@ -39,6 +38,7 @@ import (
 	"github.com/aliras1/FileTribe/eth/gen/factory/ConsensusFactory"
 	"github.com/aliras1/FileTribe/eth/gen/factory/GroupFactory"
 	ipfsapi "github.com/aliras1/FileTribe/ipfs"
+	"github.com/aliras1/FileTribe/client/interfaces"
 )
 
 func NewEthAccount(ethKeyPath, password string) (*ecdsa.PrivateKey, error) {
@@ -165,7 +165,7 @@ func NewTestCtx(username string, signup bool, keyPath string, sim *backends.Simu
 		}
 	}
 
-	auth, err := test.NewAuthFake(keyPath, "pwd")
+	auth, err := NewAuthFake(keyPath, "pwd")
 	if err != nil {
 		panic(fmt.Sprintf("could not load account key data: NewNetwork: %s", err))
 	}
@@ -191,6 +191,10 @@ func NewTestCtx(username string, signup bool, keyPath string, sim *backends.Simu
 	}
 
 	return ctx, nil
+}
+
+func NewAuthFake(keyPath string, password string) (interfaces.Auth, error) {
+
 }
 
 func TestUserContext_SignUp(t *testing.T) {

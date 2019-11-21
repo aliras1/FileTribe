@@ -22,7 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/miguelmota/go-ethereum-hdwallet"
+	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 	"github.com/pkg/errors"
 )
 

@@ -1,0 +1,708 @@
+<?xml version="1.0" encoding="UTF-8"?><XMI xmlns:UML="href://org.omg/UML/1.3" xmi.version="1.1">
+<XMI.header>
+<XMI.metamodel xmi.name="UML" xmi.version="1.3"/>
+</XMI.header>
+<XMI.content>
+<UML:Model name="PlantUML" xmi.id="model1">
+<UML:Namespace.ownedElement>
+<UML:Class name="AccountData" namespace="client" xmi.id="cl0003">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Name string" visibility="public" xmi.id="att102"/>
+<UML:Attribute name="ContractAddress common.Address" visibility="public" xmi.id="att103"/>
+<UML:Attribute name="Boxer tribecrypto.AnonymBoxer" visibility="public" xmi.id="att104"/>
+<UML:Attribute name="Owner common.Address" visibility="public" xmi.id="att105"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="Eth" namespace="client" xmi.id="cl0004">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Auth interfaces.Auth" visibility="public" xmi.id="att106"/>
+<UML:Attribute name="App *FileTribeDApp.FileTribeDApp" visibility="public" xmi.id="att107"/>
+<UML:Attribute name="Backend bind.ContractBackend" visibility="public" xmi.id="att108"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="FileView" namespace="client" xmi.id="cl0005">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Name string" visibility="public" xmi.id="att109"/>
+<UML:Attribute name="WriteAccess []MemberView" visibility="public" xmi.id="att110"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GroupContext" namespace="client" xmi.id="cl0006">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="account interfaces.Account" visibility="private" xmi.id="att111"/>
+<UML:Attribute name="state &lt;font color=blue&gt;map&lt;/font&gt;[GroupState]bool" visibility="private" xmi.id="att112"/>
+<UML:Attribute name="eth *GroupEth" visibility="private" xmi.id="att113"/>
+<UML:Attribute name="broadcastChannel *ipfs.PubSubSubscription" visibility="private" xmi.id="att114"/>
+<UML:Attribute name="proposals *Map" visibility="private" xmi.id="att115"/>
+<UML:Attribute name="proposedKeys *Map" visibility="private" xmi.id="att116"/>
+<UML:Attribute name="proposedPayloads *Map" visibility="private" xmi.id="att117"/>
+<UML:Attribute name="subs *List" visibility="private" xmi.id="att118"/>
+<UML:Attribute name="keyInvalidValueChangedCh &lt;font color=blue&gt;chan&lt;/font&gt; bool" visibility="private" xmi.id="att119"/>
+<UML:Attribute name="stopCh &lt;font color=blue&gt;chan&lt;/font&gt; &lt;font color=blue&gt;struct&lt;/font&gt;{}" visibility="private" xmi.id="att120"/>
+<UML:Attribute name="keyEventCh &lt;font color=blue&gt;chan&lt;/font&gt; *asynctask.Event" visibility="private" xmi.id="att121"/>
+<UML:Attribute name="proposedKeyEventCh &lt;font color=blue&gt;chan&lt;/font&gt; *asynctask.Event" visibility="private" xmi.id="att122"/>
+<UML:Attribute name="lock sync.Mutex" visibility="private" xmi.id="att123"/>
+<UML:Attribute name=" " xmi.id="att124"/>
+<UML:Attribute name="Group interfaces.Group" visibility="public" xmi.id="att125"/>
+<UML:Attribute name="P2P *communication.P2PManager" visibility="public" xmi.id="att126"/>
+<UML:Attribute name="Repo *fs.GroupRepo" visibility="public" xmi.id="att127"/>
+<UML:Attribute name="GroupConnection *communication.GroupConnection" visibility="public" xmi.id="att128"/>
+<UML:Attribute name="AddressBook *common.AddressBook" visibility="public" xmi.id="att129"/>
+<UML:Attribute name="Ipfs ipfs.IIpfs" visibility="public" xmi.id="att130"/>
+<UML:Attribute name="Storage *fs.Storage" visibility="public" xmi.id="att131"/>
+<UML:Attribute name="Transactions *List" visibility="public" xmi.id="att132"/>
+<UML:Operation name="onNewConsensus(e *Group.GroupNewConsensus)" visibility="private" xmi.id="att133"/>
+<UML:Operation name="onIpfsHashChanged(e *Group.GroupIpfsHashChanged)" visibility="private" xmi.id="att134"/>
+<UML:Operation name="handleStateKeyInvalid()" visibility="private" xmi.id="att135"/>
+<UML:Operation name="getKey()" visibility="private" xmi.id="att136"/>
+<UML:Operation name="getProposedKey(proposalKey string)" visibility="private" xmi.id="att137"/>
+<UML:Operation name="startGetKey(encNewIpfsHash []byte) error" visibility="private" xmi.id="att138"/>
+<UML:Operation name="broadcast(msg []byte) error" visibility="private" xmi.id="att139"/>
+<UML:Operation name="p2pBroadcast(msg []byte) error" visibility="private" xmi.id="att140"/>
+<UML:Operation name="approveConsensus(cons *Consensus.Consensus) error" visibility="private" xmi.id="att141"/>
+<UML:Operation name=" " xmi.id="att142"/>
+<UML:Operation name="HandleGroupInvitationSentEvents(group *Group.Group)" visibility="public" xmi.id="att143"/>
+<UML:Operation name="HandleGroupInvitationAcceptedEvents(group *Group.Group)" visibility="public" xmi.id="att144"/>
+<UML:Operation name="HandleNewConsensusEvents(group *Group.Group)" visibility="public" xmi.id="att145"/>
+<UML:Operation name="HandleIpfsHashChangedEvents(group *Group.Group)" visibility="public" xmi.id="att146"/>
+<UML:Operation name="HandleKeyEvents()" visibility="public" xmi.id="att147"/>
+<UML:Operation name="HandleProposedKeyEvents()" visibility="public" xmi.id="att148"/>
+<UML:Operation name="HandleDebugEvents(group *Group.Group)" visibility="public" xmi.id="att149"/>
+<UML:Operation name="HandleDebugConsEvents(cons *Consensus.Consensus)" visibility="public" xmi.id="att150"/>
+<UML:Operation name="SetStateKeyInvalid(value bool)" visibility="public" xmi.id="att151"/>
+<UML:Operation name="Update() error" visibility="public" xmi.id="att152"/>
+<UML:Operation name="UpdateGroupKey()" visibility="public" xmi.id="att153"/>
+<UML:Operation name="Leave() error" visibility="public" xmi.id="att154"/>
+<UML:Operation name="Stop()" visibility="public" xmi.id="att155"/>
+<UML:Operation name="CommitChanges() error" visibility="public" xmi.id="att156"/>
+<UML:Operation name="Invite(newMember common.Address, hasInviteRight bool) error" visibility="public" xmi.id="att157"/>
+<UML:Operation name="Save() error" visibility="public" xmi.id="att158"/>
+<UML:Operation name="GrantWriteAccess(filePath string, accountAddress common.Address) error" visibility="public" xmi.id="att159"/>
+<UML:Operation name="RevokeWriteAccess(filePath string, user common.Address) error" visibility="public" xmi.id="att160"/>
+<UML:Operation name="Address() common.Address" visibility="public" xmi.id="att161"/>
+<UML:Operation name="Name() string" visibility="public" xmi.id="att162"/>
+<UML:Operation name="ListFiles() []FileView" visibility="public" xmi.id="att163"/>
+<UML:Operation name="ListMembers() []MemberView" visibility="public" xmi.id="att164"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GroupContextConfig" namespace="client" xmi.id="cl0007">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Group interfaces.Group" visibility="public" xmi.id="att165"/>
+<UML:Attribute name="Account interfaces.Account" visibility="public" xmi.id="att166"/>
+<UML:Attribute name="P2P *communication.P2PManager" visibility="public" xmi.id="att167"/>
+<UML:Attribute name="AddressBook *common.AddressBook" visibility="public" xmi.id="att168"/>
+<UML:Attribute name="Eth *GroupEth" visibility="public" xmi.id="att169"/>
+<UML:Attribute name="Ipfs ipfs.IIpfs" visibility="public" xmi.id="att170"/>
+<UML:Attribute name="Storage *fs.Storage" visibility="public" xmi.id="att171"/>
+<UML:Attribute name="Transactions *List" visibility="public" xmi.id="att172"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GroupEth" namespace="client" xmi.id="cl0008">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Group *Group.Group" visibility="public" xmi.id="att173"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class isInterface="true" name="IGroupFacade" namespace="client" xmi.id="cl0009">
+<UML:Classifier.feature>
+<UML:Operation name="Address() common.Address" visibility="public" xmi.id="att174"/>
+<UML:Operation name="Name() string" visibility="public" xmi.id="att175"/>
+<UML:Operation name="GrantWriteAccess(filePath string, user common.Address) error" visibility="public" xmi.id="att176"/>
+<UML:Operation name="RevokeWriteAccess(filePath string, user common.Address) error" visibility="public" xmi.id="att177"/>
+<UML:Operation name="CommitChanges() error" visibility="public" xmi.id="att178"/>
+<UML:Operation name="Invite(user common.Address, hasInviteRigth bool) error" visibility="public" xmi.id="att179"/>
+<UML:Operation name="Leave() error" visibility="public" xmi.id="att180"/>
+<UML:Operation name="ListFiles() []FileView" visibility="public" xmi.id="att181"/>
+<UML:Operation name="ListMembers() []MemberView" visibility="public" xmi.id="att182"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class isInterface="true" name="IUserFacade" namespace="client" xmi.id="cl0010">
+<UML:Classifier.feature>
+<UML:Operation name="SignUp(username string) error" visibility="public" xmi.id="att183"/>
+<UML:Operation name="CreateGroup(groupname string) error" visibility="public" xmi.id="att184"/>
+<UML:Operation name="AcceptInvitation(groupAddress common.Address) error" visibility="public" xmi.id="att185"/>
+<UML:Operation name="User() interfaces.Account" visibility="public" xmi.id="att186"/>
+<UML:Operation name="Groups() []IGroupFacade" visibility="public" xmi.id="att187"/>
+<UML:Operation name="SignOut()" visibility="public" xmi.id="att188"/>
+<UML:Operation name="Transactions() ([]*types.Transaction, error)" visibility="public" xmi.id="att189"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="MemberView" namespace="client" xmi.id="cl0011">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Name string" visibility="public" xmi.id="att190"/>
+<UML:Attribute name="Address string" visibility="public" xmi.id="att191"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="StateTransition" namespace="client" xmi.id="cl0012">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="State GroupState" visibility="public" xmi.id="att192"/>
+<UML:Attribute name="Value bool" visibility="public" xmi.id="att193"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="UserContext" namespace="client" xmi.id="cl0013">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="account interfaces.Account" visibility="private" xmi.id="att194"/>
+<UML:Attribute name="eth *Eth" visibility="private" xmi.id="att195"/>
+<UML:Attribute name="groups *Map" visibility="private" xmi.id="att196"/>
+<UML:Attribute name="addressBook *common.AddressBook" visibility="private" xmi.id="att197"/>
+<UML:Attribute name="ipfs ipfs.IIpfs" visibility="private" xmi.id="att198"/>
+<UML:Attribute name="storage *fs.Storage" visibility="private" xmi.id="att199"/>
+<UML:Attribute name="p2p *communication.P2PManager" visibility="private" xmi.id="att200"/>
+<UML:Attribute name="p2pPort string" visibility="private" xmi.id="att201"/>
+<UML:Attribute name="transactions *List" visibility="private" xmi.id="att202"/>
+<UML:Attribute name="invitations *List" visibility="private" xmi.id="att203"/>
+<UML:Attribute name="subs *List" visibility="private" xmi.id="att204"/>
+<UML:Attribute name="channelStop &lt;font color=blue&gt;chan&lt;/font&gt; int" visibility="private" xmi.id="att205"/>
+<UML:Attribute name="lock sync.RWMutex" visibility="private" xmi.id="att206"/>
+<UML:Operation name="disposeGroup(groupAddr common.Address) error" visibility="private" xmi.id="att207"/>
+<UML:Operation name="onAccountCreated(e *FileTribeDApp.FileTribeDAppAccountCreated)" visibility="private" xmi.id="att208"/>
+<UML:Operation name="onGroupInvitation(e *Account.AccountNewInvitation)" visibility="private" xmi.id="att209"/>
+<UML:Operation name="onInvitationAccepted(e *Account.AccountInvitationAccepted)" visibility="private" xmi.id="att210"/>
+<UML:Operation name="onGetKeySuccess(groupAddressBytes []byte, boxer tribecrypto.SymmetricKey)" visibility="private" xmi.id="att211"/>
+<UML:Operation name="onGroupCreated(e *Account.AccountGroupCreated)" visibility="private" xmi.id="att212"/>
+<UML:Operation name=" " xmi.id="att213"/>
+<UML:Operation name="SignUp(username string) error" visibility="public" xmi.id="att214"/>
+<UML:Operation name="IsMember(group common.Address, accountOwner common.Address) error" visibility="public" xmi.id="att215"/>
+<UML:Operation name="GetBoxerOfGroup(group common.Address) (tribecrypto.SymmetricKey, error)" visibility="public" xmi.id="att216"/>
+<UML:Operation name="GetProposedBoxerOfGroup(group common.Address, proposalKey []byte) (tribecrypto.SymmetricKey, error)" visibility="public" xmi.id="att217"/>
+<UML:Operation name="Init(acc interfaces.Account) error" visibility="public" xmi.id="att218"/>
+<UML:Operation name="User() interfaces.Account" visibility="public" xmi.id="att219"/>
+<UML:Operation name="Save() error" visibility="public" xmi.id="att220"/>
+<UML:Operation name="SignOut()" visibility="public" xmi.id="att221"/>
+<UML:Operation name="BuildGroups() error" visibility="public" xmi.id="att222"/>
+<UML:Operation name="CreateGroup(groupname string) error" visibility="public" xmi.id="att223"/>
+<UML:Operation name="AcceptInvitation(groupAddress common.Address) error" visibility="public" xmi.id="att224"/>
+<UML:Operation name="Groups() []IGroupFacade" visibility="public" xmi.id="att225"/>
+<UML:Operation name="ListFiles() &lt;font color=blue&gt;map&lt;/font&gt;[string][]string" visibility="public" xmi.id="att226"/>
+<UML:Operation name="Transactions() ([]*types.Transaction, error)" visibility="public" xmi.id="att227"/>
+<UML:Operation name="HandleAccountCreatedEvents(app *FileTribeDApp.FileTribeDApp)" visibility="public" xmi.id="att228"/>
+<UML:Operation name="HandleGroupInvitationEvents(acc *Account.Account)" visibility="public" xmi.id="att229"/>
+<UML:Operation name="HandleInvitationAcceptedEvents(acc *Account.Account)" visibility="public" xmi.id="att230"/>
+<UML:Operation name="HandleGroupCreatedEvents(acc *Account.Account)" visibility="public" xmi.id="att231"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="account" namespace="client" xmi.id="cl0014">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="data *AccountData" visibility="private" xmi.id="att232"/>
+<UML:Attribute name="contract *Account.Account" visibility="private" xmi.id="att233"/>
+<UML:Attribute name="storage *fs.Storage" visibility="private" xmi.id="att234"/>
+<UML:Operation name="Owner() common.Address" visibility="public" xmi.id="att235"/>
+<UML:Operation name="ContractAddress() common.Address" visibility="public" xmi.id="att236"/>
+<UML:Operation name="Name() string" visibility="public" xmi.id="att237"/>
+<UML:Operation name="Boxer() tribecrypto.AnonymBoxer" visibility="public" xmi.id="att238"/>
+<UML:Operation name="Contract() *Account.Account" visibility="public" xmi.id="att239"/>
+<UML:Operation name="SetContract(address common.Address, backend bind.ContractBackend) error" visibility="public" xmi.id="att240"/>
+<UML:Operation name="Save() error" visibility="public" xmi.id="att241"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="auth" namespace="client" xmi.id="cl0015">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="wallet *go-ethereum-hdwallet.Wallet" visibility="private" xmi.id="att242"/>
+<UML:Attribute name="account accounts.Account" visibility="private" xmi.id="att243"/>
+<UML:Attribute name="txOpts *bind.TransactOpts" visibility="private" xmi.id="att244"/>
+<UML:Operation name="Sign(hash []byte) ([]byte, error)" visibility="public" xmi.id="att245"/>
+<UML:Operation name="Address() common.Address" visibility="public" xmi.id="att246"/>
+<UML:Operation name="TxOpts() *bind.TransactOpts" visibility="public" xmi.id="att247"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GroupState" namespace="client" xmi.id="cl0016">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="group" namespace="client" xmi.id="cl0017">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="data *interfaces.GroupData" visibility="private" xmi.id="att248"/>
+<UML:Attribute name="lock sync.RWMutex" visibility="private" xmi.id="att249"/>
+<UML:Attribute name="storage *fs.Storage" visibility="private" xmi.id="att250"/>
+<UML:Attribute name="contract *Group.Group" visibility="private" xmi.id="att251"/>
+<UML:Operation name="isMember(memberOwner common.Address) bool" visibility="private" xmi.id="att252"/>
+<UML:Operation name=" " xmi.id="att253"/>
+<UML:Operation name="Save() error" visibility="public" xmi.id="att254"/>
+<UML:Operation name="SetIpfsHash(encIpfsHash []byte) error" visibility="public" xmi.id="att255"/>
+<UML:Operation name="Update() error" visibility="public" xmi.id="att256"/>
+<UML:Operation name="IsMember(memberOwner common.Address) bool" visibility="public" xmi.id="att257"/>
+<UML:Operation name="AddMember(accountOwner common.Address)" visibility="public" xmi.id="att258"/>
+<UML:Operation name="RemoveMember(account common.Address)" visibility="public" xmi.id="att259"/>
+<UML:Operation name="MemberOwners() []common.Address" visibility="public" xmi.id="att260"/>
+<UML:Operation name="CountMembers() int" visibility="public" xmi.id="att261"/>
+<UML:Operation name="Address() common.Address" visibility="public" xmi.id="att262"/>
+<UML:Operation name="Name() string" visibility="public" xmi.id="att263"/>
+<UML:Operation name="IpfsHash() string" visibility="public" xmi.id="att264"/>
+<UML:Operation name="EncryptedIpfsHash() []byte" visibility="public" xmi.id="att265"/>
+<UML:Operation name="Boxer() tribecrypto.SymmetricKey" visibility="public" xmi.id="att266"/>
+<UML:Operation name="SetBoxer(boxer tribecrypto.SymmetricKey) error" visibility="public" xmi.id="att267"/>
+<UML:Operation name="CheckBoxer(newBoxer tribecrypto.SymmetricKey) error" visibility="public" xmi.id="att268"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class isInterface="true" name="CtxCallback" namespace="common" xmi.id="cl0022">
+<UML:Classifier.feature>
+<UML:Operation name="IsMember(group common.Address, account common.Address) error" visibility="public" xmi.id="att269"/>
+<UML:Operation name="GetBoxerOfGroup(group common.Address) (tribecrypto.SymmetricKey, error)" visibility="public" xmi.id="att270"/>
+<UML:Operation name="GetProposedBoxerOfGroup(group common.Address, proposalKey []byte) (tribecrypto.SymmetricKey, error)" visibility="public" xmi.id="att271"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class isInterface="true" name="Account" namespace="interfaces" xmi.id="cl0025">
+<UML:Classifier.feature>
+<UML:Operation name="Owner() common.Address" visibility="public" xmi.id="att272"/>
+<UML:Operation name="ContractAddress() common.Address" visibility="public" xmi.id="att273"/>
+<UML:Operation name="Contract() *Account.Account" visibility="public" xmi.id="att274"/>
+<UML:Operation name="Name() string" visibility="public" xmi.id="att275"/>
+<UML:Operation name="Boxer() tribecrypto.AnonymBoxer" visibility="public" xmi.id="att276"/>
+<UML:Operation name="SetContract(addr common.Address, backend bind.ContractBackend) error" visibility="public" xmi.id="att277"/>
+<UML:Operation name="Save() error" visibility="public" xmi.id="att278"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class isInterface="true" name="Auth" namespace="interfaces" xmi.id="cl0027">
+<UML:Classifier.feature>
+<UML:Operation name="Address() common.Address" visibility="public" xmi.id="att279"/>
+<UML:Operation name="TxOpts() *bind.TransactOpts" visibility="public" xmi.id="att280"/>
+<UML:Operation name="Sign(hash []byte) ([]byte, error)" visibility="public" xmi.id="att281"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class isInterface="true" name="Group" namespace="interfaces" xmi.id="cl0029">
+<UML:Classifier.feature>
+<UML:Operation name="Address() common.Address" visibility="public" xmi.id="att282"/>
+<UML:Operation name="Name() string" visibility="public" xmi.id="att283"/>
+<UML:Operation name="IpfsHash() string" visibility="public" xmi.id="att284"/>
+<UML:Operation name="SetIpfsHash(encIpfsHash []byte) error" visibility="public" xmi.id="att285"/>
+<UML:Operation name="EncryptedIpfsHash() []byte" visibility="public" xmi.id="att286"/>
+<UML:Operation name="AddMember(user common.Address)" visibility="public" xmi.id="att287"/>
+<UML:Operation name="RemoveMember(user common.Address)" visibility="public" xmi.id="att288"/>
+<UML:Operation name="IsMember(user common.Address) bool" visibility="public" xmi.id="att289"/>
+<UML:Operation name="CountMembers() int" visibility="public" xmi.id="att290"/>
+<UML:Operation name="MemberOwners() []common.Address" visibility="public" xmi.id="att291"/>
+<UML:Operation name="Boxer() tribecrypto.SymmetricKey" visibility="public" xmi.id="att292"/>
+<UML:Operation name="CheckBoxer(newBoxer tribecrypto.SymmetricKey) error" visibility="public" xmi.id="att293"/>
+<UML:Operation name="SetBoxer(boxer tribecrypto.SymmetricKey) error" visibility="public" xmi.id="att294"/>
+<UML:Operation name="Update() error" visibility="public" xmi.id="att295"/>
+<UML:Operation name="Save() error" visibility="public" xmi.id="att296"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GetGroupDataSessionClient" namespace="clients" xmi.id="cl0032">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="sessionID uint32" visibility="private" xmi.id="att297"/>
+<UML:Attribute name="state uint8" visibility="private" xmi.id="att298"/>
+<UML:Attribute name="receiver *common.Contact" visibility="private" xmi.id="att299"/>
+<UML:Attribute name="groupDataMsg common.GroupDataMessage" visibility="private" xmi.id="att300"/>
+<UML:Attribute name="sender common.Address" visibility="private" xmi.id="att301"/>
+<UML:Attribute name="onSessionClosed common.SessionClosedCallback" visibility="private" xmi.id="att302"/>
+<UML:Attribute name="signer common.Signer" visibility="private" xmi.id="att303"/>
+<UML:Attribute name="lock sync.RWMutex" visibility="private" xmi.id="att304"/>
+<UML:Attribute name="stop &lt;font color=blue&gt;chan&lt;/font&gt; bool" visibility="private" xmi.id="att305"/>
+<UML:Attribute name="error error" visibility="private" xmi.id="att306"/>
+<UML:Attribute name="resultCh &lt;font color=blue&gt;chan&lt;/font&gt; tribecrypto.SymmetricKey" visibility="private" xmi.id="att307"/>
+<UML:Operation name="close()" visibility="private" xmi.id="att308"/>
+<UML:Operation name="isAlive() bool" visibility="private" xmi.id="att309"/>
+<UML:Operation name=" " xmi.id="att310"/>
+<UML:Operation name="Error() error" visibility="public" xmi.id="att311"/>
+<UML:Operation name="Abort()" visibility="public" xmi.id="att312"/>
+<UML:Operation name="State() uint8" visibility="public" xmi.id="att313"/>
+<UML:Operation name="ID() uint32" visibility="public" xmi.id="att314"/>
+<UML:Operation name="IsAlive() bool" visibility="public" xmi.id="att315"/>
+<UML:Operation name="Run()" visibility="public" xmi.id="att316"/>
+<UML:Operation name="NextState(contact *common.Contact, data []byte)" visibility="public" xmi.id="att317"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class isInterface="true" name="Session" namespace="common" xmi.id="cl0033">
+<UML:Classifier.feature>
+<UML:Operation name="ID() uint32" visibility="public" xmi.id="att318"/>
+<UML:Operation name="IsAlive() bool" visibility="public" xmi.id="att319"/>
+<UML:Operation name="Abort()" visibility="public" xmi.id="att320"/>
+<UML:Operation name="NextState(contact *common.Contact, data []byte)" visibility="public" xmi.id="att321"/>
+<UML:Operation name="State() uint8" visibility="public" xmi.id="att322"/>
+<UML:Operation name="Run()" visibility="public" xmi.id="att323"/>
+<UML:Operation name="Error() error" visibility="public" xmi.id="att324"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="AddressBook" namespace="common" xmi.id="cl0035">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="accountToContactMap *collections.Map" visibility="private" xmi.id="att325"/>
+<UML:Attribute name="backend chequebook.Backend" visibility="private" xmi.id="att326"/>
+<UML:Attribute name="app *FileTribeDApp.FileTribeDApp" visibility="private" xmi.id="att327"/>
+<UML:Attribute name="ipfs ipfs.IIpfs" visibility="private" xmi.id="att328"/>
+<UML:Operation name="getContactFromEth(accountAddress common.Address) (*Contact, error)" visibility="private" xmi.id="att329"/>
+<UML:Operation name=" " xmi.id="att330"/>
+<UML:Operation name="GetFromAccountAddress(accountAddress common.Address) (*Contact, error)" visibility="public" xmi.id="att331"/>
+<UML:Operation name="GetFromOwnerAddress(ownerAddress common.Address) (*Contact, error)" visibility="public" xmi.id="att332"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="Contact" namespace="common" xmi.id="cl0036">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="conn *P2PConn" visibility="private" xmi.id="att333"/>
+<UML:Attribute name="ipfs ipfs.IIpfs" visibility="private" xmi.id="att334"/>
+<UML:Attribute name=" " xmi.id="att335"/>
+<UML:Attribute name="AccountAddress common.Address" visibility="public" xmi.id="att336"/>
+<UML:Attribute name="OwnerAddress common.Address" visibility="public" xmi.id="att337"/>
+<UML:Attribute name="Name string" visibility="public" xmi.id="att338"/>
+<UML:Attribute name="IpfsPeerID string" visibility="public" xmi.id="att339"/>
+<UML:Attribute name="Boxer tribecrypto.AnonymPublicKey" visibility="public" xmi.id="att340"/>
+<UML:Operation name="dialP2PConn(ipfs ipfs.IIpfs) (*P2PConn, error)" visibility="private" xmi.id="att341"/>
+<UML:Operation name=" " xmi.id="att342"/>
+<UML:Operation name="Send(data []byte) error" visibility="public" xmi.id="att343"/>
+<UML:Operation name="VerifySignature(digest []byte, signature []byte) bool" visibility="public" xmi.id="att344"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GroupDataMessage" namespace="common" xmi.id="cl0037">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Group common.Address" visibility="public" xmi.id="att345"/>
+<UML:Attribute name="Data GroupData" visibility="public" xmi.id="att346"/>
+<UML:Attribute name="Payload []byte" visibility="public" xmi.id="att347"/>
+<UML:Operation name="Encode() ([]byte, error)" visibility="public" xmi.id="att348"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="HeartBeat" namespace="common" xmi.id="cl0038">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="From string" visibility="public" xmi.id="att349"/>
+<UML:Attribute name="Rand []byte" visibility="public" xmi.id="att350"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="Message" namespace="common" xmi.id="cl0039">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="From common.Address" visibility="public" xmi.id="att351"/>
+<UML:Attribute name="Type MessageType" visibility="public" xmi.id="att352"/>
+<UML:Attribute name="SessionID uint32" visibility="public" xmi.id="att353"/>
+<UML:Attribute name="Payload []byte" visibility="public" xmi.id="att354"/>
+<UML:Attribute name="Sig []byte" visibility="public" xmi.id="att355"/>
+<UML:Operation name="Encode() ([]byte, error)" visibility="public" xmi.id="att356"/>
+<UML:Operation name="Verify(contact *Contact) error" visibility="public" xmi.id="att357"/>
+<UML:Operation name="Digest() []byte" visibility="public" xmi.id="att358"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="P2PConn" namespace="common" xmi.id="cl0040">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Operation name="ReadMessage(addressBook *AddressBook) ([]*Message, error)" visibility="public" xmi.id="att359"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="Broadcast" namespace="common" xmi.id="cl0041">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="GetGroupDataCallback" namespace="common" xmi.id="cl0042">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="GroupData" namespace="common" xmi.id="cl0043">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="MessageType" namespace="common" xmi.id="cl0044">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="OnGetGroupKeySuccessCallback" namespace="common" xmi.id="cl0045">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="SessionClosedCallback" namespace="common" xmi.id="cl0046">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="Signer" namespace="common" xmi.id="cl0047">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="net.TCPConn" namespace="common" xmi.id="cl0048">
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="&lt;font color=blue&gt;func&lt;/font&gt;([]byte, tribecrypto.SymmetricKey) " namespace="common" xmi.id="cl0049">
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="&lt;font color=blue&gt;func&lt;/font&gt;(common.Address) (interfaces.Group, *fs.GroupRepo)" namespace="common" xmi.id="cl0050">
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="GroupConnection" namespace="communication" xmi.id="cl0052">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="group interfaces.Group" visibility="private" xmi.id="att360"/>
+<UML:Attribute name="repo *fs.GroupRepo" visibility="private" xmi.id="att361"/>
+<UML:Attribute name="account interfaces.Account" visibility="private" xmi.id="att362"/>
+<UML:Attribute name="addressBook *common.AddressBook" visibility="private" xmi.id="att363"/>
+<UML:Attribute name="sessionClosed common.SessionClosedCallback" visibility="private" xmi.id="att364"/>
+<UML:Attribute name="p2p *P2PManager" visibility="private" xmi.id="att365"/>
+<UML:Attribute name="ipfs ipfs.IIpfs" visibility="private" xmi.id="att366"/>
+<UML:Attribute name="channelState &lt;font color=blue&gt;chan&lt;/font&gt; []byte" visibility="private" xmi.id="att367"/>
+<UML:Attribute name="channelStop &lt;font color=blue&gt;chan&lt;/font&gt; bool" visibility="private" xmi.id="att368"/>
+<UML:Attribute name="groupSubscription ipfs.IPubSubSubscription" visibility="private" xmi.id="att369"/>
+<UML:Operation name="connectionListener()" visibility="private" xmi.id="att370"/>
+<UML:Operation name=" " xmi.id="att371"/>
+<UML:Operation name="Broadcast(msg []byte) error" visibility="public" xmi.id="att372"/>
+<UML:Operation name="Kill()" visibility="public" xmi.id="att373"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="P2PManager" namespace="communication" xmi.id="cl0053">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="account interfaces.Account" visibility="private" xmi.id="att374"/>
+<UML:Attribute name="signer common.Signer" visibility="private" xmi.id="att375"/>
+<UML:Attribute name="sessions *Map" visibility="private" xmi.id="att376"/>
+<UML:Attribute name="messagesCh &lt;font color=blue&gt;chan&lt;/font&gt; *common.Message" visibility="private" xmi.id="att377"/>
+<UML:Attribute name="addressBook *common.AddressBook" visibility="private" xmi.id="att378"/>
+<UML:Attribute name="p2pListener *ipfs.P2PListener" visibility="private" xmi.id="att379"/>
+<UML:Attribute name="ctxCallback common.CtxCallback" visibility="private" xmi.id="att380"/>
+<UML:Attribute name="stop &lt;font color=blue&gt;chan&lt;/font&gt; &lt;font color=blue&gt;struct&lt;/font&gt;{}" visibility="private" xmi.id="att381"/>
+<UML:Attribute name="stopConnection &lt;font color=blue&gt;chan&lt;/font&gt; &lt;font color=blue&gt;struct&lt;/font&gt;{}" visibility="private" xmi.id="att382"/>
+<UML:Attribute name="ipfs ipfs.IIpfs" visibility="private" xmi.id="att383"/>
+<UML:Operation name="connectionListener(port string)" visibility="private" xmi.id="att384"/>
+<UML:Operation name="handleConnection(conn *common.P2PConn)" visibility="private" xmi.id="att385"/>
+<UML:Operation name="handleMassages()" visibility="private" xmi.id="att386"/>
+<UML:Operation name="onSessionClosed(session common.Session)" visibility="private" xmi.id="att387"/>
+<UML:Operation name=" " xmi.id="att388"/>
+<UML:Operation name="AddSession(session common.Session)" visibility="public" xmi.id="att389"/>
+<UML:Operation name="Stop()" visibility="public" xmi.id="att390"/>
+<UML:Operation name="StartGetGroupKeySession(group common.Address, receiverOwner common.Address, sender common.Address, resultCh &lt;font color=blue&gt;chan&lt;/font&gt; tribecrypto.SymmetricKey) (common.Session, error)" visibility="public" xmi.id="att391"/>
+<UML:Operation name="StartGetProposedGroupKeySession(group common.Address, proposalKey []byte, receiverOwner common.Address, sender common.Address, resultCh &lt;font color=blue&gt;chan&lt;/font&gt; tribecrypto.SymmetricKey) (common.Session, error)" visibility="public" xmi.id="att392"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="Cache" namespace="fs" xmi.id="cl0055">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="data &lt;font color=blue&gt;map&lt;/font&gt;[string]string" visibility="private" xmi.id="att393"/>
+<UML:Attribute name="storage *Storage" visibility="private" xmi.id="att394"/>
+<UML:Operation name="save() error" visibility="private" xmi.id="att395"/>
+<UML:Operation name="encode() ([]byte, error)" visibility="private" xmi.id="att396"/>
+<UML:Operation name="path() string" visibility="private" xmi.id="att397"/>
+<UML:Operation name=" " xmi.id="att398"/>
+<UML:Operation name="Put(key string, value string) error" visibility="public" xmi.id="att399"/>
+<UML:Operation name="Get(key string) (string, bool)" visibility="public" xmi.id="att400"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="DiffNode" namespace="fs" xmi.id="cl0056">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Hash []byte" visibility="public" xmi.id="att401"/>
+<UML:Attribute name="Diff []diffmatchpatch.Diff" visibility="public" xmi.id="att402"/>
+<UML:Attribute name="Next string" visibility="public" xmi.id="att403"/>
+<UML:Attribute name="NextBoxer tribecrypto.FileBoxer" visibility="public" xmi.id="att404"/>
+<UML:Operation name="Encode() ([]byte, error)" visibility="public" xmi.id="att405"/>
+<UML:Operation name="Encrypt(boxer tribecrypto.FileBoxer) (io.Reader, error)" visibility="public" xmi.id="att406"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="File" namespace="fs" xmi.id="cl0057">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="lock sync.RWMutex" visibility="private" xmi.id="att407"/>
+<UML:Attribute name=" " xmi.id="att408"/>
+<UML:Attribute name="Meta *meta.FileMeta" visibility="public" xmi.id="att409"/>
+<UML:Attribute name="PendingChanges *meta.FileMeta" visibility="public" xmi.id="att410"/>
+<UML:Attribute name="DataPath string" visibility="public" xmi.id="att411"/>
+<UML:Attribute name="MetaPath string" visibility="public" xmi.id="att412"/>
+<UML:Attribute name="OrigPath string" visibility="public" xmi.id="att413"/>
+<UML:Operation name="diff(boxer tribecrypto.FileBoxer) (*DiffNode, error)" visibility="private" xmi.id="att414"/>
+<UML:Operation name=" " xmi.id="att415"/>
+<UML:Operation name="Update(fileMeta *meta.FileMeta, storage *Storage, ipfs ipfs.IIpfs) error" visibility="public" xmi.id="att416"/>
+<UML:Operation name="Download(storage *Storage, ipfs ipfs.IIpfs)" visibility="public" xmi.id="att417"/>
+<UML:Operation name="SaveMetadata() error" visibility="public" xmi.id="att418"/>
+<UML:Operation name="GrantWriteAccess(user common.Address, target common.Address) error" visibility="public" xmi.id="att419"/>
+<UML:Operation name="RevokeWriteAccess(user common.Address, target common.Address) error" visibility="public" xmi.id="att420"/>
+<UML:Operation name="UploadDiff(ipfs ipfs.IIpfs) (string, error)" visibility="public" xmi.id="att421"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GroupRepo" namespace="fs" xmi.id="cl0058">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="files *Map" visibility="private" xmi.id="att422"/>
+<UML:Attribute name="group interfaces.Group" visibility="private" xmi.id="att423"/>
+<UML:Attribute name="ipfs ipfs.IIpfs" visibility="private" xmi.id="att424"/>
+<UML:Attribute name="storage *Storage" visibility="private" xmi.id="att425"/>
+<UML:Attribute name="user common.Address" visibility="private" xmi.id="att426"/>
+<UML:Attribute name="ipfsHash string" visibility="private" xmi.id="att427"/>
+<UML:Attribute name="lock sync.RWMutex" visibility="private" xmi.id="att428"/>
+<UML:Operation name="getPendingChanges() ([]*meta.FileMeta, error)" visibility="private" xmi.id="att429"/>
+<UML:Operation name="getFileMetas() []*meta.FileMeta" visibility="private" xmi.id="att430"/>
+<UML:Operation name="isDiffNodeValid(file *File, newBoxer tribecrypto.FileBoxer, newIpfsHash string) error" visibility="private" xmi.id="att431"/>
+<UML:Operation name="getGroupFileMetasFromIpfs(ipfsHash string, boxer tribecrypto.SymmetricKey) ([]*meta.FileMeta, error)" visibility="private" xmi.id="att432"/>
+<UML:Operation name=" " xmi.id="att433"/>
+<UML:Operation name="IpfsHash() string" visibility="public" xmi.id="att434"/>
+<UML:Operation name="Get(fileName string) *File" visibility="public" xmi.id="att435"/>
+<UML:Operation name="Files() []*File" visibility="public" xmi.id="att436"/>
+<UML:Operation name="CommitChanges(boxer tribecrypto.SymmetricKey) (string, error)" visibility="public" xmi.id="att437"/>
+<UML:Operation name="IsValidChangeSet(newIpfsHash string, boxer tribecrypto.SymmetricKey, address common.Address) error" visibility="public" xmi.id="att438"/>
+<UML:Operation name="Update(newIpfsHash string) error" visibility="public" xmi.id="att439"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class isInterface="true" name="IFile" namespace="fs" xmi.id="cl0059">
+<UML:Classifier.feature>
+<UML:Operation name="Share()" visibility="public" xmi.id="att440"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="Storage" namespace="fs" xmi.id="cl0060">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="basePath string" visibility="private" xmi.id="att441"/>
+<UML:Attribute name="dataPath string" visibility="private" xmi.id="att442"/>
+<UML:Attribute name="publicPath string" visibility="private" xmi.id="att443"/>
+<UML:Attribute name="publicFilesPath string" visibility="private" xmi.id="att444"/>
+<UML:Attribute name="publicForPath string" visibility="private" xmi.id="att445"/>
+<UML:Attribute name="userDataPath string" visibility="private" xmi.id="att446"/>
+<UML:Attribute name="metasPath string" visibility="private" xmi.id="att447"/>
+<UML:Attribute name="origPath string" visibility="private" xmi.id="att448"/>
+<UML:Attribute name="metasGAPath string" visibility="private" xmi.id="att449"/>
+<UML:Attribute name="fileRootPath string" visibility="private" xmi.id="att450"/>
+<UML:Attribute name="sharedPath string" visibility="private" xmi.id="att451"/>
+<UML:Attribute name="tmpPath string" visibility="private" xmi.id="att452"/>
+<UML:Attribute name="myFilesPath string" visibility="private" xmi.id="att453"/>
+<UML:Attribute name="ipfsFilesPath string" visibility="private" xmi.id="att454"/>
+<UML:Attribute name="contextDataPath string" visibility="private" xmi.id="att455"/>
+<UML:Operation name="Init(username string)" visibility="public" xmi.id="att456"/>
+<UML:Operation name="UserFilesPath() string" visibility="public" xmi.id="att457"/>
+<UML:Operation name="CopyFileIntoPublicDir(filePath string) error" visibility="public" xmi.id="att458"/>
+<UML:Operation name="CopyFileIntoMyFiles(filePath string) (string, error)" visibility="public" xmi.id="att459"/>
+<UML:Operation name="CopyFileIntoGroupFiles(filePath string, groupName string) error" visibility="public" xmi.id="att460"/>
+<UML:Operation name="SaveAccountData(data []byte) error" visibility="public" xmi.id="att461"/>
+<UML:Operation name="LoadAccountData() ([]byte, error)" visibility="public" xmi.id="att462"/>
+<UML:Operation name="GetGroupDatas() ([]*interfaces.GroupData, error)" visibility="public" xmi.id="att463"/>
+<UML:Operation name="GetGroupFileMetas(groupAddress string) ([]*meta.FileMeta, error)" visibility="public" xmi.id="att464"/>
+<UML:Operation name="SaveGroupData(data []byte, groupAddress string) error" visibility="public" xmi.id="att465"/>
+<UML:Operation name="GroupMetaDir() string" visibility="public" xmi.id="att466"/>
+<UML:Operation name="GroupFileMetaDir(id string) string" visibility="public" xmi.id="att467"/>
+<UML:Operation name="GroupFileOrigDir(id string) string" visibility="public" xmi.id="att468"/>
+<UML:Operation name="GroupFileDataDir(groupName string) string" visibility="public" xmi.id="att469"/>
+<UML:Operation name="MakeGroupDir(name string, address string)" visibility="public" xmi.id="att470"/>
+<UML:Operation name="DownloadTmpFile(ipfsHash string, ipfs ipfs.IIpfs) (string, error)" visibility="public" xmi.id="att471"/>
+<UML:Operation name="DownloadAndDecryptWithSymmetricKey(boxer tribecrypto.SymmetricKey, ipfsHash string, ipfs ipfs.IIpfs) ([]byte, error)" visibility="public" xmi.id="att472"/>
+<UML:Operation name="DownloadAndDecryptWithFileBoxer(boxer tribecrypto.FileBoxer, ipfsHash string, ipfs ipfs.IIpfs) ([]byte, error)" visibility="public" xmi.id="att473"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GroupData" namespace="interfaces" xmi.id="cl0061">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Address common.Address" visibility="public" xmi.id="att474"/>
+<UML:Attribute name="Name string" visibility="public" xmi.id="att475"/>
+<UML:Attribute name="IpfsHash string" visibility="public" xmi.id="att476"/>
+<UML:Attribute name="EncryptedIpfsHash []byte" visibility="public" xmi.id="att477"/>
+<UML:Attribute name="MemberOwners []common.Address" visibility="public" xmi.id="att478"/>
+<UML:Attribute name="Boxer tribecrypto.SymmetricKey" visibility="public" xmi.id="att479"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="Proposal" namespace="interfaces" xmi.id="cl0062">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Proposer common.Address" visibility="public" xmi.id="att480"/>
+<UML:Attribute name="Version uint64" visibility="public" xmi.id="att481"/>
+<UML:Attribute name="EncIpfsHash []byte" visibility="public" xmi.id="att482"/>
+<UML:Attribute name="Boxer tribecrypto.SymmetricKey" visibility="public" xmi.id="att483"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="FileMeta" namespace="meta" xmi.id="cl0064">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="FileName string" visibility="public" xmi.id="att484"/>
+<UML:Attribute name="IpfsHash string" visibility="public" xmi.id="att485"/>
+<UML:Attribute name="DataKey tribecrypto.FileBoxer" visibility="public" xmi.id="att486"/>
+<UML:Attribute name="WriteAccessList []common.Address" visibility="public" xmi.id="att487"/>
+<UML:Operation name="Equal(other *FileMeta) bool" visibility="public" xmi.id="att488"/>
+<UML:Operation name="Encode() ([]byte, error)" visibility="public" xmi.id="att489"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GroupMeta" namespace="meta" xmi.id="cl0065">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="Address common.Address" visibility="public" xmi.id="att490"/>
+<UML:Attribute name="Boxer tribecrypto.SymmetricKey" visibility="public" xmi.id="att491"/>
+<UML:Operation name="Encode() ([]byte, error)" visibility="public" xmi.id="att492"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="GetGroupDataSessionServer" namespace="servers" xmi.id="cl0067">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="sessionID uint32" visibility="private" xmi.id="att493"/>
+<UML:Attribute name="state uint8" visibility="private" xmi.id="att494"/>
+<UML:Attribute name="contact *common.Contact" visibility="private" xmi.id="att495"/>
+<UML:Attribute name="sender common.Address" visibility="private" xmi.id="att496"/>
+<UML:Attribute name="groupDataMsg common.GroupDataMessage" visibility="private" xmi.id="att497"/>
+<UML:Attribute name="callback common.CtxCallback" visibility="private" xmi.id="att498"/>
+<UML:Attribute name="signer common.Signer" visibility="private" xmi.id="att499"/>
+<UML:Attribute name="challenge []byte" visibility="private" xmi.id="att500"/>
+<UML:Attribute name="onSessionClosed common.SessionClosedCallback" visibility="private" xmi.id="att501"/>
+<UML:Attribute name="lock sync.RWMutex" visibility="private" xmi.id="att502"/>
+<UML:Attribute name="stop &lt;font color=blue&gt;chan&lt;/font&gt; bool" visibility="private" xmi.id="att503"/>
+<UML:Attribute name="error error" visibility="private" xmi.id="att504"/>
+<UML:Attribute name="keyType common.MessageType" visibility="private" xmi.id="att505"/>
+<UML:Operation name="close()" visibility="private" xmi.id="att506"/>
+<UML:Operation name="isAlive() bool" visibility="private" xmi.id="att507"/>
+<UML:Operation name=" " xmi.id="att508"/>
+<UML:Operation name="Error() error" visibility="public" xmi.id="att509"/>
+<UML:Operation name="State() uint8" visibility="public" xmi.id="att510"/>
+<UML:Operation name="ID() uint32" visibility="public" xmi.id="att511"/>
+<UML:Operation name="Abort()" visibility="public" xmi.id="att512"/>
+<UML:Operation name="IsAlive() bool" visibility="public" xmi.id="att513"/>
+<UML:Operation name="Run()" visibility="public" xmi.id="att514"/>
+<UML:Operation name="NextState(contact *common.Contact, data []byte)" visibility="public" xmi.id="att515"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="getKeyAsyncTask" namespace="tasks" xmi.id="cl0070">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="account interfaces.Account" visibility="private" xmi.id="att516"/>
+<UML:Attribute name="group interfaces.Group" visibility="private" xmi.id="att517"/>
+<UML:Attribute name="p2p *communication.P2PManager" visibility="private" xmi.id="att518"/>
+<UML:Attribute name="sessions []common.Session" visibility="private" xmi.id="att519"/>
+<UML:Attribute name="eventCh &lt;font color=blue&gt;chan&lt;/font&gt; *asynctask.Event" visibility="private" xmi.id="att520"/>
+<UML:Attribute name="keyCh &lt;font color=blue&gt;chan&lt;/font&gt; tribecrypto.SymmetricKey" visibility="private" xmi.id="att521"/>
+<UML:Attribute name="stopCh &lt;font color=blue&gt;chan&lt;/font&gt; &lt;font color=blue&gt;struct&lt;/font&gt;{}" visibility="private" xmi.id="att522"/>
+<UML:Attribute name="status asynctask.Status" visibility="private" xmi.id="att523"/>
+<UML:Attribute name="lock sync.Mutex" visibility="private" xmi.id="att524"/>
+<UML:Operation name="execute()" visibility="private" xmi.id="att525"/>
+<UML:Operation name="cleanUp()" visibility="private" xmi.id="att526"/>
+<UML:Operation name=" " xmi.id="att527"/>
+<UML:Operation name="Execute()" visibility="public" xmi.id="att528"/>
+<UML:Operation name="Cancel()" visibility="public" xmi.id="att529"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="getProposalKeyAsyncTask" namespace="tasks" xmi.id="cl0071">
+<UML:ModelElement.stereotype/>
+<UML:Classifier.feature>
+<UML:Attribute name="account interfaces.Account" visibility="private" xmi.id="att530"/>
+<UML:Attribute name="group interfaces.Group" visibility="private" xmi.id="att531"/>
+<UML:Attribute name="proposalKey []byte" visibility="private" xmi.id="att532"/>
+<UML:Attribute name="p2p *communication.P2PManager" visibility="private" xmi.id="att533"/>
+<UML:Attribute name="sessions []common.Session" visibility="private" xmi.id="att534"/>
+<UML:Attribute name="eventCh &lt;font color=blue&gt;chan&lt;/font&gt; *asynctask.Event" visibility="private" xmi.id="att535"/>
+<UML:Attribute name="keyCh &lt;font color=blue&gt;chan&lt;/font&gt; tribecrypto.SymmetricKey" visibility="private" xmi.id="att536"/>
+<UML:Attribute name="stopCh &lt;font color=blue&gt;chan&lt;/font&gt; &lt;font color=blue&gt;struct&lt;/font&gt;{}" visibility="private" xmi.id="att537"/>
+<UML:Attribute name="status asynctask.Status" visibility="private" xmi.id="att538"/>
+<UML:Attribute name="lock sync.Mutex" visibility="private" xmi.id="att539"/>
+<UML:Operation name="execute()" visibility="private" xmi.id="att540"/>
+<UML:Operation name="isBoxerValid(proposedBoxer tribecrypto.SymmetricKey) error" visibility="private" xmi.id="att541"/>
+<UML:Operation name="cleanUp()" visibility="private" xmi.id="att542"/>
+<UML:Operation name=" " xmi.id="att543"/>
+<UML:Operation name="Execute()" visibility="public" xmi.id="att544"/>
+<UML:Operation name="Cancel()" visibility="public" xmi.id="att545"/>
+</UML:Classifier.feature>
+</UML:Class>
+<UML:Class name="byte" namespace="__builtin__" xmi.id="cl0073">
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="int" namespace="__builtin__" xmi.id="cl0076">
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="&lt;font color=blue&gt;func&lt;/font&gt;(Session) " namespace="common" xmi.id="cl0078">
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="&lt;font color=blue&gt;func&lt;/font&gt;([]byte) ([]byte, error)" namespace="common" xmi.id="cl0080">
+<UML:Classifier.feature/>
+</UML:Class>
+<UML:Class name="&lt;font color=blue&gt;func&lt;/font&gt;([]byte) error" namespace="common" xmi.id="cl0082">
+<UML:Classifier.feature/>
+</UML:Class>
+</UML:Namespace.ownedElement>
+</UML:Model>
+</XMI.content>
+</XMI>

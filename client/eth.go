@@ -18,7 +18,7 @@ package client
 
 import (
 	"github.com/aliras1/FileTribe/client/interfaces"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 
 	ethapp "github.com/aliras1/FileTribe/eth/gen/FileTribeDApp"
 	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
@@ -30,7 +30,7 @@ import (
 type Eth struct {
 	Auth    interfaces.Auth
 	App     *ethapp.FileTribeDApp
-	Backend chequebook.Backend
+	Backend bind.ContractBackend
 }
 
 // GroupEth stores a GroupContract and a pointer to all the

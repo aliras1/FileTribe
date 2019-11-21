@@ -315,6 +315,38 @@ func (f *File) RevokeWriteAccess(user, target ethcommon.Address) error {
 	return nil
 }
 
+func (file *File) IsNewIpfsHashValid(newBoxer tribecrypto.FileBoxer, newIpfsHash string, storage *Storage, ipfs ipfsapi.IIpfs) error {
+	file.lock.RLock()
+	defer file.lock.RUnlock()
+
+	data, err := storage.DownloadAndDecryptWithFileBoxer(newBoxer, newIpfsHash, ipfs)
+	if err != nil {
+		return errors.Wrap(err, "could not download and decrypt new diff node")
+	}
+
+	newDiff, err := DecodeDiffNode(data)
+	if err != nil {
+		return errors.Wrap(err, "could not decode new DiffNode")
+	}
+
+	if strings.Compare(newDiff.Next, file.Meta.IpfsHash) != 0 {
+		return errors.New("next ipfs hash is not the current ipfs hash")
+	}
+
+	fileData, err := ioutil.ReadFile(file.OrigPath)
+	if err != nil {
+		return errors.Wrap(err, "could not read orig file")
+	}
+
+	hash := ethcrypto.Keccak256(fileData)
+
+	if !bytes.Equal(newDiff.Hash, hash) {
+		return errors.New("new diff prev hash does not match with current hash")
+	}
+
+	return nil
+}
+
 func (f *File) diff(boxer tribecrypto.FileBoxer) (*DiffNode, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()

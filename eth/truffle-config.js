@@ -1,4 +1,4 @@
-var HDWalletProvider = require("truffle-hdwallet-provider");
+var HDWalletProvider = require("@truffle/hdwallet-provider");
 var mnemonic = "apple orange banana...";
 
 module.exports = {
@@ -34,10 +34,15 @@ module.exports = {
         }
     },
 
-    solc: {
-        optimizer: {
-            enabled: true,
-            runs: 200
+    compilers: {
+        solc: {
+            version: "^0.5.11",
+            settings: {
+                optimizer: {            
+                    enabled: true,
+                    runs: 200
+                }
+            }
         }
     },
 

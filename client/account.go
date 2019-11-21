@@ -20,8 +20,8 @@ import (
 	"crypto/rand"
 	"encoding/json"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/curve25519"
 
@@ -72,7 +72,7 @@ func (acc *account) Contract() *ethacc.Account {
 
 // SetContract stores the smart contract address of an
 // account and its smart contract object
-func (acc *account) SetContract(address ethcommon.Address, backend chequebook.Backend) error {
+func (acc *account) SetContract(address ethcommon.Address, backend bind.ContractBackend) error {
 	contract, err := ethacc.NewAccount(address, backend)
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (acc *account) Save() error {
 }
 
 // NewAccountFromStorage loads an existing account from disk
-func NewAccountFromStorage(storage *fs.Storage, backend chequebook.Backend) (interfaces.Account, error) {
+func NewAccountFromStorage(storage *fs.Storage, backend bind.ContractBackend) (interfaces.Account, error) {
 	dataEncoded, err := storage.LoadAccountData()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not load account data")
@@ -137,7 +137,7 @@ func NewAccount(username string, owner ethcommon.Address, storage *fs.Storage) (
 
 	return &account{
 		data: &AccountData{
-			Name: username,
+			Name:  username,
 			Owner: owner,
 			Boxer: tribecrypto.AnonymBoxer{
 				PublicKey:  tribecrypto.AnonymPublicKey{Value: publicBoxerBytes},

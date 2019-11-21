@@ -25,7 +25,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -75,7 +74,7 @@ type UserContext struct {
 }
 
 // NewUserContext creates a new UserContext with the data provided
-func NewUserContext(auth interfaces.Auth, backend chequebook.Backend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
+func NewUserContext(auth interfaces.Auth, backend bind.ContractBackend, appContractAddress ethcommon.Address, ipfs ipfsapi.IIpfs, p2pPort string) (*UserContext, error) {
 	var err error
 	var ctx UserContext
 

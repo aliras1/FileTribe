@@ -18,8 +18,8 @@ package interfaces
 
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
-
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	
 	ethacc "github.com/aliras1/FileTribe/eth/gen/Account"
 	"github.com/aliras1/FileTribe/tribecrypto"
 )
@@ -31,6 +31,6 @@ type Account interface {
 	Contract() *ethacc.Account
 	Name() string
 	Boxer() tribecrypto.AnonymBoxer
-	SetContract(addr ethcommon.Address, backend chequebook.Backend) error
+	SetContract(addr ethcommon.Address, backend bind.ContractBackend) error
 	Save() error
 }
