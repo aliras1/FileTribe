@@ -2,7 +2,7 @@ package tribecrypto
 
 import (
 	"bufio"
-	//"encoding/hex"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/aliras1/FileTribe/tribecrypto/bgls"
 	. "github.com/aliras1/FileTribe/tribecrypto/curves"
@@ -42,13 +44,16 @@ type Member struct {
 }
 
 type DataForCommit struct {
-	Coefficients []*big.Int
-	PubCommitG1  []Point
-	PubCommitG2  []Point
-	PrvCommit    []*big.Int
-	PrvCommitEnc []*big.Int
-	SK           *big.Int
-	PK           Point
+	Coefficients 	[]*big.Int
+	PubCommitG1  	[]Point
+	PubCommitG2  	[]Point
+	PrvCommit    	[]*big.Int
+	PrvCommitEnc 	[]*big.Int
+	MerkleTreePubCommitG1 *MerkleTree
+	MerkleTreePubCommitG2 *MerkleTree
+	MerkleTreePrvCommit   *MerkleTree
+	SK              *big.Int
+	PK              Point
 }
 
 type JsonDataForCommit struct {
@@ -78,8 +83,10 @@ func GetCommitDataForSingleParticipant(curve CurveSystem, index int, t int, n in
 		PubCommitG1:  make([]Point, t+1),
 		PubCommitG2:  make([]Point, t+1),
 		PrvCommit:    make([]*big.Int, n),
-		PrvCommitEnc: make([]*big.Int, n),
+		PrvCommitEnc: make([]*big.Int, n),		
 	}
+	pubCommitG1MerkleLeaves := make([][]byte, t+1)
+	pubCommitG2MerkleLeaves := make([][]byte, t+1)
 
 	for i := 0; i < t+1; i++ {
 		var err error
@@ -87,6 +94,10 @@ func GetCommitDataForSingleParticipant(curve CurveSystem, index int, t int, n in
 		if err != nil {
 			return nil, err
 		}
+
+		pubCommitG1MerkleLeaves[i] = ethcrypto.Keccak256(pointToBytesArray(data.PubCommitG1[i])...)
+		pubCommitG2MerkleLeaves[i] = ethcrypto.Keccak256(pointToBytesArray(data.PubCommitG2[i])...)
+
 		// verifyResult := dkg.VerifyPublicCommitment(curve, data.PubCommitG1[i], data.PubCommitG2[i])
 		// if !verifyResult {
 		// 	return nil, fmt.Errorf("VerifyPublicCommitment() failed for (participant=%v i=%v)", index, i)
@@ -94,6 +105,10 @@ func GetCommitDataForSingleParticipant(curve CurveSystem, index int, t int, n in
 		//fmt.Printf("PASSED VerifyPublicCommitment() (index=%v i=%v)\n", index, i)
 	}
 
+	data.MerkleTreePubCommitG1 = NewMerkleTree(pubCommitG1MerkleLeaves)
+	data.MerkleTreePubCommitG2 = NewMerkleTree(pubCommitG2MerkleLeaves)
+
+	prvCommitLeaves := make([][]byte, n)
 	j := big.NewInt(1)
 	for i := 0; i < n; i++ {
 		//if i == index-1 {
@@ -104,10 +119,14 @@ func GetCommitDataForSingleParticipant(curve CurveSystem, index int, t int, n in
 		//fmt.Printf("Calling Encrypt() with sk=%v pks[%v]=%v\n", mySK, i, pks[i].ToAffineCoords(), )
 		data.PrvCommit[i] = plainPrvCommit
 		data.PrvCommitEnc[i] = dkg.Encrypt(curve, mySK, pks[i], plainPrvCommit)
+
+		prvCommitLeaves[i] = ethcrypto.Keccak256(data.PrvCommitEnc[i].Bytes())
 		//fmt.Printf("Encrypt() result: %v\n", data.PrvCommit[i])
 		//}
 		j.Add(j, big.NewInt(1))
 	}
+
+	data.MerkleTreePrvCommit = NewMerkleTree(prvCommitLeaves)
 
 	return &data, nil
 }
@@ -177,7 +196,7 @@ func SignAndVerify(curve CurveSystem, threshold int, n int, data []*DataForCommi
 		//fmt.Printf("pubCommitG2All[%v]: %v\n", participant, pubCommitG2All[participant])
 	}
 
-	start := time.Now()		
+	start := time.Now()
 	pkAll := dkg.GetAllPublicKey(curve, threshold, pubCommitG2All)
 	end := time.Now()
 	fmt.Println(end.Sub(start).String())
@@ -188,7 +207,11 @@ func SignAndVerify(curve CurveSystem, threshold int, n int, data []*DataForCommi
 		for commitParticipant := 0; commitParticipant < n; commitParticipant++ {
 			prvCommit[commitParticipant] = commitPrvAllDec[commitParticipant][participant]
 		}
+
+		start = time.Now()		
 		skAll[participant] = dkg.GetSecretKey(prvCommit)		
+		end = time.Now()
+		fmt.Printf("SK: %s\n", end.Sub(start).String())
 	}
 	fmt.Println("Calculated SKs, PKs")
 
@@ -212,8 +235,11 @@ func SignAndVerify(curve CurveSystem, threshold int, n int, data []*DataForCommi
 	// }
 	//fmt.Println()
 
+	start = time.Now()		
 	groupPk := dkg.GetGroupPublicKey(curve, pubCommitG2Zero)	
+	end = time.Now()		
 	fmt.Printf("Group PK: %v\n", pointToHexCoords(groupPk))
+	fmt.Printf("GROUP PK: %s\n", end.Sub(start).String())
 
 	// coefsZero := make([]*big.Int, n)
 	// for participant := 0; participant < n; participant++ {
@@ -231,11 +257,14 @@ func SignAndVerify(curve CurveSystem, threshold int, n int, data []*DataForCommi
 		msg = readFromStdin("*** Enter message: ")
 	} else {
 		msg = "Hello Orbs"
-	}
+	}	
 
 	//fmt.Println()
 	//fmt.Printf("Message for signature verification: %v\n", msg)
 	msgBytes := []byte(msg)
+	fmt.Println("message:")
+	fmt.Println(hex.EncodeToString(msgBytes))
+	fmt.Println(msgBytes)
 	//fmt.Printf("Message bytes: %v\n", msgBytes)
 	//fmt.Printf("Message hex: %v\n", hex.EncodeToString(msgBytes))
 	sigs := make([]Point, n)
@@ -254,7 +283,7 @@ func SignAndVerify(curve CurveSystem, threshold int, n int, data []*DataForCommi
 	indices := make([]*big.Int, n)
 	index := big.NewInt(0)
 	for participant := 0; participant < n; participant++ {
-		index.Add(index, big.NewInt(1))
+	index.Add(index, big.NewInt(1))
 		indices[participant] = big.NewInt(0).Set(index)
 	}
 
@@ -319,21 +348,21 @@ func verifySigOnSubset(curve CurveSystem, indices []*big.Int, sigs []Point, grou
 	//fmt.Printf("* PASSED VerifySingleSignature for subgroup signature: %v\n", pointToHexCoords(groupSig1))
 	//fmt.Printf("Group PK: %v\n", pointToHexCoords(groupPk))
 
-	return true, nil
+	return true, nil 
 }
-
+       
 func TestBenchmark(t *testing.T) {
 	var testCases = []struct{
 		threshold int
 		n		  int
 	}{
-		// {2, 5},
-		// {5, 10},
-		// {25, 50},
-		// {50, 100},
-		{100, 200},
+		{2, 5},
+		{5, 10},
+		{25, 50},
+		{50, 100},
+		// {128, 256},
 		// {500, 1000},
-		//{1000, 2000},
+		// {1000, 2000}, 
 	}
 	curve := Altbn128
 	
@@ -343,6 +372,8 @@ func TestBenchmark(t *testing.T) {
 		group := make([]*Member, n)
 		pks := make([]Point, n)
 		commits := make([]*DataForCommit, n)
+
+		fmt.Printf("N: %v, T: %v", n, threshold)
 
 		// gen member
 		for i := 0; i < n; i++ {
@@ -399,9 +430,101 @@ func TestBenchmark(t *testing.T) {
 		// 	fmt.Printf("Calling VerifyPrivateCommitment(): myIndex: %v prvCommit: %v pubCommitG1: %v\n", myIndex, bigIntToHexStr(prvCommit), pointsToStr(pubCommitG1))
 		// 	passedVerification := dkg.VerifyPrivateCommitment(curve, myIndex, prvCommit, pubCommitG1)
 		// 	res := fmt.Sprintf("%v\n", boolToStr(passedVerification))
-		// 	fmt.Println(res)
+		// 	fmt.Println(res) 
+	}          
+}     
+  
+type TruffleCommit struct {
+	SenderIndex int `json:"senderIndex"`
+	RootPubCommitG1 string `json:"rootPubCommitG1"`
+	RootPubCommitG2 string `json:"rootPubCommitG2"`
+	RootEncPrvCommit string `json:"rootEncPrvCommit"`
+	CommitIpfsHash string `json:commitIpfsHash"`
+	YG1 []string `json:"yG1"`
+}                  
+         
+type TruffleTestData struct {
+	T int `json:"t"`
+	N int `json:"n"`
+	PKs [][]string `json:"pks"`
+	Commits []TruffleCommit  `json:"commits"`
+}
+       
+func TestGenerateTestDataForTruffle(t *testing.T) {
+	var testCases = []struct{
+		threshold int
+		n		  int
+	}{
+		{1, 2},
+		{2, 5},
+		{5, 10},
+		{25, 50},
+		{50, 100},
+		// {128, 256},
+		// {500, 1000},
+		// {1000, 2000},
+	} 
+	curve := Altbn128
+	genTests := make([]*TruffleTestData, len(testCases))
+
+	for j, testCase := range(testCases) {
+		genData := new(TruffleTestData)
+		n := testCase.n
+		threshold := testCase.threshold
+		group := make([]*Member, n)
+		pks := make([]Point, n)
+		commits := make([]*DataForCommit, n)
+
+		// gen member
+		for i := 0; i < n; i++ {
+			group[i] = newMember(i+1, curve)
+			pks[i] = group[i].Key.PK
+		}
+
+		// gen commits
+		for i := 0; i < n; i++ {
+			var err error
+			member := group[i]
+			start := time.Now()
+			member.Commit, err = GetCommitDataForSingleParticipant(curve, member.Index, threshold, n, member.Key.SK, pks)
+			end := time.Now()
+			fmt.Printf("CommitData time: %v\n", end.Sub(start).String())
+			if err != nil {
+				panic(err)
+			}
+
+			member.Commit.SK = member.Key.SK
+			member.Commit.PK = member.Key.PK
+			commits[i] = member.Commit
+		}
+
+		genData.T = threshold 
+		genData.N = n
+		genData.PKs = make([][]string, n)
+		genData.Commits = make([]TruffleCommit, n)
+		for i, member := range(group) {
+			genData.PKs[i] = pointToStrArray(member.Key.PK)
+			genData.Commits[i].SenderIndex = member.Index
+			genData.Commits[i].RootPubCommitG1 = fmt.Sprintf("0x%s", hex.EncodeToString(member.Commit.MerkleTreePubCommitG1.Root()))
+			genData.Commits[i].RootPubCommitG2 = fmt.Sprintf("0x%s", hex.EncodeToString(member.Commit.MerkleTreePubCommitG2.Root()))
+			genData.Commits[i].RootEncPrvCommit = fmt.Sprintf("0x%s", hex.EncodeToString(member.Commit.MerkleTreePrvCommit.Root()))
+			genData.Commits[i].CommitIpfsHash = "ipfshash"
+			genData.Commits[i].YG1 = pointToStrArray(member.Commit.PubCommitG1[0])
+		}
+
+		// rand participant --> make him prove everything
+
+		genTests[j] = genData		
 	}
 
+	jsonBytes, err := json.Marshal(genTests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if err := ioutil.WriteFile("truffle_test_data.json", jsonBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func newMember(idx int, curve CurveSystem) *Member {
@@ -409,7 +532,7 @@ func newMember(idx int, curve CurveSystem) *Member {
 	keyPair := KeyPair{sk, pk}
 
 	return &Member{
-		Key:   &keyPair,
+	Key:   &keyPair,
 		Index: idx,
 	}
 }
@@ -471,6 +594,15 @@ func (keyPair KeyPair) Marshal() ([]byte, error) {
 	return json.Marshal(keyPair)
 }
 
+func pointToBytesArray(point Point) [][]byte {
+	coords := point.ToAffineCoords()
+	coordsBytes := make([][]byte, len(coords))
+	for k := 0; k < len(coords); k++ {
+		coordsBytes[k] = coords[k].Bytes()
+	}
+	return coordsBytes
+}
+
 func pointToStrArray(point Point) []string {
 	coords := point.ToAffineCoords()
 	coordsStr := make([]string, len(coords))
@@ -478,8 +610,8 @@ func pointToStrArray(point Point) []string {
 		coordsStr[k] = toHexBigInt(coords[k])
 	}
 	return coordsStr
-
 }
+
 func toHexBigInt(n *big.Int) string {
 	return fmt.Sprintf("0x%x", n) // or %X or upper case
 }
@@ -547,7 +679,7 @@ func readFromStdin(caption string) string {
 	fmt.Println()
 	fmt.Print(caption)
 	text, _ := reader.ReadString('\n')
-	return text
+return text
 }
 
 func (jd *JsonDataForCommit) toData(curve CurveSystem) *DataForCommit {

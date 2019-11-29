@@ -3,11 +3,11 @@ pragma solidity ^0.5.11;
 import "./interfaces/IAccount.sol";
 import "./interfaces/IFileTribeDApp.sol";
 import "./interfaces/IConsensus.sol";
+import "./interfaces/IConsensusCallback.sol";
 import "./common/Ownable.sol";
 import "./ecOps.sol";
-import "./dkg.sol";
 
-contract Group is Ownable, IGroup {
+contract Group is Ownable, IGroup, IConsensusCallback {
     struct Member {
         IAccount account;
         IConsensus consensus;
@@ -23,6 +23,7 @@ contract Group is Ownable, IGroup {
     bytes public _ipfsHash; // encrypted with group key
     uint256 _currConsId;
     mapping(address => IAccount) private _invitations; // owner -> account address
+    address _dkg;
 
     // G1 generator (on the curve)
     uint256[2] public _g1 = [
@@ -61,14 +62,23 @@ contract Group is Ownable, IGroup {
         _ipfsHash = ipfsHash;
         _currConsId = 0;
         _memberOwners.push(owner);
+        _dkg = _fileTribe.createDkg();
 
         _members[owner].account = account;
-        _members[owner].consensus = IFileTribeDApp(_fileTribe).createConsensus(account);
+        _members[owner].consensus = _fileTribe.createConsensus(account);
         _members[owner].exists = true;
+    }
+    
+    // constructor (IFileTribeDApp fileTribe) public Ownable(msg.sender) { 
+    //     dkg = fileTribe.createDkg();
+    // }
+
+    function setVk(uint256[4] memory vk) public {
+        _verifyKey = vk;
     }
 
     modifier onlyMembers() {
-        require(isMember(msg.sender));
+        require(isMember(msg.sender), "wee");
         _;
     }
 
@@ -76,12 +86,19 @@ contract Group is Ownable, IGroup {
         return _members[owner].exists;
     }
 
-    function commitWithGroupSig(bytes memory newIpfsHash, uint256[2] memory sig) public onlyMembers {
+    function hashToG1(bytes memory data) public view returns(uint256[2] memory) {
+        uint256[2] memory p = ecOps.hashToG1(data);
+        p[1] = ecOps.P() - p[1];
+
+        return p;
+    }
+
+    function commitWithGroupSig(bytes memory newIpfsHash, uint256[2] memory sig) public /*onlyMembers*/ {
         uint256[2] memory hash = ecOps.hashToG1(newIpfsHash);
 
         require(ecOps.pairingCheck(hash, _verifyKey, sig, _g2), "invalid signature");
 
-        emit IpfsHashChanged(this, newIpfsHash, _fileTribe.getAccountOf(msg.sender), _currConsId);
+        //emit IpfsHashChanged(this, newIpfsHash, _fileTribe.getAccountOf(msg.sender), _currConsId);
         _ipfsHash = newIpfsHash;
     }
 
@@ -98,21 +115,6 @@ contract Group is Ownable, IGroup {
         IConsensus(cons).propose(newIpfsHash, _currConsId + 1);
 
         emit NewConsensus(this, cons, _currConsId + 1);
-    }
-
-    function onChangeIpfsHashConsensus(bytes calldata payload) external {
-        uint256 id = IConsensus(msg.sender).getId();
-        require(id > _currConsId, "Consensus expired!");
-
-        IAccount proposer = IConsensus(msg.sender).getProposer();
-        address proposerOwner = Ownable(address(proposer)).owner();
-
-        require(address(_members[proposerOwner].consensus) == msg.sender, "Consensus does not belong to the group!");
-
-        _ipfsHash = payload;
-        _currConsId = id;
-
-        emit IpfsHashChanged(this, payload, proposer, _currConsId);
     }
 
     function leave() public onlyMembers {
@@ -170,10 +172,10 @@ contract Group is Ownable, IGroup {
         _memberOwners.push(msg.sender);
 
         _members[msg.sender].account = account;
-        _members[msg.sender].consensus = IFileTribeDApp(_fileTribe).createConsensus(account);
+        _members[msg.sender].consensus = _fileTribe.createConsensus(account);
         _members[msg.sender].exists = true;
 
-        IAccount(account).onInvitationAccepted();
+        account.onInvitationAccepted();
         _invitations[msg.sender] = IAccount(address(0));
 
         emit InvitationAccepted(this, account);
@@ -197,7 +199,30 @@ contract Group is Ownable, IGroup {
         return _memberOwners;
     }
 
-    function threshold() public view returns(uint256) {
+    // IConsensusCallback implementation
+
+    function onConsensusSuccess(bytes calldata payload) external {
+        uint256 id = IConsensus(msg.sender).getId();
+        require(id > _currConsId, "Consensus expired!");
+
+        IAccount proposer = IConsensus(msg.sender).getProposer();
+        address proposerOwner = Ownable(address(proposer)).owner();
+
+        require(address(_members[proposerOwner].consensus) == msg.sender, "Consensus does not belong to the group!");
+
+        _ipfsHash = payload;
+        _currConsId = id;
+
+        emit IpfsHashChanged(this, payload, proposer, _currConsId);
+    }
+
+    function onConsensusFailure(bytes calldata payload) external { }
+
+    function threshold() external view returns(uint256) {
         return _memberOwners.length / 2;
+    }
+
+    function isAuthorized(address sender) external view returns(bool) {
+        return isMember(sender);
     }
 }

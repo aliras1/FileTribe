@@ -1,8 +1,17 @@
-pragma solidity ^0.5.11;
+pragma solidity ^0.5.10;
 
+import "./openzeppelin/contracts/cryptography/MerkleProof.sol";
+import "./openzeppelin/contracts/cryptography/MerkleTree.sol";
+
+import "./interfaces/IConsensusCallback.sol";
+import "./interfaces/IConsensus.sol";
+import "./interfaces/IFileTribeDApp.sol";
+import "./interfaces/IGroup.sol";
+import "./common/Ownable.sol";
 import "./ecOps.sol";
 
-contract dkg {
+
+contract GroupDkg is Ownable, IConsensusCallback {
 
     /** 
      * DKG phases (optimistic case):
@@ -62,24 +71,29 @@ contract dkg {
     struct Participant {
         address payable ethPk; // Ethereum pk
         uint256[2] encPk; // pk for encryption
-        mapping (uint16 => uint256[2]) publicCommitmentsG1; // coefficient index to commitment
-        mapping (uint16 => uint256[4]) publicCommitmentsG2;
-        // TODO: should be encrypted (and possibly off chain). 
-        mapping (uint16 => uint256) encPrivateCommitments; // node's index to its commitment
+        bytes32 rootPubCommitG1;
+        bytes32 rootPubCommitG2;
+        bytes32 rootPrvCommit;
+        uint256[2] yG1;
+        string commitIpfsHash;
         bool isCommitted;
     }
 
     enum Phase { Enrollment, Commit, PostCommit, EndSuccess, EndFail } // start from 0
 
-
+    event NewComplaint(
+        address consensus
+    );
     event PhaseChange(
         Phase phase
     );
     event NewCommit(
         uint16 committerIndex,
-        uint256[] pubCommitG1,
-        uint256[] pubCommitG2,
-        uint256[] prvCommit
+        bytes32 rootPubCommitG1,
+        bytes32 rootPubCommitG2,
+        bytes32 rootPrvCommit,
+        uint256[2] yG1,
+        string commitIpfsHash
     );
     event ParticipantJoined(
         uint16 index
@@ -121,23 +135,27 @@ contract dkg {
 
     // mapping from node's index to a participant
     mapping (uint16 => Participant) public participants;
+    uint256[2] public VK;
+    uint16 finalizerIdx;
+    IGroup _group;
+    IFileTribeDApp _fileTribe;
+    mapping (address => uint16) _cons2Idx;
 
+    constructor() public Ownable(msg.sender) { }
 
-    constructor(uint16 threshold, uint16 numParticipants, uint deposit) public 
-    {
+    function init(uint16 threshold, uint16 numParticipants) public {
         t = threshold;
         n = numParticipants;
         curNumCommittedLeft = numParticipants;
-        depositWei = deposit;
+        //depositWei = deposit;
         curPhase = Phase.Enrollment;
 
         require(n > t && t > 0, "wrong input");
 
+        curN = 0;
 
         phaseStart = block.number;
     }
-
-
 
     modifier checkDeposit() {
         require(msg.value == depositWei, "wrong deposit");
@@ -165,10 +183,10 @@ contract dkg {
     // A point on G1 that represents this participant's pk for encryption have
     // to be published. The publisher have to know the secret that generates
     // this point.
-    function join(uint256[2] calldata encPk) 
-        checkDeposit()
+    function join(uint256[2] calldata encPk)
+        external payable
+        //checkDeposit()
         inPhase(Phase.Enrollment)
-        external payable 
         returns(uint16 index)
     {
         // TODO: check pk
@@ -182,12 +200,21 @@ contract dkg {
         }
 
         cn++;
-        participants[cn] = Participant({ethPk: sender, encPk: encPk, isCommitted: false});
+        participants[cn] = Participant({
+            ethPk: sender,
+            encPk: encPk,
+            isCommitted: false,
+            rootPubCommitG1: "",
+            rootPubCommitG2: "",
+            rootPrvCommit: "",
+            commitIpfsHash: "",
+            yG1: [uint256(0), uint256(0)]
+        });
 
         curN = cn;
         if(cn == 1) {
             phaseStart = block.number;
-        } 
+        }
 
         // Abort if capacity on participants was reached
         if(cn == n) {
@@ -224,144 +251,150 @@ contract dkg {
     // Note that this function does not verifies the committed data, it
     // should be done outside of this contract scope. In case of an
     // invalid committed data use complaints.
-    function commit(uint16 senderIndex, uint256[] calldata pubCommitG1, 
-                    uint256[] calldata pubCommitG2, uint256[] calldata encPrCommit) 
+    function commit(
+        uint16 senderIndex,
+        bytes32 rootPubCommitG1,
+        bytes32 rootPubCommitG2,
+        bytes32 rootEncPrvCommit,
+        uint256[2] calldata yG1,
+        string calldata commitIpfsHash
+    )
+        external
         inPhase(Phase.Commit)
         checkAuthorizedSender(senderIndex)
         beFalse(participants[senderIndex].isCommitted)
-        external
     {
-        // TODO: phase timeout, make prCommit encrypted, verify sender 
+        // TODO: phase timeout, make prCommit encrypted, verify sender
         // index matches the sender's address.
-        
-        assignCommitments(senderIndex, pubCommitG1, pubCommitG2, encPrCommit);
+
+        participants[senderIndex].rootPubCommitG1 = rootPubCommitG1;
+        participants[senderIndex].rootPubCommitG1 = rootPubCommitG2;
+        participants[senderIndex].rootPrvCommit = rootEncPrvCommit;
+        participants[senderIndex].yG1 = yG1;
+        participants[senderIndex].commitIpfsHash = commitIpfsHash;
+        participants[senderIndex].isCommitted = true;
+        emit NewCommit(
+            senderIndex,
+            rootPubCommitG1,
+            rootPubCommitG2,
+            rootEncPrvCommit,
+            yG1,
+            commitIpfsHash);
 
         uint16 committedNumLeft = curNumCommittedLeft - 1;
         curNumCommittedLeft = committedNumLeft;
 
         if(committedNumLeft == 0) {
-            curPhase = Phase.PostCommit; 
+            curPhase = Phase.PostCommit;
             phaseStart = block.number;
             emit PhaseChange(Phase.PostCommit);
         }
     }
 
 
-    // Assigns the commitments to the sender with index of senderIndex.
-    function assignCommitments(uint16 senderIndex, uint256[] memory pubCommitG1, 
-                               uint256[] memory pubCommitG2, uint256[] memory prCommit)
-        internal
-    {
-        // TODO: consider merging the following loops to save gas
-        uint16 nParticipants = n;
-
-        uint16 threshold = t;
-
-        // Verify input size
-        require(pubCommitG1.length == (threshold*2 + 2) 
-            && pubCommitG2.length == (threshold*4 + 4)
-            && prCommit.length == nParticipants, 
-            "input size invalid");
-
-        // Assign public commitments from G1 and G2
-        uint16 i;
-        for(i = 0; i < (threshold+1); i++) {
-            participants[senderIndex].publicCommitmentsG1[i] = [pubCommitG1[2*i], pubCommitG1[2*i+1]];
-            participants[senderIndex].publicCommitmentsG2[i] = [
-                pubCommitG2[4*i], pubCommitG2[4*i+1], pubCommitG2[4*i+2], pubCommitG2[4*i+3]
-            ];
-        }
-
-        // Assign private commitments
-        for(i = 1; i <= nParticipants; i++) {
-            if(senderIndex != i) {
-                participants[senderIndex].encPrivateCommitments[i] = prCommit[i-1];
-            }
-        }
-
-        participants[senderIndex].isCommitted = true;
-        emit NewCommit(senderIndex, pubCommitG1, pubCommitG2, prCommit);
-    }
-
-
     // Call this when in Phase.PostCommit for more than postCommitTimeout
     // blocks and no comlaint has to be made.
-    function postCommitTimedOut() 
+    function postCommitTimedOut(uint16 senderIndex, uint256[2] calldata vk)
+        external
         inPhase(Phase.PostCommit)
-        external 
+        checkAuthorizedSender(senderIndex)
     {
-        
+
         uint curBlockNum = block.number;
 
         require(curBlockNum > (phaseStart+postCommitTimeout), "hasn't reached timeout yet");
-        curPhase = Phase.EndSuccess; 
+
+        curPhase = Phase.EndSuccess;
+        finalizerIdx = senderIndex;
+        VK = vk;
+
         emit PhaseChange(Phase.EndSuccess);
-        slash(0);  
+        //slash(0);
     }
 
     // Call this when in Phase.Enrollment for more than joinTimeout
     // blocks and not enough members have joined.
-    function joinTimedOut() 
+    function joinTimedOut()
+        external
         inPhase(Phase.Enrollment)
-        external 
     {
         uint curBlockNum = block.number;
 
         require(curBlockNum > (phaseStart+joinTimeout), "hasn't reached timeout yet");
-        curPhase = Phase.EndFail; 
+        curPhase = Phase.EndFail;
         emit PhaseChange(Phase.EndFail);
-        slash(0);  
+        slash(0);
     }
 
     // Call this when in Phase.Commit for more than commitTimeout
     // blocks and not enough members have committed.
-    function commitTimedOut() 
+    function commitTimedOut()
+        external
         inPhase(Phase.Commit)
-        external 
     {
         uint curBlockNum = block.number;
 
         require(curBlockNum > (phaseStart+commitTimeout), "hasn't reached timeout yet");
-        curPhase = Phase.EndFail; 
+        curPhase = Phase.EndFail;
         emit PhaseChange(Phase.EndFail);
-        slashUncommitted();  
+        slashUncommitted();
     }
 
     // Returns the group PK.
     // This can only be performed after the DKG has ended. This
     // means only when the current phase is Phase.End .
-    function getGroupPK() 
-        inPhase(Phase.EndSuccess)
-        public view returns(uint256[2] memory groupPK)
+    function getGroupPK()
+        //inPhase(Phase.EndSuccess)
+        public view returns(uint256[2] memory)
     {
-
-        uint16 nParticipants = n;
-        groupPK = participants[1].publicCommitmentsG1[0];
-    
-        for(uint16 i = 2; i <= nParticipants; i++) {
-            groupPK = ecOps.ecadd(groupPK, participants[i].publicCommitmentsG1[0]);
-        }
+        return VK;
     }
 
+    function calculateGroupPK() private view returns(uint256[2] memory vk) {
+        vk = participants[1].yG1;
+
+        for(uint16 i = 2; i <= n; i++) {
+            vk = ecOps.ecadd(vk, participants[i].yG1);
+        }
+    }
 
 
     ////////////////
     // Complaints //
     ////////////////
 
+    function complaintInvalidIpfsHash(uint16 complainerIdx, uint16 accusedIdx)
+        public
+        checkAuthorizedSender(complainerIdx)
+        inPhase(Phase.Commit)
+    {
+        IAccount acc = _fileTribe.getAccountOf(msg.sender);
+        IConsensus cons = _fileTribe.createConsensus(acc);
+        _cons2Idx[address(cons)] = complainerIdx;
+
+        cons.propose(uint16ToBytes(accusedIdx), 0);
+
+        emit NewComplaint(address(cons));
+    }
 
     // A complaint on some public commit. If for some reason this
     // function fails it will slash the complainer deposit! (unless some
     // unauthorized address made the transaction or the wrong phase).
-    // 
-    // The complaint should be called when the public commitments coming 
+    //
+    // The complaint should be called when the public commitments coming
     // from the G1 group does not match to the ones from G2 group (using pairing).
-    function complaintPublicCommit(uint16 complainerIndex, uint16 accusedIndex,
-                                   uint16 pubCommitIndex)
+    function complaintPublicCommit(
+        uint16 complainerIndex,
+        uint16 accusedIndex,
+        uint256[2] memory pubCommitG1,
+        uint256[4] memory pubCommitG2,
+        bytes32[] memory proofG1, // TODO: restrict the length of proof based on t
+        bytes32[] memory proofG2 // TODO: restrict the length of proof based on t
+    )
+        public
         checkAuthorizedSender(complainerIndex)
         notInPhase(Phase.EndFail)
         notInPhase(Phase.EndSuccess)
-        public
     {
         curPhase = Phase.EndFail;
         emit PhaseChange(Phase.EndFail);
@@ -372,16 +405,22 @@ contract dkg {
             return;
         }
 
-        
-        if (ecOps.pairingCheck(accused.publicCommitmentsG1[pubCommitIndex],
-            g2, g1, accused.publicCommitmentsG2[pubCommitIndex])) {
-            
+        bytes32 leafG1 = keccak256(abi.encodePacked(pubCommitG1));
+        if (!MerkleProof.verify(proofG1, accused.rootPubCommitG1, leafG1)) {
             slash(complainerIndex);
-        } 
-        else {
-            slash(accusedIndex);
+            return;
+        }
+        bytes32 leafG2 = keccak256(abi.encodePacked(pubCommitG2));
+        if (!MerkleProof.verify(proofG2, accused.rootPubCommitG2, leafG2)) {
+            slash(complainerIndex);
+            return;
         }
 
+        if (ecOps.pairingCheck(pubCommitG1, g2, g1, pubCommitG2)) {
+            slash(complainerIndex);
+        } else {
+            slash(accusedIndex);
+        }
     }
 
     // A complaint on some private commitment. If for some reason this
@@ -392,13 +431,17 @@ contract dkg {
     // not match to the public commitment.
     // The complainer has to publish the secret key from which its pk
     // for encryption is derived.
-    function complaintPrivateCommit(uint16 complainerIndex, 
-                                    uint16 accusedIndex,
-                                    uint256 complainerSk)
+    function complaintPrivateCommit(
+        uint16 complainerIndex,
+        uint16 accusedIndex,
+        uint256 complainerSk,
+        uint256 encPrvCommit, // from the accused to the complainer
+        uint256[2][] memory pubCommitsG1 // accused's public G1 commitments
+    )
+        public
         checkAuthorizedSender(complainerIndex)
         notInPhase(Phase.EndFail)
         notInPhase(Phase.EndSuccess)
-        public
     {
         // TODO: a check for edge cases has to be
         // done (e.g., when no one has yet committed)
@@ -419,30 +462,36 @@ contract dkg {
             return;
         }
 
-        uint256 prvCommit = uint256(decrypt(accused.encPk, complainerSk, bytes32(accused.encPrivateCommitments[complainerIndex])));
-        
-        if (isPrvMatchPubCommit(complainerIndex, prvCommit, accused)) {
+        if (getMerkleRoot(pubCommitsG1) != accused.rootPubCommitG1) {
             slash(complainerIndex);
-        } 
+            return;
+        }
+
+
+        uint256 prvCommit = uint256(decrypt(accused.encPk, complainerSk, bytes32(encPrvCommit)));
+        if (isPrvMatchPubCommit(complainerIndex, prvCommit, pubCommitsG1)) {
+            slash(complainerIndex);
+        }
         else {
             slash(accusedIndex);
         }
-    } 
+    }
 
-
-    function isPrvMatchPubCommit(uint16 complainerIndex, uint256 prvCommit, Participant storage accused) 
+    function isPrvMatchPubCommit(
+        uint16 complainerIndex,
+        uint256 prvCommit,
+        uint256[2][] memory pubCommitsG1
+    )
+        internal
         view
-        internal 
         returns (bool isMatch)
     {
-
         uint256[2] memory temp;
         uint256[2] memory RHS;
         uint256[2] memory LHS = ecOps.ecmul(g1, prvCommit);
 
-        
         for(uint16 i = 0; i < t+1; i++) {
-            temp = ecOps.ecmul(accused.publicCommitmentsG1[i], complainerIndex**i);
+            temp = ecOps.ecmul(pubCommitsG1[i], complainerIndex**i);
             if(i == 0) {
                 RHS = temp;
             }
@@ -450,55 +499,53 @@ contract dkg {
                 RHS = ecOps.ecadd(RHS, temp);
             }
         }
-        
+
         return ecOps.isEqualPoints(LHS, RHS);
-    } 
-
-
-    // A complaint that the accused participant has committed to a non-G1
-    // curve point.
-    function complaintNotInG1(uint16 complainerIndex, uint16 accusedIndex, uint16 coefIndex)
-        checkAuthorizedSender(complainerIndex)
-        notInPhase(Phase.EndFail)
-        notInPhase(Phase.EndSuccess)
-        public
-    {
-        Participant storage accused = participants[accusedIndex];
-        if(accused.isCommitted) {
-            if(!ecOps.isInG1(accused.publicCommitmentsG1[coefIndex])) {
-                curPhase = Phase.EndFail;
-                emit PhaseChange(Phase.EndFail);
-                slash(accusedIndex);
-            }
-        }
     }
 
-
-    // A complaint that the accused participant has committed to a non-G2
-    // curve point.
-    function complaintNotInG2(uint16 complainerIndex, uint16 accusedIndex, uint16 coefIndex)
-        checkAuthorizedSender(complainerIndex)
-        notInPhase(Phase.EndFail)
-        notInPhase(Phase.EndSuccess)
-        public
-    {
-        Participant storage accused = participants[accusedIndex];
-        if(accused.isCommitted) {
-            if(!ecOps.isInG2(accused.publicCommitmentsG2[coefIndex])) {
-                curPhase = Phase.EndFail;
-                emit PhaseChange(Phase.EndFail);
-                slash(accusedIndex);
-            }
+    function getMerkleRoot(uint256[2][] memory pubCommitsG1) internal pure returns (bytes32) {
+        bytes32[] memory leaves = new bytes32[](pubCommitsG1.length);
+        for (uint256 i = 0; i < pubCommitsG1.length; i++) {
+            leaves[i] = keccak256(abi.encodePacked(pubCommitsG1[i]));
         }
+        return MerkleTree.getRoot(leaves, leaves.length);
     }
 
+    function checkKeccak(bytes32[2] memory b) public pure returns (bytes32) {        
+            return keccak256(abi.encodePacked(b));
+    }
+
+    function getMerkleRootTest(bytes memory byts) public pure returns (bytes32) {
+        bytes32[] memory leaves = new bytes32[](byts.length);
+        for (uint256 i = 0; i < byts.length; i++) {
+            leaves[i] = keccak256(abi.encodePacked(byts[i]));
+        }
+        return MerkleTree.getRoot(leaves, leaves.length);
+    }
+
+    function checkMerkleProof(bytes32[] memory proof, bytes32 root, bytes32 leaf) public returns(bool) {
+        return MerkleProof.verify(proof, root, leaf);
+    }
+
+    function complaintVK(uint16 complainerIdx)
+        public
+        checkAuthorizedSender(complainerIdx)
+        inPhase(Phase.EndSuccess)
+    {
+        uint256[2] memory expectedVk = calculateGroupPK();
+        if (expectedVk[0] != VK[0] && expectedVk[1] != VK[1]) {
+            slash(finalizerIdx);
+        } else {
+            slash(complainerIdx);
+        }
+    }
 
     // Divides the deposited balance in the contract between
     // the enrolled participants except for the participant
     // with the slashedIndex. Send slashedIndex = 0 in order
     // to divide it between all the participants (no slashing).
     function slash(uint16 slashedIndex) private {
-        
+
         uint16 nParticipants = curN;
         uint256 amount;
         if (slashedIndex == 0) {
@@ -510,7 +557,7 @@ contract dkg {
 
         for (uint16 i = 1; i < (nParticipants+1); i++) {
             if (i != slashedIndex) {
-                require(participants[i].ethPk.send(amount));
+                participants[i].ethPk.transfer(amount);
             }
         }
     }
@@ -519,16 +566,16 @@ contract dkg {
     // Divides the deposited balance in the contract between
     // all the committed paricipants.
     function slashUncommitted() private {
-        
+
         uint16 nParticipants = curN;
         uint16 committedNum = nParticipants - curNumCommittedLeft;
         uint256 amount = address(this).balance/committedNum;
 
         for (uint16 i = 1; i < (nParticipants+1); i++) {
             Participant memory part = participants[i];
-            
+
             if (part.isCommitted) {
-                require(part.ethPk.send(amount));
+                part.ethPk.transfer(amount);
             }
         }
     }
@@ -545,47 +592,99 @@ contract dkg {
 
 ////////////////////////////////////////////////////////////////////////////
 
-    function getParticipantPkEnc(uint16 participantIndex) 
-        view 
-        external 
+    function getParticipantPkEnc(uint16 participantIndex)
+        external
+        view    
         returns(uint256[2] memory encPk)
     {
         return participants[participantIndex].encPk;
     }
 
-    function getParticipantPubCommitG1(uint16 participantIndex, uint16 coefIndex) 
+    // function getParticipantPubCommitG1(uint16 participantIndex, uint16 coefIndex) 
+    //     view
+    //     external 
+    //     returns(uint256[2] memory publicCommitmentsG1)
+    // {
+    //     return participants[participantIndex].publicCommitmentsG1[coefIndex];
+    // }
+
+    // function getParticipantPubCommitG2(uint16 participantIndex, uint16 coefIndex) 
+    //     view
+    //     external 
+    //     returns(uint256[4] memory publicCommitmentsG2)
+    // {
+    //     return participants[participantIndex].publicCommitmentsG2[coefIndex];
+    // }
+
+    // function getParticipantPrvCommit(uint16 participantIndex, uint16 committedToIndex) 
+    //     view
+    //     external 
+    //     returns(uint256 encPrivateCommitments)
+    // {
+    //     return participants[participantIndex].encPrivateCommitments[committedToIndex];
+    // }
+    function getParticipantYG1(uint16 participantIndex)
+        external
         view
-        external 
-        returns(uint256[2] memory publicCommitmentsG1)
+        returns(uint256[2] memory yG1)
     {
-        return participants[participantIndex].publicCommitmentsG1[coefIndex];
+        return participants[participantIndex].yG1;
     }
 
-    function getParticipantPubCommitG2(uint16 participantIndex, uint16 coefIndex) 
+    function getParticipantIsCommitted(uint16 participantIndex)
+        external
         view
-        external 
-        returns(uint256[4] memory publicCommitmentsG2)
-    {
-        return participants[participantIndex].publicCommitmentsG2[coefIndex];
-    }
-
-    function getParticipantPrvCommit(uint16 participantIndex, uint16 committedToIndex) 
-        view
-        external 
-        returns(uint256 encPrivateCommitments)
-    {
-        return participants[participantIndex].encPrivateCommitments[committedToIndex];
-    }
-
-    function getParticipantIsCommitted(uint16 participantIndex) 
-        view
-        external 
         returns(bool isCommitted)
     {
         return participants[participantIndex].isCommitted;
     }
-    
 
+    // IConsensusCallback implementation
+
+    // Consensus is used to determine if a complaint about a member's
+    // invalid IPFS hash was invalid indeed. Success means that others
+    // agree that the accused was faulty.
+    function onConsensusSuccess(bytes calldata payload) external {
+        require(_cons2Idx[msg.sender] != uint16(0), "invalid caller");
+
+        slash(bytesToUint16(payload));
+        curPhase = Phase.EndFail;
+
+        emit PhaseChange(Phase.EndFail);
+    }
+
+    function onConsensusFailure(bytes calldata payload) external {
+        uint16 complainerIdx = _cons2Idx[msg.sender];
+        require(complainerIdx != uint16(0), "invalid caller");
+
+        slash(complainerIdx);
+        curPhase = Phase.EndFail;
+
+        emit PhaseChange(Phase.EndFail);
+    }
+
+    function threshold() external view returns(uint256) {
+        return t;
+    }
+
+    function isAuthorized(address sender) external view returns(bool) {
+        return _group.isMember(sender);
+    }
+
+    // Utility
+
+    function bytesToUint16(bytes memory bys) private pure returns (uint16 integer) {
+        assembly {
+            integer := mload(add(bys,2))
+        }
+    }
+
+    function uint16ToBytes(uint16 x) public returns (bytes memory b) {
+        b = new bytes(2);
+        assembly {
+            mstore(add(b, 2), x)
+        }
+    }
 }
 
 
@@ -667,8 +766,7 @@ Group PK:
     "0x5d18e484aeddc886ba162e2fa4bf8bcc125d32230a3fbea6e39ef74de3d6117",
     "0x17f6b138a7105622c493ac45d228e9c858544c47227f27a548942c2f01d59970"],
     [1,2,3,4,5,6,7,8],
-    ["0x0000000000000000000000000000000000000000000000000000000000000000",
-    "0x492cb4e02f3d22db552acd7d0d37ac3813a17bb0f62bbf314443cb5d4dece465"]
+    ["0x0000000000000000000000000000000000000000000000000000000000000000","0x492cb4e02f3d22db552acd7d0d37ac3813a17bb0f62bbf314443cb5d4dece465"]
 
     2,
     ["0x1df91772c249f1b2a7e539242ed9eb60e1475f159a376614e91de79c644097f7",
@@ -676,8 +774,7 @@ Group PK:
     "0x31e598642c78a683eedf66cf7cd4a35a3dd5b5fd8ea947a1c53ab867154fac7",
     "0x1cd918c17d9ea92a1a3efb8a999d577d06058a1b205e99769bdc06b6686c8b3c"],
     [1,2,3,4,5,6,7,8],
-    ["0x492cb4e02f3d22db552acd7d0d37ac3813a17bb0f62bbf7cce6131901dd9c57b",
-    "0x0000000000000000000000000000000000000000000000000000000000000000"]
+    ["0x492cb4e02f3d22db552acd7d0d37ac3813a17bb0f62bbf7cce6131901dd9c57b","0x0000000000000000000000000000000000000000000000000000000000000000"]
 
 
  */

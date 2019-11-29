@@ -7,9 +7,83 @@ import (
 	"crypto/rand"
 	"math/big"
 	"sync"
+	"fmt"
+	"strings"
+	"strconv"
 
 	. "github.com/aliras1/FileTribe/tribecrypto/curves" // nolint: golint
 )
+
+func pointToStrArray(point Point) []string {
+	coords := point.ToAffineCoords()
+	coordsStr := make([]string, len(coords))
+	for k := 0; k < len(coords); k++ {
+		coordsStr[k] = toHexBigInt(coords[k])
+	}
+	return coordsStr
+
+}
+func toHexBigInt(n *big.Int) string {
+	return fmt.Sprintf("0x%x", n) // or %X or upper case
+}
+
+func toInt(s string) int {
+	i, _ := strconv.Atoi(s)
+	return i
+}
+
+func toBigInt(s string) *big.Int {
+	bigInt := new(big.Int)
+	bigInt, ok := bigInt.SetString(s, 0)
+	if !ok {
+		panic(fmt.Errorf("toBigInt() failed on string %v", s))
+	}
+	return bigInt
+}
+
+func boolToStr(boolRes bool) string {
+	return fmt.Sprintf("%v", boolRes)
+}
+
+func bigIntToHexStr(bigInt *big.Int) string {
+	return fmt.Sprintf("0x%x", bigInt)
+}
+
+func bigIntArrayToHexStrArray(bigInts []*big.Int) []string {
+
+	arr := make([]string, len(bigInts))
+	for i := 0; i < len(bigInts); i++ {
+		arr[i] = bigIntToHexStr(bigInts[i])
+	}
+	return arr
+}
+
+func pointToHexCoords(p Point) string {
+
+	return strings.Join(pointToHexCoordsArray(p), ",")
+}
+
+func pointToHexCoordsArray(p Point) []string {
+
+	coords := p.ToAffineCoords()
+	res := make([]string, len(coords))
+	for i, coord := range coords {
+		res[i] = toHexBigInt(coord)
+	}
+	return res
+}
+
+func pointsToStr(points []Point) string {
+	return strings.Join(pointsToStrArray(points), ",")
+}
+
+func pointsToStrArray(points []Point) []string {
+	pointStrs := make([]string, 0)
+	for i := 0; i < len(points); i++ {
+		pointStrs = append(pointStrs, pointToHexCoordsArray(points[i])...)
+	}
+	return pointStrs
+}
 
 //MultiSig holds set of keys and one message plus signature
 type MultiSig struct {
@@ -68,7 +142,14 @@ func VerifySingleSignatureCustHash(
 	msg []byte,
 	hash func([]byte) Point) bool {
 
-	h := hash(msg).Mul(new(big.Int).SetInt64(-1))
+	h1 := hash(msg)
+	coords1 := h1.ToAffineCoords()
+	fmt.Println(coords1[0].String())
+	fmt.Println(coords1[1].String())
+	h := hash(msg).Mul(new(big.Int).SetInt64(-1))	
+	coords := h.ToAffineCoords()
+	fmt.Println(coords[0].String())
+	fmt.Println(coords[1].String())
 	paired, _ := curve.PairingProduct([]Point{h, sig}, []Point{pubkey, curve.GetG2()})
 	return curve.GetGTIdentity().Equals(paired)
 }

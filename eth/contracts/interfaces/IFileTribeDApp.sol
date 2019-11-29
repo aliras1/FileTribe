@@ -9,9 +9,11 @@ interface IFileTribeDApp {
 
     function createConsensus(IAccount proposer) external returns(IConsensus consensus);
 
-    function onInvitationAccepted(address group) external;
+    // function onInvitationAccepted(address group) external;
 
-    function onInvitationDeclined() external;
+    // function onInvitationDeclined() external;
 
     function getAccountOf(address owner) external view returns (IAccount);
+    
+    function createDkg() external returns(address);
 }

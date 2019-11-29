@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"time"
 
 	. "github.com/aliras1/FileTribe/tribecrypto/bgls"   // nolint: golint
 	. "github.com/aliras1/FileTribe/tribecrypto/curves" // nolint: golint
@@ -112,7 +113,10 @@ func GetAllPublicKey(curve CurveSystem, threshold int, pubCommitG2 [][]Point) []
 	PKs := make([]Point, numParticipants)
 	j := big.NewInt(1)
 	for i := 0; i < numParticipants; i++ {
+		start := time.Now()
 		PKs[i] = GetSpecificPublicKey(curve, j, threshold, pubCommitG2)
+		end := time.Now()
+		fmt.Printf("PK dt: %s\n", end.Sub(start).String())
 		j.Add(j, big.NewInt(1))
 	}
 	return PKs

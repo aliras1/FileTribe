@@ -5,6 +5,7 @@ import "./interfaces/factory/IAccountFactory.sol";
 import "./interfaces/factory/IGroupFactory.sol";
 import "./interfaces/factory/IConsensusFactory.sol";
 import "./common/Ownable.sol";
+import "./GroupDkg.sol";
 
 contract FileTribeDApp is Ownable, IFileTribeDApp {
     IAccountFactory private _accountFactory;
@@ -18,6 +19,10 @@ contract FileTribeDApp is Ownable, IFileTribeDApp {
     event DebugBytes(bytes msg);
 
     constructor () public Ownable(msg.sender) {
+    }
+
+    function createDkg() external returns(address) {
+        return address(new GroupDkg());
     }
 
     function setConsensusFactory(IConsensusFactory factory) public onlyOwner {

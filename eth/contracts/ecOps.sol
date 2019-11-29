@@ -1,4 +1,4 @@
-pragma solidity ^0.5.11;
+pragma solidity ^0.5.10;
 
 library ecOps {
     ////////////////////////////////////////////////////////
@@ -9,6 +9,14 @@ library ecOps {
     uint256 public constant b = 3;
     uint256 public constant p = 0x30644E72E131A029B85045B68181585D97816A916871CA8D3C208C16D87CFD47;
     uint256 public constant q = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001;
+    
+    function P() public pure returns(uint256) {
+        return p;
+    }
+    
+    function Q() public pure returns(uint256) {
+        return q;
+    }
 
     function ecmul(uint256[2] memory p0, uint256 scalar) public view
         returns(uint256[2] memory p1)
