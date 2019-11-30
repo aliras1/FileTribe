@@ -95,8 +95,8 @@ func GetCommitDataForSingleParticipant(curve CurveSystem, index int, t int, n in
 			return nil, err
 		}
 
-		pubCommitG1MerkleLeaves[i] = ethcrypto.Keccak256(pointToBytesArray(data.PubCommitG1[i])...)
-		pubCommitG2MerkleLeaves[i] = ethcrypto.Keccak256(pointToBytesArray(data.PubCommitG2[i])...)
+		pubCommitG1MerkleLeaves[i] = ethcrypto.Keccak256(pointTo32ByteArray(data.PubCommitG1[i])...)
+		pubCommitG2MerkleLeaves[i] = ethcrypto.Keccak256(pointTo32ByteArray(data.PubCommitG2[i])...)
 
 		// verifyResult := dkg.VerifyPublicCommitment(curve, data.PubCommitG1[i], data.PubCommitG2[i])
 		// if !verifyResult {
@@ -120,7 +120,7 @@ func GetCommitDataForSingleParticipant(curve CurveSystem, index int, t int, n in
 		data.PrvCommit[i] = plainPrvCommit
 		data.PrvCommitEnc[i] = dkg.Encrypt(curve, mySK, pks[i], plainPrvCommit)
 
-		prvCommitLeaves[i] = ethcrypto.Keccak256(data.PrvCommitEnc[i].Bytes())
+		prvCommitLeaves[i] = ethcrypto.Keccak256(bigIntTo32ByteArray(data.PrvCommitEnc[i]))
 		//fmt.Printf("Encrypt() result: %v\n", data.PrvCommit[i])
 		//}
 		j.Add(j, big.NewInt(1))
@@ -434,20 +434,148 @@ func TestBenchmark(t *testing.T) {
 	}          
 }     
   
-type TruffleCommit struct {
+type truffleCommit struct {
 	SenderIndex int `json:"senderIndex"`
 	RootPubCommitG1 string `json:"rootPubCommitG1"`
 	RootPubCommitG2 string `json:"rootPubCommitG2"`
 	RootEncPrvCommit string `json:"rootEncPrvCommit"`
-	CommitIpfsHash string `json:commitIpfsHash"`
+	CommitIpfsHash string `json:"commitIpfsHash"`
 	YG1 []string `json:"yG1"`
-}                  
+}   
+
+type complaintPubCommit struct {
+	ComplainerIndex int `json:"complainerIndex"`
+    AccusedIndex int `json:"accusedIndex"`
+	PubCommitG1 []string `json:"pubCommitG1"`
+    PubCommitG2 []string `json:"pubCommitG2"`
+    ProofG1 []string `json:"proofG1"`
+    ProofG2 []string `json:"proofG2"`
+}
+
+type complaintPrvCommit struct {
+	ComplainerIndex int `json:"complainerIndex"`
+    AccusedIndex int `json:"accusedIndex"`	
+	ComplainerSk string `json:"complainerSk"`
+	EncPrvCommit string `json:"encPrvCommit"`
+	ProofPrvCommit []string `json:"proofPrvCommit"`
+	PubCommitsG1 [][]string `json:"pubCommitsG1"`
+}
          
 type TruffleTestData struct {
 	T int `json:"t"`
 	N int `json:"n"`
 	PKs [][]string `json:"pks"`
-	Commits []TruffleCommit  `json:"commits"`
+	Commits []truffleCommit  `json:"commits"`
+	ComplaintPubCommit complaintPubCommit `json:"complaintPubCommit"`
+	ComplaintPrvCommit complaintPrvCommit `json:"complaintPrvCommit"`
+}
+
+func TestGenTestDataForComplaining(t *testing.T) {
+	var testCases = []struct{
+		threshold int
+		n		  int
+	}{
+		{1, 2},
+		{2, 5},
+		{5, 10},
+		{25, 50},
+		{50, 100},
+		// {128, 256},
+		// {500, 1000},
+		// {1000, 2000},
+	} 
+	curve := Altbn128
+	genTests := make([]*TruffleTestData, len(testCases))
+
+	for j, testCase := range(testCases) {
+		genData := new(TruffleTestData)
+		n := testCase.n
+		threshold := testCase.threshold
+				
+		// gen members & commits
+		group, pks := genMembers(n, curve)
+		genCommits(group, pks, threshold, curve)
+
+		genData.T = threshold 
+		genData.N = n
+		genData.PKs = make([][]string, n)
+		genData.Commits = make([]truffleCommit, 1)
+		for i, member := range(group) {
+			genData.PKs[i] = pointToStrArray(member.Key.PK)			
+		}
+		member := group[0]
+		genData.Commits[0].SenderIndex = member.Index
+		genData.Commits[0].RootPubCommitG1 = fmt.Sprintf("0x%s", hex.EncodeToString(member.Commit.MerkleTreePubCommitG1.Root()))
+		genData.Commits[0].RootPubCommitG2 = fmt.Sprintf("0x%s", hex.EncodeToString(member.Commit.MerkleTreePubCommitG2.Root()))
+		genData.Commits[0].RootEncPrvCommit = fmt.Sprintf("0x%s", hex.EncodeToString(member.Commit.MerkleTreePrvCommit.Root()))
+		genData.Commits[0].CommitIpfsHash = "ipfshash"
+		genData.Commits[0].YG1 = pointToStrArray(member.Commit.PubCommitG1[0])
+
+		leafG1 := ethcrypto.Keccak256(pointTo32ByteArray(member.Commit.PubCommitG1[1])...)
+		leafG2 := ethcrypto.Keccak256(pointTo32ByteArray(member.Commit.PubCommitG2[1])...)
+		leafPrv := ethcrypto.Keccak256(bigIntTo32ByteArray(member.Commit.PrvCommitEnc[1]))		
+		fmt.Printf("leafG1: 0x%s\n", hex.EncodeToString(leafG1))
+		fmt.Printf("leafG2: 0x%s\n", hex.EncodeToString(leafG2))
+		fmt.Printf("leafPrv: 0x%s\n", hex.EncodeToString(leafPrv))
+
+		proofG1, err := member.Commit.MerkleTreePubCommitG1.Prove(leafG1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !VerifyMerkleProof(proofG1, member.Commit.MerkleTreePubCommitG1.Root(), leafG1) {
+			t.Fatal("invalid proof G1")
+		}
+		proofG2, err := member.Commit.MerkleTreePubCommitG2.Prove(leafG2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !VerifyMerkleProof(proofG2, member.Commit.MerkleTreePubCommitG2.Root(), leafG2) {
+			t.Fatal("invalid proof G1")
+		}
+		proofPrv, err := member.Commit.MerkleTreePrvCommit.Prove(leafPrv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !VerifyMerkleProof(proofPrv, member.Commit.MerkleTreePrvCommit.Root(), leafPrv) {
+			t.Fatal("invalid proof Prv commit")
+		}
+
+		genData.ComplaintPubCommit = complaintPubCommit{
+			ComplainerIndex: 2,
+			AccusedIndex: 1,
+			PubCommitG1: pointToStrArray(member.Commit.PubCommitG1[1]),
+			PubCommitG2: pointToStrArray(member.Commit.PubCommitG2[1]),		
+			ProofG1: bytesArrayToStringArray(proofG1),
+			ProofG2: bytesArrayToStringArray(proofG2),
+		}
+
+		pubCommitsG1 := make([][]string, len(member.Commit.PubCommitG1))
+		for i, commit := range(member.Commit.PubCommitG1) {
+			pubCommitsG1[i] = pointToStrArray(commit)
+		}
+
+		genData.ComplaintPrvCommit = complaintPrvCommit {
+			ComplainerIndex: 2,
+			AccusedIndex: 1,
+			ComplainerSk: fmt.Sprintf("0x%s", hex.EncodeToString(bigIntTo32ByteArray(group[1].Key.SK))),
+			EncPrvCommit: fmt.Sprintf("0x%s", hex.EncodeToString(bigIntTo32ByteArray(member.Commit.PrvCommitEnc[1]))),
+			ProofPrvCommit: bytesArrayToStringArray(proofPrv),
+			PubCommitsG1:  pubCommitsG1,
+		}
+
+		// rand participant --> make him prove everything
+
+		genTests[j] = genData		
+	}
+
+	jsonBytes, err := json.Marshal(genTests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if err := ioutil.WriteFile("truffle_test_data_complaints.json", jsonBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
 }
        
 func TestGenerateTestDataForTruffle(t *testing.T) {
@@ -471,37 +599,15 @@ func TestGenerateTestDataForTruffle(t *testing.T) {
 		genData := new(TruffleTestData)
 		n := testCase.n
 		threshold := testCase.threshold
-		group := make([]*Member, n)
-		pks := make([]Point, n)
-		commits := make([]*DataForCommit, n)
-
-		// gen member
-		for i := 0; i < n; i++ {
-			group[i] = newMember(i+1, curve)
-			pks[i] = group[i].Key.PK
-		}
-
-		// gen commits
-		for i := 0; i < n; i++ {
-			var err error
-			member := group[i]
-			start := time.Now()
-			member.Commit, err = GetCommitDataForSingleParticipant(curve, member.Index, threshold, n, member.Key.SK, pks)
-			end := time.Now()
-			fmt.Printf("CommitData time: %v\n", end.Sub(start).String())
-			if err != nil {
-				panic(err)
-			}
-
-			member.Commit.SK = member.Key.SK
-			member.Commit.PK = member.Key.PK
-			commits[i] = member.Commit
-		}
+				
+		// gen members & commits
+		group, pks := genMembers(n, curve)
+		genCommits(group, pks, threshold, curve)
 
 		genData.T = threshold 
 		genData.N = n
 		genData.PKs = make([][]string, n)
-		genData.Commits = make([]TruffleCommit, n)
+		genData.Commits = make([]truffleCommit, n)
 		for i, member := range(group) {
 			genData.PKs[i] = pointToStrArray(member.Key.PK)
 			genData.Commits[i].SenderIndex = member.Index
@@ -511,8 +617,6 @@ func TestGenerateTestDataForTruffle(t *testing.T) {
 			genData.Commits[i].CommitIpfsHash = "ipfshash"
 			genData.Commits[i].YG1 = pointToStrArray(member.Commit.PubCommitG1[0])
 		}
-
-		// rand participant --> make him prove everything
 
 		genTests[j] = genData		
 	}
@@ -525,6 +629,38 @@ func TestGenerateTestDataForTruffle(t *testing.T) {
 	if err := ioutil.WriteFile("truffle_test_data.json", jsonBytes, 0644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func genMembers(n int, curve CurveSystem) ([]*Member, []Point) {
+	group := make([]*Member, n)
+	pks := make([]Point, n)
+	for i := 0; i < n; i++ {
+		group[i] = newMember(i+1, curve)
+		pks[i] = group[i].Key.PK
+	}
+	return group, pks
+}
+
+func genCommits(group []*Member, pks []Point, threshold int, curve CurveSystem) []*DataForCommit {
+	n := len(group)
+	commits := make([]*DataForCommit, n)	
+	for i := 0; i < n; i++ {
+		var err error
+		member := group[i]
+		start := time.Now()
+		member.Commit, err = GetCommitDataForSingleParticipant(curve, member.Index, threshold, n, member.Key.SK, pks)
+		end := time.Now()
+		fmt.Printf("CommitData time: %v\n", end.Sub(start).String())
+		if err != nil {
+			panic(err)
+		}
+
+		member.Commit.SK = member.Key.SK
+		member.Commit.PK = member.Key.PK
+		commits[i] = member.Commit
+	}
+
+	return commits
 }
 
 func newMember(idx int, curve CurveSystem) *Member {
@@ -594,20 +730,34 @@ func (keyPair KeyPair) Marshal() ([]byte, error) {
 	return json.Marshal(keyPair)
 }
 
-func pointToBytesArray(point Point) [][]byte {
-	coords := point.ToAffineCoords()
-	coordsBytes := make([][]byte, len(coords))
-	for k := 0; k < len(coords); k++ {
-		coordsBytes[k] = coords[k].Bytes()
+func bytesArrayToStringArray(bytesArray [][]byte) ([]string) {
+	strArr := make([]string, len(bytesArray))
+	for i, b := range(bytesArray) {
+		strArr[i] = fmt.Sprintf("0x%s", hex.EncodeToString(b))
 	}
-	return coordsBytes
+	return strArr
+}
+
+func bigIntTo32ByteArray(num *big.Int) []byte {
+	numBytes := num.Bytes()
+	b := make([]byte, 32-len(numBytes))
+	return append(b, numBytes...)
+}
+
+func pointTo32ByteArray(point Point) [][]byte {
+	coords := point.ToAffineCoords()
+	coordsBytesArr := make([][]byte, len(coords))
+	for k := 0; k < len(coords); k++ {
+		coordsBytesArr[k] = bigIntTo32ByteArray(coords[k])
+	}
+	return coordsBytesArr
 }
 
 func pointToStrArray(point Point) []string {
 	coords := point.ToAffineCoords()
 	coordsStr := make([]string, len(coords))
 	for k := 0; k < len(coords); k++ {
-		coordsStr[k] = toHexBigInt(coords[k])
+		coordsStr[k] = fmt.Sprintf("0x%s", hex.EncodeToString(bigIntTo32ByteArray(coords[k])))
 	}
 	return coordsStr
 }

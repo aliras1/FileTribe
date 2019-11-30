@@ -1,5 +1,6 @@
 pragma solidity ^0.5.0;
 
+import "./interfaces/IConsensusCallback.sol";
 import "./interfaces/IFileTribeDApp.sol";
 import "./interfaces/factory/IAccountFactory.sol";
 import "./interfaces/factory/IGroupFactory.sol";
@@ -55,7 +56,7 @@ contract FileTribeDApp is Ownable, IFileTribeDApp {
     }
 
     function createConsensus(IAccount proposer) external returns(IConsensus consensus) {
-        return _consensusFactory.create(proposer, IGroup(msg.sender));
+        return _consensusFactory.create(proposer, IConsensusCallback(msg.sender));
     }
 
 

@@ -2,9 +2,9 @@ pragma solidity ^0.5.0;
 
 import "../IAccount.sol";
 import "../IConsensus.sol";
-import "../IGroup.sol";
+import "../IConsensusCallback.sol";
 
 interface IConsensusFactory {
 
-    function create(IAccount proposer, IGroup group) external returns(IConsensus);
+    function create(IAccount proposer, IConsensusCallback callback) external returns(IConsensus);
 }

@@ -2,9 +2,9 @@ pragma solidity ^0.5.0;
 
 import "../interfaces/factory/IConsensusFactory.sol";
 import "../Consensus.sol";
-import "../interfaces/IGroup.sol";
 import "../interfaces/IAccount.sol";
 import "../interfaces/IConsensus.sol";
+import "../interfaces/IConsensusCallback.sol";
 import "../common/Ownable.sol";
 
 contract ConsensusFactory is Ownable, IConsensusFactory {
@@ -14,8 +14,8 @@ contract ConsensusFactory is Ownable, IConsensusFactory {
 
     }
 
-    function create(IAccount proposer, IGroup group) external returns(IConsensus) {
-        return new Consensus(proposer, group);
+    function create(IAccount proposer, IConsensusCallback callback) external returns(IConsensus) {
+        return new Consensus(proposer, callback);
     }
 
     function setParent(address parent) public onlyOwner {

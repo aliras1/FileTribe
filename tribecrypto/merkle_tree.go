@@ -20,8 +20,9 @@ package tribecrypto
 import (
 	"bytes"
 
-	"github.com/pkg/errors"
+	
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/pkg/errors"
 )
 
 
@@ -39,43 +40,40 @@ type MerkleTree struct {
 	depth  int
 }
 
-func NewMerkleTree(leaves [][]byte) (*MerkleTree) {
+func NewMerkleTree(leaves [][]byte) *MerkleTree {
 	tree := &MerkleTree{}
-	
-	if len(leaves) % 2 != 0 {
-		leaves = append(leaves, ethcrypto.Keccak256([]byte{0}))
-	}	
 
 	var unprocessed []*node
-	for i := 0; i < len(leaves) / 2; i++ {
-		lnode := &node{
-			value: leaves[2*i],
+	for i := 0; i < len(leaves); i++ {
+		n := &node{
+			value: leaves[i],
 		}
-		rnode := &node{
-			value: leaves[2*i + 1],
-		}		
-
-		tree.leaves = append(tree.leaves, lnode)
-		tree.leaves = append(tree.leaves, rnode)
-		unprocessed = append(unprocessed, lnode)
-		unprocessed = append(unprocessed, rnode)
+		
+		unprocessed = append(unprocessed, n)
 	}
 
-	for ; len(unprocessed) > 1; {
+	for len(unprocessed) > 1 {
 		lnode := unprocessed[0]
 		rnode := unprocessed[1]
+
+		if lnode.isLeaf() {
+			tree.leaves = append(tree.leaves, lnode)
+		}
+		if rnode.isLeaf() {
+			tree.leaves = append(tree.leaves, rnode)
+		}
 
 		lnode.sibling = rnode
 		rnode.sibling = lnode
 
 		var value []byte
-		if (bytes.Compare(lnode.value, rnode.value) < 0) {
+		if bytes.Compare(lnode.value, rnode.value) < 0 {
 			value = ethcrypto.Keccak256(lnode.value, rnode.value)
 		} else {
 			value = ethcrypto.Keccak256(rnode.value, lnode.value)
 		}
 		newNode := &node{
-			value: value,
+			value:  value,
 			lchild: lnode,
 			rchild: rnode,
 		}
@@ -92,7 +90,7 @@ func NewMerkleTree(leaves [][]byte) (*MerkleTree) {
 
 func (tree *MerkleTree) Prove(leafValue []byte) ([][]byte, error) {
 	var n *node
-	for _, leaf := range(tree.leaves) {
+	for _, leaf := range tree.leaves {
 		if bytes.EqualFold(leafValue, leaf.value) {
 			n = leaf
 			break
@@ -104,8 +102,8 @@ func (tree *MerkleTree) Prove(leafValue []byte) ([][]byte, error) {
 	}
 
 	var proof [][]byte
-	for ; n.parent != nil; {
-		proof = append(proof, n.sibling.value)		
+	for n.parent != nil {
+		proof = append(proof, n.sibling.value)
 		n = n.parent
 	}
 
@@ -122,4 +120,31 @@ func (tree *MerkleTree) Leaves() [][]byte {
 		leaveValues[i] = tree.leaves[i].value
 	}
 	return leaveValues
+}
+
+
+func VerifyMerkleProof(proof [][]byte, root []byte, leaf []byte) bool {
+	computedHash := leaf
+
+	for i := 0; i < len(proof); i++ {
+		proofElement := proof[i]
+
+		if bytes.Compare(computedHash, proofElement) < 0 {
+			// Hash(current computed hash + current element of the proof)
+			computedHash = ethcrypto.Keccak256(computedHash, proofElement)
+		} else {
+			// Hash(current element of the proof + current computed hash)
+			computedHash = ethcrypto.Keccak256(proofElement, computedHash)
+		}
+	}
+
+	// Check if the computed hash (root) is equal to the provided root
+	return bytes.EqualFold(computedHash, root)
+}
+
+func (n *node) isLeaf() bool {
+	if n.lchild == nil && n.rchild == nil {
+		return true
+	}
+	return false
 }

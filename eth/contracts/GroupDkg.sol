@@ -98,6 +98,19 @@ contract GroupDkg is Ownable, IConsensusCallback {
     event ParticipantJoined(
         uint16 index
     );
+    event Debug(
+        string message
+    );
+    event DebugProofG1(
+        bytes32[] proof,
+        bytes32 root,
+        bytes32 leaf
+    );
+    event DebugProofG2(
+        bytes32[] proof,
+        bytes32 root,
+        bytes32 leaf
+    );
 
 
     Phase public curPhase;
@@ -268,7 +281,7 @@ contract GroupDkg is Ownable, IConsensusCallback {
         // index matches the sender's address.
 
         participants[senderIndex].rootPubCommitG1 = rootPubCommitG1;
-        participants[senderIndex].rootPubCommitG1 = rootPubCommitG2;
+        participants[senderIndex].rootPubCommitG2 = rootPubCommitG2;
         participants[senderIndex].rootPrvCommit = rootEncPrvCommit;
         participants[senderIndex].yG1 = yG1;
         participants[senderIndex].commitIpfsHash = commitIpfsHash;
@@ -402,24 +415,31 @@ contract GroupDkg is Ownable, IConsensusCallback {
         Participant storage accused = participants[accusedIndex];
         if(!accused.isCommitted) {
             slash(complainerIndex);
+            emit Debug("accused has not commtied: slashed complainer");
             return;
         }
 
         bytes32 leafG1 = keccak256(abi.encodePacked(pubCommitG1));
+        emit DebugProofG1(proofG1, accused.rootPubCommitG1, leafG1);
         if (!MerkleProof.verify(proofG1, accused.rootPubCommitG1, leafG1)) {
             slash(complainerIndex);
+            emit Debug("invalid merkle proof G1: slashed complainer");
             return;
         }
         bytes32 leafG2 = keccak256(abi.encodePacked(pubCommitG2));
+        emit DebugProofG2(proofG2, accused.rootPubCommitG2, leafG2);
         if (!MerkleProof.verify(proofG2, accused.rootPubCommitG2, leafG2)) {
             slash(complainerIndex);
+            emit Debug("invalid merkle proof G2: slashed complainer");
             return;
         }
 
         if (ecOps.pairingCheck(pubCommitG1, g2, g1, pubCommitG2)) {
             slash(complainerIndex);
+            emit Debug("pairing was correct: slashed complainer");
         } else {
             slash(accusedIndex);
+            emit Debug("pairing was incorrect: slashed accused");
         }
     }
 
@@ -436,6 +456,7 @@ contract GroupDkg is Ownable, IConsensusCallback {
         uint16 accusedIndex,
         uint256 complainerSk,
         uint256 encPrvCommit, // from the accused to the complainer
+        bytes32[] memory proofPrvCommit,
         uint256[2][] memory pubCommitsG1 // accused's public G1 commitments
     )
         public
@@ -453,26 +474,38 @@ contract GroupDkg is Ownable, IConsensusCallback {
         Participant storage accused = participants[accusedIndex];
         if(!accused.isCommitted) {
             slash(complainerIndex);
+            emit Debug("accused has not commited yet: slashed complainer");
             return;
         }
 
+        bytes32 leaf = keccak256(abi.encodePacked(encPrvCommit));
+        emit DebugProofG2(proofPrvCommit, accused.rootPrvCommit, leaf);
+        if (!MerkleProof.verify(proofPrvCommit, accused.rootPrvCommit, leaf)) {
+            slash(complainerIndex);
+            emit Debug("invalid merkle proof prv: slashed complainer");
+            return;
+        }
 
         if(!ecOps.isEqualPoints(participants[complainerIndex].encPk, ecOps.ecmul(g1, complainerSk))) {
             slash(complainerIndex);
+            emit Debug("invalid sk: slashed complainer");
             return;
         }
 
         if (getMerkleRoot(pubCommitsG1) != accused.rootPubCommitG1) {
             slash(complainerIndex);
+            emit Debug("invalid G1 commits: merkle roots do not match: slashed complainer");
             return;
         }
 
 
         uint256 prvCommit = uint256(decrypt(accused.encPk, complainerSk, bytes32(encPrvCommit)));
         if (isPrvMatchPubCommit(complainerIndex, prvCommit, pubCommitsG1)) {
+            emit Debug("correct pairing: slashed complainer");
             slash(complainerIndex);
         }
         else {
+            emit Debug("incorrect pairing: slashed accused");
             slash(accusedIndex);
         }
     }
@@ -508,11 +541,19 @@ contract GroupDkg is Ownable, IConsensusCallback {
         for (uint256 i = 0; i < pubCommitsG1.length; i++) {
             leaves[i] = keccak256(abi.encodePacked(pubCommitsG1[i]));
         }
-        return MerkleTree.getRoot(leaves, leaves.length);
+        return MerkleTree.root(leaves);
     }
 
     function checkKeccak(bytes32[2] memory b) public pure returns (bytes32) {        
             return keccak256(abi.encodePacked(b));
+    }
+
+    function leaves(bytes memory byts) public pure returns (bytes32[] memory) {
+        bytes32[] memory leaves = new bytes32[](byts.length);
+        for (uint256 i = 0; i < byts.length; i++) {
+            leaves[i] = keccak256(abi.encodePacked(byts[i]));
+        }
+        return leaves;
     }
 
     function getMerkleRootTest(bytes memory byts) public pure returns (bytes32) {
@@ -520,7 +561,7 @@ contract GroupDkg is Ownable, IConsensusCallback {
         for (uint256 i = 0; i < byts.length; i++) {
             leaves[i] = keccak256(abi.encodePacked(byts[i]));
         }
-        return MerkleTree.getRoot(leaves, leaves.length);
+        return MerkleTree.root(leaves);
     }
 
     function checkMerkleProof(bytes32[] memory proof, bytes32 root, bytes32 leaf) public returns(bool) {
