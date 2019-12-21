@@ -21,7 +21,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/chequebook"
 	"github.com/pkg/errors"
 
 	"github.com/aliras1/FileTribe/collections"
@@ -34,13 +33,13 @@ import (
 // AddressBook is a cache for fellow users' P2P contact data
 type AddressBook struct {
 	accountToContactMap *collections.Map
-	backend             chequebook.Backend
+	backend             bind.ContractBackend
 	app                 *ethapp.FileTribeDApp
 	ipfs                ipfs.IIpfs
 }
 
 // NewAddressBook creates a new AddressBook
-func NewAddressBook(backend chequebook.Backend, app *ethapp.FileTribeDApp, ipfs ipfs.IIpfs) *AddressBook {
+func NewAddressBook(backend bind.ContractBackend, app *ethapp.FileTribeDApp, ipfs ipfs.IIpfs) *AddressBook {
 	return &AddressBook{
 		backend:             backend,
 		app:                 app,
@@ -76,7 +75,7 @@ func (ab *AddressBook) GetFromOwnerAddress(ownerAddress ethcommon.Address) (*Con
 		}
 	}
 
-	accountAddress, err := ab.app.GetAccount(&bind.CallOpts{Pending: true}, ownerAddress)
+	accountAddress, err := ab.app.GetAccountOf(&bind.CallOpts{Pending: true}, ownerAddress)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get account of owner")
 	}

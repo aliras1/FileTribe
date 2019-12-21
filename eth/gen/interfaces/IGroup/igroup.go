@@ -28,7 +28,7 @@ var (
 )
 
 // IGroupABI is the input ABI used to generate the binding from.
-const IGroupABI = "[{\"constant\":true,\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"isMember\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"payload\",\"type\":\"bytes\"}],\"name\":\"onChangeIpfsHashConsensus\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[],\"name\":\"threshold\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"}]"
+const IGroupABI = "[{\"constant\":true,\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"isMember\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[],\"name\":\"threshold\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"uint256[4]\",\"name\":\"vk\",\"type\":\"uint256[4]\"}],\"name\":\"setVk\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 
 // IGroup is an auto generated Go binding around an Ethereum contract.
 type IGroup struct {
@@ -224,23 +224,23 @@ func (_IGroup *IGroupCallerSession) Threshold() (*big.Int, error) {
 	return _IGroup.Contract.Threshold(&_IGroup.CallOpts)
 }
 
-// OnChangeIpfsHashConsensus is a paid mutator transaction binding the contract method 0x8379088e.
+// SetVk is a paid mutator transaction binding the contract method 0x163396eb.
 //
-// Solidity: function onChangeIpfsHashConsensus(bytes payload) returns()
-func (_IGroup *IGroupTransactor) OnChangeIpfsHashConsensus(opts *bind.TransactOpts, payload []byte) (*types.Transaction, error) {
-	return _IGroup.contract.Transact(opts, "onChangeIpfsHashConsensus", payload)
+// Solidity: function setVk(uint256[4] vk) returns()
+func (_IGroup *IGroupTransactor) SetVk(opts *bind.TransactOpts, vk [4]*big.Int) (*types.Transaction, error) {
+	return _IGroup.contract.Transact(opts, "setVk", vk)
 }
 
-// OnChangeIpfsHashConsensus is a paid mutator transaction binding the contract method 0x8379088e.
+// SetVk is a paid mutator transaction binding the contract method 0x163396eb.
 //
-// Solidity: function onChangeIpfsHashConsensus(bytes payload) returns()
-func (_IGroup *IGroupSession) OnChangeIpfsHashConsensus(payload []byte) (*types.Transaction, error) {
-	return _IGroup.Contract.OnChangeIpfsHashConsensus(&_IGroup.TransactOpts, payload)
+// Solidity: function setVk(uint256[4] vk) returns()
+func (_IGroup *IGroupSession) SetVk(vk [4]*big.Int) (*types.Transaction, error) {
+	return _IGroup.Contract.SetVk(&_IGroup.TransactOpts, vk)
 }
 
-// OnChangeIpfsHashConsensus is a paid mutator transaction binding the contract method 0x8379088e.
+// SetVk is a paid mutator transaction binding the contract method 0x163396eb.
 //
-// Solidity: function onChangeIpfsHashConsensus(bytes payload) returns()
-func (_IGroup *IGroupTransactorSession) OnChangeIpfsHashConsensus(payload []byte) (*types.Transaction, error) {
-	return _IGroup.Contract.OnChangeIpfsHashConsensus(&_IGroup.TransactOpts, payload)
+// Solidity: function setVk(uint256[4] vk) returns()
+func (_IGroup *IGroupTransactorSession) SetVk(vk [4]*big.Int) (*types.Transaction, error) {
+	return _IGroup.Contract.SetVk(&_IGroup.TransactOpts, vk)
 }

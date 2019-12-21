@@ -44,6 +44,8 @@ type Contact struct {
 	Name           string
 	IpfsPeerID     string
 	Boxer          tribecrypto.AnonymPublicKey
+	IsOnline	  bool
+
 	conn           *P2PConn
 	ipfs           ipfs.IIpfs
 }
@@ -63,6 +65,7 @@ func NewContact(
 		Name:           name,
 		IpfsPeerID:     ipfsPeerID,
 		Boxer:          boxer,
+		IsOnline:       false,
 		ipfs:           ipfs,
 	}
 }

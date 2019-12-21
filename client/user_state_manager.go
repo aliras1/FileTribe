@@ -98,7 +98,7 @@ func NewUserContext(auth interfaces.Auth, backend bind.ContractBackend, appContr
 	ctx.channelStop = make(chan int)
 	ctx.storage = fs.NewStorage(os.Getenv("HOME"))
 
-	accountAddress, err := appContract.GetAccount(&bind.CallOpts{}, auth.Address())
+	accountAddress, err := appContract.GetAccountOf(&bind.CallOpts{}, auth.Address())
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get account address")
 	}

@@ -17,9 +17,12 @@
 package interfaces
 
 import (
+	"math/big"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/tribecrypto/curves"
 )
 
 // Group is a mirror to the group data on the blockchain
@@ -37,6 +40,10 @@ type Group interface {
 	Boxer() tribecrypto.SymmetricKey
 	CheckBoxer(newBoxer tribecrypto.SymmetricKey) error
 	SetBoxer(boxer tribecrypto.SymmetricKey) error
+	VerifyKey() curves.Point
+	SetVerifyKey(vk curves.Point)
+	SignKey() *big.Int
+	SetSignKey(sk *big.Int)
 	Update() error
 	Save() error
 }
@@ -48,6 +55,11 @@ type GroupData struct {
 	Name              string
 	IpfsHash          string
 	EncryptedIpfsHash []byte
-	MemberOwners      []ethcommon.Address
-	Boxer             tribecrypto.SymmetricKey
+
+	MemberOwners []ethcommon.Address
+	Boxer        tribecrypto.SymmetricKey
+
+	VerifyKey curves.Point
+	SignKey           *big.Int
+
 }

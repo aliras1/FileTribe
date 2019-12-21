@@ -37,7 +37,7 @@ async function createAccount(dipfshare, address, name, ipfsId, publicKey) {
         return ev.owner === address;
     }, 'Contract should return the correct message.');
 
-    const accountAddress = await dipfshare.getAccount(address);
+    const accountAddress = await dipfshare.getAccountOf(address);
     let account = await Account.at(accountAddress);
 
     const accountOwner = await account.owner();

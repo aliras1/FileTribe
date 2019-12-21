@@ -28,7 +28,24 @@ var (
 )
 
 // FileTribeDAppABI is the input ABI used to generate the binding from.
-const FileTribeDAppABI = "[{\"inputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"contractIAccount\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AccountCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"int256\",\"name\":\"msg\",\"type\":\"int256\"}],\"name\":\"Debug\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"msg\",\"type\":\"bytes\"}],\"name\":\"DebugBytes\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"GroupRegistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"constant\":true,\"inputs\":[],\"name\":\"isOwner\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"address\",\"name\":\"group\",\"type\":\"address\"}],\"name\":\"onInvitationAccepted\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[],\"name\":\"onInvitationDeclined\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIConsensusFactory\",\"name\":\"factory\",\"type\":\"address\"}],\"name\":\"setConsensusFactory\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIAccountFactory\",\"name\":\"factory\",\"type\":\"address\"}],\"name\":\"setAccountFactory\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIGroupFactory\",\"name\":\"factory\",\"type\":\"address\"}],\"name\":\"setGroupFactory\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"ipfsPeerId\",\"type\":\"string\"},{\"internalType\":\"bytes32\",\"name\":\"boxingKey\",\"type\":\"bytes32\"}],\"name\":\"createAccount\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[],\"name\":\"removeAccount\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"createGroup\",\"outputs\":[{\"internalType\":\"contractIGroup\",\"name\":\"group\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIAccount\",\"name\":\"proposer\",\"type\":\"address\"}],\"name\":\"createConsensus\",\"outputs\":[{\"internalType\":\"contractIConsensus\",\"name\":\"consensus\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"getAccountOf\",\"outputs\":[{\"internalType\":\"contractIAccount\",\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"}]"
+const FileTribeDAppABI = "[{\"inputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"contractIAccount\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AccountCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"int256\",\"name\":\"msg\",\"type\":\"int256\"}],\"name\":\"Debug\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"msg\",\"type\":\"bytes\"}],\"name\":\"DebugBytes\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"id\",\"type\":\"bytes32\"}],\"name\":\"GroupRegistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"constant\":true,\"inputs\":[],\"name\":\"isOwner\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIConsensusFactory\",\"name\":\"factory\",\"type\":\"address\"}],\"name\":\"setConsensusFactory\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIAccountFactory\",\"name\":\"factory\",\"type\":\"address\"}],\"name\":\"setAccountFactory\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIGroupFactory\",\"name\":\"factory\",\"type\":\"address\"}],\"name\":\"setGroupFactory\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractDkgFactory\",\"name\":\"factory\",\"type\":\"address\"}],\"name\":\"setDkgFactory\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"ipfsPeerId\",\"type\":\"string\"},{\"internalType\":\"bytes32\",\"name\":\"boxingKey\",\"type\":\"bytes32\"}],\"name\":\"createAccount\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[],\"name\":\"removeAccount\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"createGroup\",\"outputs\":[{\"internalType\":\"contractIGroup\",\"name\":\"group\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIAccount\",\"name\":\"proposer\",\"type\":\"address\"}],\"name\":\"createConsensus\",\"outputs\":[{\"internalType\":\"contractIConsensus\",\"name\":\"consensus\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[],\"name\":\"createDkg\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"getAccountOf\",\"outputs\":[{\"internalType\":\"contractIAccount\",\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"}]"
+
+// FileTribeDAppBin is the compiled bytecode used for deploying new contracts.
+var FileTribeDAppBin = "0x608060405234801561001057600080fd5b50600080546001600160a01b0319163390811780835560405191926001600160a01b0391909116917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0908290a350610a188061006d6000396000f3fe608060405234801561001057600080fd5b50600436106100ea5760003560e01c8063837b3b931161008c57806395184d3b1161006657806395184d3b14610310578063addc1a7614610336578063dc2ddcae1461035c578063f2fde38b146103cc576100ea565b8063837b3b93146102c65780638da5cb5b146102ec5780638f32d59b146102f4576100ea565b80633c2aea2e116100c85780633c2aea2e1461017f57806345aa926f146102ae578063715018a6146102b657806375beca08146102be576100ea565b806315db2069146100ef578063186cd722146101315780631c38ea5614610159575b600080fd5b6101156004803603602081101561010557600080fd5b50356001600160a01b03166103f2565b604080516001600160a01b039092168252519081900360200190f35b6101576004803603602081101561014757600080fd5b50356001600160a01b031661047c565b005b6101576004803603602081101561016f57600080fd5b50356001600160a01b03166104af565b6101576004803603606081101561019557600080fd5b8101906020810181356401000000008111156101b057600080fd5b8201836020820111156101c257600080fd5b803590602001918460018302840111640100000000831117156101e457600080fd5b91908080601f016020809104026020016040519081016040528093929190818152602001838380828437600092019190915250929594936020810193503591505064010000000081111561023757600080fd5b82018360208201111561024957600080fd5b8035906020019184600183028401116401000000008311171561026b57600080fd5b91908080601f01602080910402602001604051908101604052809392919081815260200183838082843760009201919091525092955050913592506104e2915050565b610115610706565b610157610787565b6101576107e2565b610157600480360360208110156102dc57600080fd5b50356001600160a01b0316610801565b610115610834565b6102fc610843565b604080519115158252519081900360200190f35b6101156004803603602081101561032657600080fd5b50356001600160a01b0316610854565b6101576004803603602081101561034c57600080fd5b50356001600160a01b0316610872565b6101156004803603602081101561037257600080fd5b81019060208101813564010000000081111561038d57600080fd5b82018360208201111561039f57600080fd5b803590602001918460018302840111640100000000831117156103c157600080fd5b5090925090506108a5565b610157600480360360208110156103e257600080fd5b50356001600160a01b0316610958565b60035460408051631f34340560e11b81526001600160a01b03848116600483015233602483015291516000939290921691633e68680a9160448082019260209290919082900301818787803b15801561044a57600080fd5b505af115801561045e573d6000803e3d6000fd5b505050506040513d602081101561047457600080fd5b505192915050565b610484610843565b61048d57600080fd5b600480546001600160a01b0319166001600160a01b0392909216919091179055565b6104b7610843565b6104c057600080fd5b600380546001600160a01b0319166001600160a01b0392909216919091179055565b336000908152600560205260409020546001600160a01b031615610546576040805162461bcd60e51b81526020600482015260166024820152754163636f756e7420616c72656164792065786973747360501b604482015290519081900360640190fd5b60015460405163d0bf552b60e01b81523360048201818152606483018590526080602484019081528751608485015287516000956001600160a01b03169463d0bf552b94938a938a938a93604481019160a49091019060208801908083838f5b838110156105be5781810151838201526020016105a6565b50505050905090810190601f1680156105eb5780820380516001836020036101000a031916815260200191505b50838103825285518152855160209182019187019080838360005b8381101561061e578181015183820152602001610606565b50505050905090810190601f16801561064b5780820380516001836020036101000a031916815260200191505b509650505050505050602060405180830381600087803b15801561066e57600080fd5b505af1158015610682573d6000803e3d6000fd5b505050506040513d602081101561069857600080fd5b50513360008181526005602090815260409182902080546001600160a01b0319166001600160a01b03861690811790915582519384529083015280519293507fac631f3001b55ea1509cf3d7e74898f85392a61a76e8149181ae1259622dabc892918290030190a150505050565b60048054604080516313db266360e31b81523393810193909352516000926001600160a01b0390921691639ed9331891602480830192602092919082900301818787803b15801561075657600080fd5b505af115801561076a573d6000803e3d6000fd5b505050506040513d602081101561078057600080fd5b5051905090565b61078f610843565b61079857600080fd5b600080546040516001600160a01b03909116907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0908390a3600080546001600160a01b0319169055565b33600090815260056020526040902080546001600160a01b0319169055565b610809610843565b61081257600080fd5b600280546001600160a01b0319166001600160a01b0392909216919091179055565b6000546001600160a01b031690565b6000546001600160a01b0316331490565b6001600160a01b039081166000908152600560205260409020541690565b61087a610843565b61088357600080fd5b600180546001600160a01b0319166001600160a01b0392909216919091179055565b6002546040805163a15ab08d60e01b8152336004820181815260248301938452604483018690526000946001600160a01b03169363a15ab08d93889288929091606401848480828437600081840152601f19601f820116905080830192505050945050505050602060405180830381600087803b15801561092557600080fd5b505af1158015610939573d6000803e3d6000fd5b505050506040513d602081101561094f57600080fd5b50519392505050565b610960610843565b61096957600080fd5b61097281610975565b50565b6001600160a01b03811661098857600080fd5b600080546040516001600160a01b03808516939216917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e091a3600080546001600160a01b0319166001600160a01b039290921691909117905556fea265627a7a7231582067b7b7e710ffed01e06d01cc12ba8ca49e3fd16a2e6a6ab4a2eb83fe0bf6d71a64736f6c634300050f0032"
+
+// DeployFileTribeDApp deploys a new Ethereum contract, binding an instance of FileTribeDApp to it.
+func DeployFileTribeDApp(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, *types.Transaction, *FileTribeDApp, error) {
+	parsed, err := abi.JSON(strings.NewReader(FileTribeDAppABI))
+	if err != nil {
+		return common.Address{}, nil, nil, err
+	}
+
+	address, tx, contract, err := bind.DeployContract(auth, parsed, common.FromHex(FileTribeDAppBin), backend)
+	if err != nil {
+		return common.Address{}, nil, nil, err
+	}
+	return address, tx, &FileTribeDApp{FileTribeDAppCaller: FileTribeDAppCaller{contract: contract}, FileTribeDAppTransactor: FileTribeDAppTransactor{contract: contract}, FileTribeDAppFilterer: FileTribeDAppFilterer{contract: contract}}, nil
+}
 
 // FileTribeDApp is an auto generated Go binding around an Ethereum contract.
 type FileTribeDApp struct {
@@ -292,6 +309,27 @@ func (_FileTribeDApp *FileTribeDAppTransactorSession) CreateConsensus(proposer c
 	return _FileTribeDApp.Contract.CreateConsensus(&_FileTribeDApp.TransactOpts, proposer)
 }
 
+// CreateDkg is a paid mutator transaction binding the contract method 0x45aa926f.
+//
+// Solidity: function createDkg() returns(address)
+func (_FileTribeDApp *FileTribeDAppTransactor) CreateDkg(opts *bind.TransactOpts) (*types.Transaction, error) {
+	return _FileTribeDApp.contract.Transact(opts, "createDkg")
+}
+
+// CreateDkg is a paid mutator transaction binding the contract method 0x45aa926f.
+//
+// Solidity: function createDkg() returns(address)
+func (_FileTribeDApp *FileTribeDAppSession) CreateDkg() (*types.Transaction, error) {
+	return _FileTribeDApp.Contract.CreateDkg(&_FileTribeDApp.TransactOpts)
+}
+
+// CreateDkg is a paid mutator transaction binding the contract method 0x45aa926f.
+//
+// Solidity: function createDkg() returns(address)
+func (_FileTribeDApp *FileTribeDAppTransactorSession) CreateDkg() (*types.Transaction, error) {
+	return _FileTribeDApp.Contract.CreateDkg(&_FileTribeDApp.TransactOpts)
+}
+
 // CreateGroup is a paid mutator transaction binding the contract method 0xdc2ddcae.
 //
 // Solidity: function createGroup(string name) returns(address group)
@@ -311,48 +349,6 @@ func (_FileTribeDApp *FileTribeDAppSession) CreateGroup(name string) (*types.Tra
 // Solidity: function createGroup(string name) returns(address group)
 func (_FileTribeDApp *FileTribeDAppTransactorSession) CreateGroup(name string) (*types.Transaction, error) {
 	return _FileTribeDApp.Contract.CreateGroup(&_FileTribeDApp.TransactOpts, name)
-}
-
-// OnInvitationAccepted is a paid mutator transaction binding the contract method 0x0a561621.
-//
-// Solidity: function onInvitationAccepted(address group) returns()
-func (_FileTribeDApp *FileTribeDAppTransactor) OnInvitationAccepted(opts *bind.TransactOpts, group common.Address) (*types.Transaction, error) {
-	return _FileTribeDApp.contract.Transact(opts, "onInvitationAccepted", group)
-}
-
-// OnInvitationAccepted is a paid mutator transaction binding the contract method 0x0a561621.
-//
-// Solidity: function onInvitationAccepted(address group) returns()
-func (_FileTribeDApp *FileTribeDAppSession) OnInvitationAccepted(group common.Address) (*types.Transaction, error) {
-	return _FileTribeDApp.Contract.OnInvitationAccepted(&_FileTribeDApp.TransactOpts, group)
-}
-
-// OnInvitationAccepted is a paid mutator transaction binding the contract method 0x0a561621.
-//
-// Solidity: function onInvitationAccepted(address group) returns()
-func (_FileTribeDApp *FileTribeDAppTransactorSession) OnInvitationAccepted(group common.Address) (*types.Transaction, error) {
-	return _FileTribeDApp.Contract.OnInvitationAccepted(&_FileTribeDApp.TransactOpts, group)
-}
-
-// OnInvitationDeclined is a paid mutator transaction binding the contract method 0xb061d9a9.
-//
-// Solidity: function onInvitationDeclined() returns()
-func (_FileTribeDApp *FileTribeDAppTransactor) OnInvitationDeclined(opts *bind.TransactOpts) (*types.Transaction, error) {
-	return _FileTribeDApp.contract.Transact(opts, "onInvitationDeclined")
-}
-
-// OnInvitationDeclined is a paid mutator transaction binding the contract method 0xb061d9a9.
-//
-// Solidity: function onInvitationDeclined() returns()
-func (_FileTribeDApp *FileTribeDAppSession) OnInvitationDeclined() (*types.Transaction, error) {
-	return _FileTribeDApp.Contract.OnInvitationDeclined(&_FileTribeDApp.TransactOpts)
-}
-
-// OnInvitationDeclined is a paid mutator transaction binding the contract method 0xb061d9a9.
-//
-// Solidity: function onInvitationDeclined() returns()
-func (_FileTribeDApp *FileTribeDAppTransactorSession) OnInvitationDeclined() (*types.Transaction, error) {
-	return _FileTribeDApp.Contract.OnInvitationDeclined(&_FileTribeDApp.TransactOpts)
 }
 
 // RemoveAccount is a paid mutator transaction binding the contract method 0x75beca08.
@@ -437,6 +433,27 @@ func (_FileTribeDApp *FileTribeDAppSession) SetConsensusFactory(factory common.A
 // Solidity: function setConsensusFactory(address factory) returns()
 func (_FileTribeDApp *FileTribeDAppTransactorSession) SetConsensusFactory(factory common.Address) (*types.Transaction, error) {
 	return _FileTribeDApp.Contract.SetConsensusFactory(&_FileTribeDApp.TransactOpts, factory)
+}
+
+// SetDkgFactory is a paid mutator transaction binding the contract method 0x186cd722.
+//
+// Solidity: function setDkgFactory(address factory) returns()
+func (_FileTribeDApp *FileTribeDAppTransactor) SetDkgFactory(opts *bind.TransactOpts, factory common.Address) (*types.Transaction, error) {
+	return _FileTribeDApp.contract.Transact(opts, "setDkgFactory", factory)
+}
+
+// SetDkgFactory is a paid mutator transaction binding the contract method 0x186cd722.
+//
+// Solidity: function setDkgFactory(address factory) returns()
+func (_FileTribeDApp *FileTribeDAppSession) SetDkgFactory(factory common.Address) (*types.Transaction, error) {
+	return _FileTribeDApp.Contract.SetDkgFactory(&_FileTribeDApp.TransactOpts, factory)
+}
+
+// SetDkgFactory is a paid mutator transaction binding the contract method 0x186cd722.
+//
+// Solidity: function setDkgFactory(address factory) returns()
+func (_FileTribeDApp *FileTribeDAppTransactorSession) SetDkgFactory(factory common.Address) (*types.Transaction, error) {
+	return _FileTribeDApp.Contract.SetDkgFactory(&_FileTribeDApp.TransactOpts, factory)
 }
 
 // SetGroupFactory is a paid mutator transaction binding the contract method 0x837b3b93.

@@ -19,6 +19,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"math/big"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -31,6 +32,7 @@ import (
 	"github.com/aliras1/FileTribe/client/interfaces"
 	ethgroup "github.com/aliras1/FileTribe/eth/gen/Group"
 	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/tribecrypto/curves"
 )
 
 type group struct {
@@ -48,6 +50,7 @@ func NewGroupFromMeta(meta *meta.GroupMeta, groupContract *ethgroup.Group, stora
 		data: &interfaces.GroupData{
 			Address:meta.Address,
 			Boxer:meta.Boxer,
+			VerifyKey:meta.VerifyKey,
 		},
 	}
 
@@ -337,4 +340,30 @@ func (g* group) CheckBoxer(newBoxer tribecrypto.SymmetricKey) error {
 	}
 
 	return nil
+}
+
+func (g *group) VerifyKey() curves.Point {
+	return g.data.VerifyKey
+}
+
+
+func (g *group) SetVerifyKey(vk curves.Point) {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
+	g.data.VerifyKey = vk
+}
+
+func (g *group) SignKey() *big.Int {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
+	return g.data.SignKey
+}
+
+func (g *group) SetSignKey(sk *big.Int) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	g.data.SignKey = sk
 }

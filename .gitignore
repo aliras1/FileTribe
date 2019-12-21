@@ -8,3 +8,5 @@ test/*
 eth/build
 node_modules
 eth/out
+eth/test/debug.log
+tribecrypto/bgls/debug.test

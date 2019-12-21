@@ -18,18 +18,22 @@ package meta
 
 import (
 	"encoding/json"
+	"math/big"
 
 	ethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
 	"github.com/aliras1/FileTribe/tribecrypto"
+	"github.com/aliras1/FileTribe/tribecrypto.curves"
 )
 
 // GroupMeta stores the information that is necessary to be able to
 // participate in a group's life and to read its shared files
 type GroupMeta struct {
-	Address ethCommon.Address
-	Boxer   tribecrypto.SymmetricKey
+	Address   ethCommon.Address
+	Boxer     tribecrypto.SymmetricKey
+	VerifyKey curves.Point
+	SignKey   *big.Int
 }
 
 // Encode encodes the group meta

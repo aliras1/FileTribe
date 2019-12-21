@@ -28,7 +28,7 @@ var (
 )
 
 // IFileTribeDAppABI is the input ABI used to generate the binding from.
-const IFileTribeDAppABI = "[{\"constant\":false,\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"createGroup\",\"outputs\":[{\"internalType\":\"contractIGroup\",\"name\":\"group\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIAccount\",\"name\":\"proposer\",\"type\":\"address\"}],\"name\":\"createConsensus\",\"outputs\":[{\"internalType\":\"contractIConsensus\",\"name\":\"consensus\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"address\",\"name\":\"group\",\"type\":\"address\"}],\"name\":\"onInvitationAccepted\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[],\"name\":\"onInvitationDeclined\",\"outputs\":[],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"getAccountOf\",\"outputs\":[{\"internalType\":\"contractIAccount\",\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"}]"
+const IFileTribeDAppABI = "[{\"constant\":false,\"inputs\":[{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"createGroup\",\"outputs\":[{\"internalType\":\"contractIGroup\",\"name\":\"group\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[{\"internalType\":\"contractIAccount\",\"name\":\"proposer\",\"type\":\"address\"}],\"name\":\"createConsensus\",\"outputs\":[{\"internalType\":\"contractIConsensus\",\"name\":\"consensus\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"constant\":true,\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"getAccountOf\",\"outputs\":[{\"internalType\":\"contractIAccount\",\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"view\",\"type\":\"function\"},{\"constant\":false,\"inputs\":[],\"name\":\"createDkg\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"payable\":false,\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 
 // IFileTribeDApp is an auto generated Go binding around an Ethereum contract.
 type IFileTribeDApp struct {
@@ -219,6 +219,27 @@ func (_IFileTribeDApp *IFileTribeDAppTransactorSession) CreateConsensus(proposer
 	return _IFileTribeDApp.Contract.CreateConsensus(&_IFileTribeDApp.TransactOpts, proposer)
 }
 
+// CreateDkg is a paid mutator transaction binding the contract method 0x45aa926f.
+//
+// Solidity: function createDkg() returns(address)
+func (_IFileTribeDApp *IFileTribeDAppTransactor) CreateDkg(opts *bind.TransactOpts) (*types.Transaction, error) {
+	return _IFileTribeDApp.contract.Transact(opts, "createDkg")
+}
+
+// CreateDkg is a paid mutator transaction binding the contract method 0x45aa926f.
+//
+// Solidity: function createDkg() returns(address)
+func (_IFileTribeDApp *IFileTribeDAppSession) CreateDkg() (*types.Transaction, error) {
+	return _IFileTribeDApp.Contract.CreateDkg(&_IFileTribeDApp.TransactOpts)
+}
+
+// CreateDkg is a paid mutator transaction binding the contract method 0x45aa926f.
+//
+// Solidity: function createDkg() returns(address)
+func (_IFileTribeDApp *IFileTribeDAppTransactorSession) CreateDkg() (*types.Transaction, error) {
+	return _IFileTribeDApp.Contract.CreateDkg(&_IFileTribeDApp.TransactOpts)
+}
+
 // CreateGroup is a paid mutator transaction binding the contract method 0xdc2ddcae.
 //
 // Solidity: function createGroup(string name) returns(address group)
@@ -238,46 +259,4 @@ func (_IFileTribeDApp *IFileTribeDAppSession) CreateGroup(name string) (*types.T
 // Solidity: function createGroup(string name) returns(address group)
 func (_IFileTribeDApp *IFileTribeDAppTransactorSession) CreateGroup(name string) (*types.Transaction, error) {
 	return _IFileTribeDApp.Contract.CreateGroup(&_IFileTribeDApp.TransactOpts, name)
-}
-
-// OnInvitationAccepted is a paid mutator transaction binding the contract method 0x0a561621.
-//
-// Solidity: function onInvitationAccepted(address group) returns()
-func (_IFileTribeDApp *IFileTribeDAppTransactor) OnInvitationAccepted(opts *bind.TransactOpts, group common.Address) (*types.Transaction, error) {
-	return _IFileTribeDApp.contract.Transact(opts, "onInvitationAccepted", group)
-}
-
-// OnInvitationAccepted is a paid mutator transaction binding the contract method 0x0a561621.
-//
-// Solidity: function onInvitationAccepted(address group) returns()
-func (_IFileTribeDApp *IFileTribeDAppSession) OnInvitationAccepted(group common.Address) (*types.Transaction, error) {
-	return _IFileTribeDApp.Contract.OnInvitationAccepted(&_IFileTribeDApp.TransactOpts, group)
-}
-
-// OnInvitationAccepted is a paid mutator transaction binding the contract method 0x0a561621.
-//
-// Solidity: function onInvitationAccepted(address group) returns()
-func (_IFileTribeDApp *IFileTribeDAppTransactorSession) OnInvitationAccepted(group common.Address) (*types.Transaction, error) {
-	return _IFileTribeDApp.Contract.OnInvitationAccepted(&_IFileTribeDApp.TransactOpts, group)
-}
-
-// OnInvitationDeclined is a paid mutator transaction binding the contract method 0xb061d9a9.
-//
-// Solidity: function onInvitationDeclined() returns()
-func (_IFileTribeDApp *IFileTribeDAppTransactor) OnInvitationDeclined(opts *bind.TransactOpts) (*types.Transaction, error) {
-	return _IFileTribeDApp.contract.Transact(opts, "onInvitationDeclined")
-}
-
-// OnInvitationDeclined is a paid mutator transaction binding the contract method 0xb061d9a9.
-//
-// Solidity: function onInvitationDeclined() returns()
-func (_IFileTribeDApp *IFileTribeDAppSession) OnInvitationDeclined() (*types.Transaction, error) {
-	return _IFileTribeDApp.Contract.OnInvitationDeclined(&_IFileTribeDApp.TransactOpts)
-}
-
-// OnInvitationDeclined is a paid mutator transaction binding the contract method 0xb061d9a9.
-//
-// Solidity: function onInvitationDeclined() returns()
-func (_IFileTribeDApp *IFileTribeDAppTransactorSession) OnInvitationDeclined() (*types.Transaction, error) {
-	return _IFileTribeDApp.Contract.OnInvitationDeclined(&_IFileTribeDApp.TransactOpts)
 }

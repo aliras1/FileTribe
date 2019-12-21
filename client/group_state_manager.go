@@ -151,14 +151,15 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 	}
 
 	groupContext.Repo = repo
-	//groupContext.GroupConnection = com.NewGroupConnection(
-	//	config.Group,
-	//	repo,
-	//	config.account,
-	//	config.AddressBook,
-	//	onSessionClosed,
-	//	config.P2P,
-	//	config.Ipfs)
+	groupContext.GroupConnection = com.NewGroupConnection(
+		config.Group,
+		repo,
+		config.Account,
+		config.AddressBook,
+		onSessionClosed,
+		config.P2P,
+		config.Ipfs,
+	)
 
 	go groupContext.HandleGroupInvitationSentEvents(config.Eth.Group)
 	go groupContext.HandleGroupInvitationAcceptedEvents(config.Eth.Group)
@@ -171,9 +172,33 @@ func NewGroupContext(config *GroupContextConfig) (*GroupContext, error) {
 	go groupContext.HandleProposedKeyEvents()
 
 	go groupContext.StartHeartbeat()
-	go groupContext.HandleHeartbeats()
 
 	return groupContext, nil
+}
+
+func (groupCtx *GroupContext) StartHeartbeat() {
+	for {
+		<- time.After(2 * time.Minute)
+		timeEncoded, err := time.Now().MarshalJSON()
+		if err != nil {
+			glog.Errorf("could not encode the timestamp")
+			continue
+		}
+		msg, err := common.NewMessage(groupCtx.account.Owner(), common.Heartbeat, 0, timeEncoded, groupCtx.eth.Auth.Sign)
+		if err != nil {
+			glog.Errorf("could not create new heartbeat message: %s", err)
+			continue
+		}
+		msgBytes, err := msg.Encode()
+		if err != nil {
+			glog.Errorf("could not encode heartbeat message: %s", err)
+			continue
+		}
+		
+		if err := groupCtx.GroupConnection.Broadcast(msgBytes); err != nil {
+			glog.Errorf("could not broadcast hearbeat message: %s", err)
+		}
+	}
 }
 
 func onSessionClosed(session sesscommon.Session) {
@@ -301,12 +326,50 @@ func (groupCtx *GroupContext) CommitChanges() error {
 	proposer := groupCtx.account.ContractAddress()
 	groupCtx.proposals.Put(proposalKey, &interfaces.Proposal{Proposer: proposer, Boxer: newKey, EncIpfsHash: encIpfsHash})
 
-	tx, err := groupCtx.eth.Group.Commit(groupCtx.eth.Auth.TxOpts(), encIpfsHash)
-	if err != nil {
-		return errors.Wrap(err, "could not send change ipfs hash tx")
+	numOnlineMembers := 0
+	for _, owner := range groupCtx.Group.MemberOwners() {
+		contact, err := groupCtx.AddressBook.GetFromOwnerAddress(owner)
+		if err != nil {
+			return errors.Wrap(err, "could not get contact from owner")
+		}
+
+		if contact.IsOnline {
+			numOnlineMembers += 1
+		}		
 	}
 
-	groupCtx.Transactions.Add(tx)
+	if numOnlineMembers > groupCtx.Group.CountMembers() / 2 {
+		newKeyBytes, err := newKey.Encode()
+		if err != nil {
+			return errors.Wrap(err, "could not encode new key")
+		}
+		commitData := common.CommitData{
+			NewIpfsHash: encIpfsHash,
+			NewKey: newKeyBytes,
+		}
+		commitDataBytes, err := commitData.Encode()
+		if err != nil {
+			return errors.Wrap(err, "could not encode commit data")
+		}
+		msg, err := common.NewMessage(groupCtx.account.Owner(), common.Commit, 0, commitDataBytes, groupCtx.eth.Auth.Sign)
+		if err != nil {
+			return errors.Wrap(err, "could not create new commit message")
+		}
+		msgBytes, err := msg.Encode()
+		if err != nil {
+			return errors.Wrap(err, "could not encode commit data message")
+		}
+		if err := groupCtx.GroupConnection.Broadcast(msgBytes); err != nil {
+			return errors.Wrap(err, "could not broadcast commit message")
+		}
+	} else {
+		tx, err := groupCtx.eth.Group.Commit(groupCtx.eth.Auth.TxOpts(), encIpfsHash)
+		if err != nil {
+			return errors.Wrap(err, "could not send change ipfs hash tx")
+		}
+	
+		groupCtx.Transactions.Add(tx)
+	}	
 
 	return nil
 }

@@ -79,7 +79,14 @@ contract GroupDkg is Ownable, IConsensusCallback {
         bool isCommitted;
     }
 
-    enum Phase { Enrollment, Commit, PostCommit, EndSuccess, EndFail } // start from 0
+    enum Phase { // start from 0
+        Enrollment,
+        Commit,
+        PostCommit,
+        VerifySubmittedKey,
+        EndSuccess,
+        EndFail
+    }
 
     event NewComplaint(
         address consensus
@@ -148,13 +155,21 @@ contract GroupDkg is Ownable, IConsensusCallback {
 
     // mapping from node's index to a participant
     mapping (uint16 => Participant) public participants;
-    uint256[2] public VK;
+
+    // The current bls api used in the client application uses G2 points as public keys.
+    // However, the Ethereum precompiled contract only supports addition of points from G1,
+    // making it unable to calculate the G2 public key. Another bls api should be used that
+    // supports the swapping of G1 and G2, so that the signatures will be in G2 and public
+    // keys in G1. Until than, the verification of submitted group keys is omitted.
+    uint256[4] public VK;
     uint16 finalizerIdx;
     IGroup _group;
     IFileTribeDApp _fileTribe;
     mapping (address => uint16) _cons2Idx;
 
-    constructor() public Ownable(msg.sender) { }
+    constructor(IGroup group) public Ownable(msg.sender) {
+        _group = group;
+     }
 
     function init(uint16 threshold, uint16 numParticipants) public {
         t = threshold;
@@ -312,18 +327,31 @@ contract GroupDkg is Ownable, IConsensusCallback {
         inPhase(Phase.PostCommit)
         checkAuthorizedSender(senderIndex)
     {
-
         uint curBlockNum = block.number;
-
         require(curBlockNum > (phaseStart+postCommitTimeout), "hasn't reached timeout yet");
 
-        curPhase = Phase.EndSuccess;
+        phaseStart = curBlockNum;
         finalizerIdx = senderIndex;
         VK = vk;
+        curPhase = Phase.VerifySubmittedKey;
 
-        emit PhaseChange(Phase.EndSuccess);
-        //slash(0);
+        emit PhaseChange(Phase.VerifySubmittedKey);
     }
+
+    function verifySubmittedKeySubmitTimedOut(uint16 senderIndex)
+        external
+        inPhase(Phase.VerifySubmittedKey)
+        checkAuthorizedSender(senderIndex)
+    {
+        uint curBlockNum = block.number;
+        require(curBlockNum > (phaseStart+postCommitTimeout), "hasn't reached timeout yet");
+
+        _group.setVk(VK);
+        curPhase = Phase.EndSuccess;
+        
+        emit PhaseChange(Phase.VerifySubmittedKey);
+    }
+
 
     // Call this when in Phase.Enrollment for more than joinTimeout
     // blocks and not enough members have joined.
@@ -358,7 +386,7 @@ contract GroupDkg is Ownable, IConsensusCallback {
     // means only when the current phase is Phase.End .
     function getGroupPK()
         //inPhase(Phase.EndSuccess)
-        public view returns(uint256[2] memory)
+        public view returns(uint256[4] memory)
     {
         return VK;
     }
@@ -374,7 +402,7 @@ contract GroupDkg is Ownable, IConsensusCallback {
 
     ////////////////
     // Complaints //
-    ////////////////
+    ////////////////    
 
     function complaintInvalidIpfsHash(uint16 complainerIdx, uint16 accusedIdx)
         public
@@ -510,6 +538,26 @@ contract GroupDkg is Ownable, IConsensusCallback {
         }
     }
 
+    function complaintVk(uint16 complainerIdx)
+        public
+        checkAuthorizedSender(complainerIdx)
+        inPhase(Phase.VerifySubmittedKey)
+    {
+        // see comment in the definition of VK
+        
+        // uint256[2] memory expectedVk = calculateGroupPK();
+        // if (expectedVk[0] != VK[0] && expectedVk[1] != VK[1]) {
+        //     slash(finalizerIdx);
+        // } else {
+        //     slash(complainerIdx);
+        // }
+
+        // VK = expectedVk;
+
+        // curPhase = Phase.EndSuccess;
+        // emit PhaseChange(Phase.EndSuccess);
+    }
+
     function isPrvMatchPubCommit(
         uint16 complainerIndex,
         uint256 prvCommit,
@@ -555,6 +603,15 @@ contract GroupDkg is Ownable, IConsensusCallback {
         }
         return leaves;
     }
+    
+    function calcSize(uint256 l) public pure returns (uint256) {
+        return MerkleTree.calcArraySize(l);
+    }
+    
+    function newArr(uint256 l) public pure returns (uint256) {
+        bytes32[] memory arr = new bytes32[](MerkleTree.calcArraySize(l));
+        return arr.length;
+    }
 
     function getMerkleRootTest(bytes memory byts) public pure returns (bytes32) {
         bytes32[] memory leaves = new bytes32[](byts.length);
@@ -566,20 +623,7 @@ contract GroupDkg is Ownable, IConsensusCallback {
 
     function checkMerkleProof(bytes32[] memory proof, bytes32 root, bytes32 leaf) public returns(bool) {
         return MerkleProof.verify(proof, root, leaf);
-    }
-
-    function complaintVK(uint16 complainerIdx)
-        public
-        checkAuthorizedSender(complainerIdx)
-        inPhase(Phase.EndSuccess)
-    {
-        uint256[2] memory expectedVk = calculateGroupPK();
-        if (expectedVk[0] != VK[0] && expectedVk[1] != VK[1]) {
-            slash(finalizerIdx);
-        } else {
-            slash(complainerIdx);
-        }
-    }
+    }    
 
     // Divides the deposited balance in the contract between
     // the enrolled participants except for the participant

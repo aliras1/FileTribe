@@ -5,11 +5,11 @@ package bgls
 
 import (
 	"crypto/rand"
-	"math/big"
-	"sync"
 	"fmt"
-	"strings"
+	"math/big"
 	"strconv"
+	"strings"
+	"sync"
 
 	. "github.com/aliras1/FileTribe/tribecrypto/curves" // nolint: golint
 )
@@ -146,11 +146,20 @@ func VerifySingleSignatureCustHash(
 	coords1 := h1.ToAffineCoords()
 	fmt.Println(coords1[0].String())
 	fmt.Println(coords1[1].String())
-	h := hash(msg).Mul(new(big.Int).SetInt64(-1))	
+	h := hash(msg).Mul(new(big.Int).SetInt64(-1))
 	coords := h.ToAffineCoords()
 	fmt.Println(coords[0].String())
 	fmt.Println(coords[1].String())
 	paired, _ := curve.PairingProduct([]Point{h, sig}, []Point{pubkey, curve.GetG2()})
+	fmt.Println("h")
+	fmt.Println(h.ToAffineCoords())
+	fmt.Println("sig")
+	fmt.Println(sig.ToAffineCoords())
+	fmt.Println("pk")
+	fmt.Println(pubkey.ToAffineCoords())
+	fmt.Println("g")
+	fmt.Println(curve.GetG2().ToAffineCoords())
+	fmt.Println()
 	return curve.GetGTIdentity().Equals(paired)
 }
 

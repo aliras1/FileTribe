@@ -31,6 +31,8 @@ type MessageType byte
 const (
 	// GetGroupData enum value
 	GetGroupData MessageType = 0
+	Heartbeat MessageType = 1
+	Commit MessageType = 2
 )
 
 // Message is a message struct
@@ -59,10 +61,9 @@ type GroupDataMessage struct {
 	Payload []byte
 }
 
-// HeartBeat is a heartbeat message, currently not used
-type HeartBeat struct {
-	From string `json:"from"`
-	Rand []byte `json:"rand"`
+type CommitData struct {
+	NewIpfsHash []byte
+	NewKey []byte
 }
 
 // NewMessage creates a new message
@@ -145,6 +146,26 @@ func DecodeGroupDataMessage(data []byte) (*GroupDataMessage, error) {
 	}
 
 	return &m, nil
+}
+
+// Encode encodes CommitData
+func (cd *CommitData) Encode() ([]byte, error) {
+	enc, err := json.Marshal(cd)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not encode CommitData")
+	}
+
+	return enc, nil
+}
+
+// DecodeCommitData decodes a group message data
+func DecodeCommitData(data []byte) (*CommitData, error) {
+	var cd CommitData
+	if err := json.Unmarshal(data, &cd); err != nil {
+		return nil, errors.Wrap(err, "could not decode CommitData")
+	}
+
+	return &cd, nil
 }
 
 // -----------------------------------------

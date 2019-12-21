@@ -19,11 +19,12 @@ package communication
 import (
 	"bytes"
 	"encoding/base64"
+	"time"
+
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
 	"github.com/aliras1/FileTribe/client/communication/common"
-	"github.com/aliras1/FileTribe/client/communication/sessions"
 	sesscommon "github.com/aliras1/FileTribe/client/communication/sessions/common"
 	"github.com/aliras1/FileTribe/client/fs"
 	"github.com/aliras1/FileTribe/client/interfaces"
@@ -158,22 +159,20 @@ func (conn *GroupConnection) connectionListener() {
 				if err := msg.Verify(contact); err != nil {
 					glog.Warningf("invalid pubsub message to group %v from account %v", conn.group.Address().String(), msg.From.Bytes())
 					continue
-				}
+				}				
 
-				session, err := sessions.NewGroupServerSession(
-					msg,
-					contact,
-					conn.account,
-					conn.group,
-					conn.repo,
-					conn.sessionClosed)
-				if err != nil {
-					glog.Errorf("could not create new group session server: %s", err)
+				var t time.Time
+				if err := t.UnmarshalJSON (msg.Payload); err != nil {
+					glog.Errorf("could not decode timestamp: %s", err)
 					continue
 				}
+			
+				if time.Since(t).Minutes() > 5.0 {
+					glog.Errorf("invalid timestamp")
+					continue
+				}				
 
-				conn.p2p.AddSession(session)
-				go session.Run()
+				contact.IsOnline = true
 			}
 		}
 	}

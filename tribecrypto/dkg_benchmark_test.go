@@ -236,6 +236,8 @@ func SignAndVerify(curve CurveSystem, threshold int, n int, data []*DataForCommi
 	//fmt.Println()
 
 	start = time.Now()		
+	fmt.Println("sample pubCommitG2")
+	fmt.Println(pubCommitG2Zero[0].ToAffineCoords())
 	groupPk := dkg.GetGroupPublicKey(curve, pubCommitG2Zero)	
 	end = time.Now()		
 	fmt.Printf("Group PK: %v\n", pointToHexCoords(groupPk))
@@ -358,8 +360,8 @@ func TestBenchmark(t *testing.T) {
 	}{
 		{2, 5},
 		{5, 10},
-		{25, 50},
-		{50, 100},
+		// {25, 50},
+		// {50, 100},
 		// {128, 256},
 		// {500, 1000},
 		// {1000, 2000}, 

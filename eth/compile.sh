@@ -5,7 +5,7 @@ if [[ ! -f "./compile.sh" ]]; then
     exit 2
 fi
 
-truffle compile --reset --all
+truffle compile
 
 compile_contracts() {
     IN=$1

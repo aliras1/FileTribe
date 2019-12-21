@@ -23,6 +23,7 @@ contract Group is Ownable, IGroup, IConsensusCallback {
     bytes public _ipfsHash; // encrypted with group key
     uint256 _currConsId;
     mapping(address => IAccount) private _invitations; // owner -> account address
+    bool private canCommitWithSig;
     address _dkg;
 
     // G1 generator (on the curve)
@@ -67,19 +68,18 @@ contract Group is Ownable, IGroup, IConsensusCallback {
         _members[owner].account = account;
         _members[owner].consensus = _fileTribe.createConsensus(account);
         _members[owner].exists = true;
-    }
-    
-    // constructor (IFileTribeDApp fileTribe) public Ownable(msg.sender) { 
-    //     dkg = fileTribe.createDkg();
-    // }
-
-    function setVk(uint256[4] memory vk) public {
-        _verifyKey = vk;
-    }
+    }    
 
     modifier onlyMembers() {
-        require(isMember(msg.sender), "wee");
+        require(isMember(msg.sender), "The sender of message is a group member");
         _;
+    }
+
+    function setVk(uint256[4] calldata vk) external {
+        require(msg.sender == _dkg, "Message sender is not the group's DKG contract");
+        
+        _verifyKey = vk;
+        canCommitWithSig = true;
     }
 
     function isMember(address owner) public view returns(bool) {
@@ -93,9 +93,10 @@ contract Group is Ownable, IGroup, IConsensusCallback {
         return p;
     }
 
-    function commitWithGroupSig(bytes memory newIpfsHash, uint256[2] memory sig) public /*onlyMembers*/ {
+    function commitWithGroupSig(bytes memory newIpfsHash, uint256[2] memory sig) public onlyMembers {
         uint256[2] memory hash = ecOps.hashToG1(newIpfsHash);
 
+        require(canCommitWithSig, "current verify key is invalid");
         require(ecOps.pairingCheck(hash, _verifyKey, sig, _g2), "invalid signature");
 
         //emit IpfsHashChanged(this, newIpfsHash, _fileTribe.getAccountOf(msg.sender), _currConsId);
@@ -132,6 +133,8 @@ contract Group is Ownable, IGroup, IConsensusCallback {
             }
         }
 
+        canCommitWithSig = false;
+
         emit MemberLeft(this, account);
     }
 
@@ -148,6 +151,8 @@ contract Group is Ownable, IGroup, IConsensusCallback {
                 break;
             }
         }
+
+        canCommitWithSig = false;
 
         emit MemberLeft(this, account);
     }
@@ -177,6 +182,8 @@ contract Group is Ownable, IGroup, IConsensusCallback {
 
         account.onInvitationAccepted();
         _invitations[msg.sender] = IAccount(address(0));
+
+        canCommitWithSig = false;
 
         emit InvitationAccepted(this, account);
     }

@@ -5,6 +5,7 @@ import "./interfaces/IFileTribeDApp.sol";
 import "./interfaces/factory/IAccountFactory.sol";
 import "./interfaces/factory/IGroupFactory.sol";
 import "./interfaces/factory/IConsensusFactory.sol";
+import "./factory/DkgFactory.sol";
 import "./common/Ownable.sol";
 import "./GroupDkg.sol";
 
@@ -12,6 +13,7 @@ contract FileTribeDApp is Ownable, IFileTribeDApp {
     IAccountFactory private _accountFactory;
     IGroupFactory private _groupFactory;
     IConsensusFactory private _consensusFactory;
+    DkgFactory private _dkgFactory;
     mapping(address => IAccount) private _accounts;
 
     event AccountCreated(address owner, IAccount account);
@@ -20,11 +22,7 @@ contract FileTribeDApp is Ownable, IFileTribeDApp {
     event DebugBytes(bytes msg);
 
     constructor () public Ownable(msg.sender) {
-    }
-
-    function createDkg() external returns(address) {
-        return address(new GroupDkg());
-    }
+    }    
 
     function setConsensusFactory(IConsensusFactory factory) public onlyOwner {
         _consensusFactory = factory;
@@ -36,6 +34,10 @@ contract FileTribeDApp is Ownable, IFileTribeDApp {
 
     function setGroupFactory(IGroupFactory factory) public onlyOwner {
         _groupFactory = factory;
+    }
+
+    function setDkgFactory(DkgFactory factory) public onlyOwner {
+        _dkgFactory = factory;
     }
 
     function createAccount(string memory name, string memory ipfsPeerId, bytes32 boxingKey) public {
@@ -59,6 +61,9 @@ contract FileTribeDApp is Ownable, IFileTribeDApp {
         return _consensusFactory.create(proposer, IConsensusCallback(msg.sender));
     }
 
+    function createDkg() external returns(address) {
+        return _dkgFactory.create(IGroup(msg.sender));
+    }
 
     //    function isUserRegistered(address id) public view returns(bool) {
     //        return _users[id].exists;
